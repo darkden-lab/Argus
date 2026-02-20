@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -8,6 +8,9 @@ import { ResourceTable, StatusBadge, type Column } from "@/components/resources/
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { LiveIndicator } from "@/components/ui/live-indicator";
+import { useK8sWildcard } from "@/hooks/use-k8s-websocket";
+import type { WatchEvent } from "@/lib/ws";
 
 interface K8sResource {
   metadata: {
@@ -107,6 +110,48 @@ export default function ClusterDetailPage() {
   const [namespaces, setNamespaces] = useState<string[]>([]);
   const [nodeCount, setNodeCount] = useState(0);
 
+  const handleWsEvent = useCallback(
+    (event: WatchEvent) => {
+      if (event.cluster !== clusterId) return;
+
+      const obj = event.object as K8sResource | undefined;
+      if (!obj?.metadata) return;
+
+      setResources((prev) => {
+        const list = prev[event.resource] ?? [];
+        if (event.type === "ADDED") {
+          const exists = list.some(
+            (r) => r.metadata.uid === obj.metadata.uid
+          );
+          if (exists) return prev;
+          return { ...prev, [event.resource]: [...list, obj] };
+        }
+        if (event.type === "DELETED") {
+          return {
+            ...prev,
+            [event.resource]: list.filter(
+              (r) => r.metadata.uid !== obj.metadata.uid
+            ),
+          };
+        }
+        if (event.type === "MODIFIED") {
+          return {
+            ...prev,
+            [event.resource]: list.map((r) =>
+              r.metadata.uid === obj.metadata.uid ? obj : r
+            ),
+          };
+        }
+        return prev;
+      });
+    },
+    [clusterId]
+  );
+
+  const { lastUpdated, isConnected } = useK8sWildcard({
+    onEvent: handleWsEvent,
+  });
+
   useEffect(() => {
     api
       .get<ResourceListResponse>(`/api/clusters/${clusterId}/namespaces`)
@@ -143,23 +188,26 @@ export default function ClusterDetailPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-8 w-8"
-          onClick={() => router.push("/clusters")}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight">
-            Cluster: {clusterId}
-          </h1>
-          <p className="text-muted-foreground">
-            {nodeCount} nodes, {namespaces.length} namespaces
-          </p>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => router.push("/clusters")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">
+              Cluster: {clusterId}
+            </h1>
+            <p className="text-muted-foreground">
+              {nodeCount} nodes, {namespaces.length} namespaces
+            </p>
+          </div>
         </div>
+        <LiveIndicator isConnected={isConnected} lastUpdated={lastUpdated} />
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>

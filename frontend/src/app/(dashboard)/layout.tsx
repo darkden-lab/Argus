@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { MainContent } from "@/components/layout/main-content";
 import { usePermissionsStore } from "@/stores/permissions";
+import { k8sWs } from "@/lib/ws";
 
 export default function DashboardLayout({
   children,
@@ -19,6 +20,16 @@ export default function DashboardLayout({
       fetchPermissions();
     }
   }, [fetchPermissions, isLoaded]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("access_token");
+    if (token) {
+      k8sWs.connect(token);
+    }
+    return () => {
+      k8sWs.disconnect();
+    };
+  }, []);
 
   return (
     <div className="flex h-screen overflow-hidden dark">
