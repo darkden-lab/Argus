@@ -1,0 +1,42 @@
+{
+  "id": "cnpg",
+  "name": "CloudNativePG",
+  "version": "1.0.0",
+  "description": "Manage CloudNativePG PostgreSQL clusters: instances, backups, scheduled backups, connection poolers",
+  "permissions": ["cnpg:*"],
+  "backend": {
+    "routes": [
+      {"method": "GET",    "path": "/api/plugins/cnpg/clusters",               "handler": "ListClusters"},
+      {"method": "GET",    "path": "/api/plugins/cnpg/clusters/{name}",        "handler": "GetCluster"},
+      {"method": "POST",   "path": "/api/plugins/cnpg/clusters",               "handler": "CreateCluster"},
+      {"method": "PUT",    "path": "/api/plugins/cnpg/clusters/{name}",        "handler": "UpdateCluster"},
+      {"method": "DELETE", "path": "/api/plugins/cnpg/clusters/{name}",        "handler": "DeleteCluster"},
+      {"method": "GET",    "path": "/api/plugins/cnpg/backups",                "handler": "ListBackups"},
+      {"method": "POST",   "path": "/api/plugins/cnpg/backups",                "handler": "CreateBackup"},
+      {"method": "DELETE", "path": "/api/plugins/cnpg/backups/{name}",         "handler": "DeleteBackup"},
+      {"method": "GET",    "path": "/api/plugins/cnpg/scheduledbackups",       "handler": "ListScheduledBackups"},
+      {"method": "POST",   "path": "/api/plugins/cnpg/scheduledbackups",       "handler": "CreateScheduledBackup"},
+      {"method": "DELETE", "path": "/api/plugins/cnpg/scheduledbackups/{name}","handler": "DeleteScheduledBackup"},
+      {"method": "GET",    "path": "/api/plugins/cnpg/poolers",                "handler": "ListPoolers"},
+      {"method": "POST",   "path": "/api/plugins/cnpg/poolers",                "handler": "CreatePooler"},
+      {"method": "DELETE", "path": "/api/plugins/cnpg/poolers/{name}",         "handler": "DeletePooler"}
+    ],
+    "watchers": [
+      {"group": "postgresql.cnpg.io", "version": "v1", "resource": "clusters"},
+      {"group": "postgresql.cnpg.io", "version": "v1", "resource": "backups"},
+      {"group": "postgresql.cnpg.io", "version": "v1", "resource": "scheduledbackups"},
+      {"group": "postgresql.cnpg.io", "version": "v1", "resource": "poolers"}
+    ]
+  },
+  "frontend": {
+    "navigation": [{"label": "CloudNativePG", "icon": "database", "path": "/plugins/cnpg"}],
+    "routes": [
+      {"path": "/plugins/cnpg",                 "component": "CnpgOverview"},
+      {"path": "/plugins/cnpg/clusters",         "component": "CnpgClusterList"},
+      {"path": "/plugins/cnpg/backups",           "component": "CnpgBackupList"},
+      {"path": "/plugins/cnpg/scheduledbackups",  "component": "CnpgScheduledBackupList"},
+      {"path": "/plugins/cnpg/poolers",           "component": "CnpgPoolerList"}
+    ],
+    "widgets": [{"id": "cnpg-status", "type": "dashboard-card", "component": "CnpgStatus"}]
+  }
+}
