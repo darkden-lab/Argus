@@ -1,27 +1,175 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/k8s-dashboard/backend/internal/auth"
+	"github.com/k8s-dashboard/backend/internal/cluster"
+	"github.com/k8s-dashboard/backend/internal/config"
+	"github.com/k8s-dashboard/backend/internal/core"
+	"github.com/k8s-dashboard/backend/internal/db"
+	mw "github.com/k8s-dashboard/backend/internal/middleware"
+	"github.com/k8s-dashboard/backend/internal/plugin"
+	"github.com/k8s-dashboard/backend/internal/rbac"
+	"github.com/k8s-dashboard/backend/internal/ws"
+	pluginCalico "github.com/k8s-dashboard/backend/plugins/calico"
+	pluginIstio "github.com/k8s-dashboard/backend/plugins/istio"
+	pluginPrometheus "github.com/k8s-dashboard/backend/plugins/prometheus"
 )
 
 func main() {
-	r := mux.NewRouter()
+	cfg := config.Load()
 
-	r.HandleFunc("/healthz", healthzHandler).Methods("GET")
-
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
+	// Database
+	ctx := context.Background()
+	database, err := db.New(ctx, cfg.DatabaseURL)
+	if err != nil {
+		log.Printf("WARNING: database connection failed: %v (continuing without DB)", err)
+	} else {
+		defer database.Close()
+		if err := db.RunMigrations(cfg.DatabaseURL, cfg.MigrationsPath); err != nil {
+			log.Printf("WARNING: migrations failed: %v", err)
+		}
 	}
 
-	log.Printf("Starting server on :%s", port)
-	if err := http.ListenAndServe(":"+port, r); err != nil {
+	// Cluster Manager
+	var pool *pgxpool.Pool
+	if database != nil {
+		pool = database.Pool
+	}
+	clusterMgr := cluster.NewManager(pool, cfg.EncryptionKey)
+	if pool != nil {
+		if err := clusterMgr.LoadExisting(ctx); err != nil {
+			log.Printf("WARNING: failed to load existing clusters: %v", err)
+		}
+	}
+
+	// RBAC Engine
+	rbacEngine := rbac.NewEngine(pool)
+
+	// JWT & Auth
+	jwtService := auth.NewJWTService(cfg.JWTSecret)
+	authService := auth.NewAuthService(database, jwtService)
+	authHandlers := auth.NewHandlers(authService)
+
+	// Plugin Engine
+	pluginEngine := plugin.NewEngine(pool)
+	registerPlugins(pluginEngine)
+
+	// WebSocket Hub
+	hub := ws.NewHub()
+	go hub.Run()
+	wsHandler := ws.NewWSHandler(hub, jwtService)
+
+	// Router
+	r := mux.NewRouter()
+
+	// CORS middleware
+	r.Use(corsMiddleware)
+
+	// Health check (no auth)
+	r.HandleFunc("/healthz", healthzHandler).Methods("GET")
+
+	// Auth routes (no auth middleware)
+	authHandlers.RegisterRoutes(r)
+
+	// Protected routes
+	protected := r.PathPrefix("").Subrouter()
+	protected.Use(mw.AuthMiddleware(jwtService))
+
+	// Cluster routes
+	clusterHandlers := cluster.NewHandlers(clusterMgr)
+	clusterHandlers.RegisterRoutes(protected)
+
+	// Core resource routes
+	resourceHandler := core.NewResourceHandler(clusterMgr)
+	resourceHandler.RegisterRoutes(protected)
+
+	// Convenience routes (namespaces, nodes, events)
+	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr)
+	convenienceHandlers.RegisterRoutes(protected)
+
+	// Plugin management routes
+	pluginHandlers := plugin.NewHandlers(pluginEngine)
+	pluginHandlers.RegisterRoutes(protected)
+
+	// Plugin-registered routes
+	pluginEngine.RegisterAllRoutes(protected, clusterMgr)
+	pluginEngine.RegisterAllWatchers(hub, clusterMgr)
+
+	// WebSocket
+	wsHandler.RegisterRoutes(r)
+
+	// Start health check ticker
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for range ticker.C {
+			clusterMgr.HealthCheck(ctx)
+		}
+	}()
+
+	// HTTP Server
+	srv := &http.Server{
+		Addr:         ":" + cfg.Port,
+		Handler:      r,
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 15 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	// Graceful shutdown
+	go func() {
+		sigCh := make(chan os.Signal, 1)
+		signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+		<-sigCh
+
+		log.Println("Shutting down server...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Fatalf("Server shutdown failed: %v", err)
+		}
+	}()
+
+	log.Printf("Starting server on :%s", cfg.Port)
+	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		log.Fatalf("Server failed to start: %v", err)
+	}
+
+	log.Println("Server stopped")
+
+	_ = rbacEngine // available for route-level RBAC when needed
+}
+
+func registerPlugins(engine *plugin.Engine) {
+	promPlugin := pluginPrometheus.New()
+	if err := engine.Register(promPlugin); err != nil {
+		log.Printf("WARNING: failed to register prometheus plugin: %v", err)
+	}
+
+	calicoPlugin := pluginCalico.New()
+	if err := engine.Register(calicoPlugin); err != nil {
+		log.Printf("WARNING: failed to register calico plugin: %v", err)
+	}
+
+	istioPlugin, err := pluginIstio.New()
+	if err != nil {
+		log.Printf("WARNING: failed to create istio plugin: %v", err)
+	} else {
+		if err := engine.Register(istioPlugin); err != nil {
+			log.Printf("WARNING: failed to register istio plugin: %v", err)
+		}
 	}
 }
 
@@ -30,3 +178,20 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
+
+func corsMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Credentials", "true")
+
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
