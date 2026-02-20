@@ -56,3 +56,47 @@ serviceAccount:
   create: true
   name: ""
   annotations: {}
+
+# OIDC authentication configuration
+# When enabled, the backend will use OIDC for user authentication
+oidc:
+  enabled: false
+  # OIDC provider issuer URL (e.g. https://accounts.google.com or https://your-keycloak/realms/myrealm)
+  issuerURL: ""
+  # OAuth2 client ID registered with the OIDC provider
+  clientID: ""
+  # OAuth2 client secret (stored in a Kubernetes Secret, set via oidc.clientSecret)
+  clientSecret: ""
+  # Redirect URI that OIDC provider will redirect back to after authentication
+  redirectURL: ""
+  # Space-separated list of OIDC scopes to request (openid and email are always included)
+  scopes: "openid email profile"
+  # JWT claim to use as the username (default: "email")
+  usernameClaim: "email"
+  # JWT claim to use as the groups field for RBAC (optional, default: "groups")
+  groupsClaim: "groups"
+
+# Plugin enable/disable configuration
+# Each plugin can be individually enabled or disabled
+plugins:
+  istio:
+    enabled: true
+  prometheus:
+    enabled: true
+  calico:
+    enabled: true
+  cnpg:
+    # CloudNativePG PostgreSQL operator
+    enabled: false
+  mariadb:
+    # MariaDB operator
+    enabled: false
+  keda:
+    # Kubernetes Event-Driven Autoscaling
+    enabled: false
+  ceph:
+    # Rook Ceph storage operator
+    enabled: false
+  helm:
+    # Flux HelmRelease management
+    enabled: false

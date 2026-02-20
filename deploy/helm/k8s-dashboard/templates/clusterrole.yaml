@@ -69,23 +69,102 @@ rules:
       - pods
       - nodes
     verbs: ["get", "list"]
-  # CRDs - Istio
-  - apiGroups: ["networking.istio.io"]
-    resources: ["*"]
-    verbs: ["get", "list", "watch"]
-  - apiGroups: ["security.istio.io"]
-    resources: ["*"]
-    verbs: ["get", "list", "watch"]
-  # CRDs - Prometheus
-  - apiGroups: ["monitoring.coreos.com"]
-    resources: ["*"]
-    verbs: ["get", "list", "watch"]
-  # CRDs - Calico
-  - apiGroups: ["crd.projectcalico.org"]
-    resources: ["*"]
-    verbs: ["get", "list", "watch"]
-  # Custom Resource Definitions
+  # Custom Resource Definitions (read access for all)
   - apiGroups: ["apiextensions.k8s.io"]
     resources:
       - customresourcedefinitions
     verbs: ["get", "list", "watch"]
+
+  # --- Plugin CRDs ---
+
+  # Istio networking and security
+  {{- if .Values.plugins.istio.enabled }}
+  - apiGroups: ["networking.istio.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["security.istio.io"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+
+  # Prometheus Operator (ServiceMonitors, PrometheusRules, etc.)
+  {{- if .Values.plugins.prometheus.enabled }}
+  - apiGroups: ["monitoring.coreos.com"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+
+  # Calico network policies and IP pools
+  {{- if .Values.plugins.calico.enabled }}
+  - apiGroups: ["crd.projectcalico.org"]
+    resources: ["*"]
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+
+  # CloudNativePG (Clusters, Backups, ScheduledBackups, Poolers)
+  {{- if .Values.plugins.cnpg.enabled }}
+  - apiGroups: ["postgresql.cnpg.io"]
+    resources:
+      - clusters
+      - backups
+      - scheduledbackups
+      - poolers
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+
+  # MariaDB Operator (MariaDB instances, Databases, Backups)
+  {{- if .Values.plugins.mariadb.enabled }}
+  - apiGroups: ["k8s.mariadb.com"]
+    resources:
+      - mariadbs
+      - databases
+      - backups
+      - restores
+      - users
+      - grants
+      - connections
+      - sqljobs
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+
+  # KEDA (ScaledObjects, ScaledJobs, TriggerAuthentications)
+  {{- if .Values.plugins.keda.enabled }}
+  - apiGroups: ["keda.sh"]
+    resources:
+      - scaledobjects
+      - scaledjobs
+      - triggerauthentications
+      - clustertriggerauthentications
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+
+  # Rook Ceph (CephClusters, CephBlockPools, CephFilesystems)
+  {{- if .Values.plugins.ceph.enabled }}
+  - apiGroups: ["ceph.rook.io"]
+    resources:
+      - cephclusters
+      - cephblockpools
+      - cephfilesystems
+      - cephobjectstores
+      - cephobjectstoreusers
+      - cephnfses
+      - cephclients
+      - cephrbdmirrors
+      - cephfilesystemmirrors
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  {{- end }}
+
+  # Flux HelmRelease management (helm.toolkit.fluxcd.io)
+  {{- if .Values.plugins.helm.enabled }}
+  - apiGroups: ["helm.toolkit.fluxcd.io"]
+    resources:
+      - helmreleases
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["source.toolkit.fluxcd.io"]
+    resources:
+      - helmrepositories
+      - helmcharts
+      - gitrepositories
+      - ocirepositories
+    verbs: ["get", "list", "watch"]
+  {{- end }}

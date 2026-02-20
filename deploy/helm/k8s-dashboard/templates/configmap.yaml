@@ -6,3 +6,26 @@ metadata:
     {{- include "k8s-dashboard.labels" . | nindent 4 }}
 data:
   apiUrl: {{ .Values.frontend.env.apiUrl | quote }}
+
+  # Plugin enable flags (read by backend at startup to determine which plugins to register)
+  PLUGIN_ISTIO_ENABLED: {{ .Values.plugins.istio.enabled | quote }}
+  PLUGIN_PROMETHEUS_ENABLED: {{ .Values.plugins.prometheus.enabled | quote }}
+  PLUGIN_CALICO_ENABLED: {{ .Values.plugins.calico.enabled | quote }}
+  PLUGIN_CNPG_ENABLED: {{ .Values.plugins.cnpg.enabled | quote }}
+  PLUGIN_MARIADB_ENABLED: {{ .Values.plugins.mariadb.enabled | quote }}
+  PLUGIN_KEDA_ENABLED: {{ .Values.plugins.keda.enabled | quote }}
+  PLUGIN_CEPH_ENABLED: {{ .Values.plugins.ceph.enabled | quote }}
+  PLUGIN_HELM_ENABLED: {{ .Values.plugins.helm.enabled | quote }}
+
+  {{- if .Values.oidc.enabled }}
+  # OIDC configuration (non-sensitive fields)
+  OIDC_ENABLED: "true"
+  OIDC_ISSUER_URL: {{ .Values.oidc.issuerURL | quote }}
+  OIDC_CLIENT_ID: {{ .Values.oidc.clientID | quote }}
+  OIDC_REDIRECT_URL: {{ .Values.oidc.redirectURL | quote }}
+  OIDC_SCOPES: {{ .Values.oidc.scopes | quote }}
+  OIDC_USERNAME_CLAIM: {{ .Values.oidc.usernameClaim | quote }}
+  OIDC_GROUPS_CLAIM: {{ .Values.oidc.groupsClaim | quote }}
+  {{- else }}
+  OIDC_ENABLED: "false"
+  {{- end }}
