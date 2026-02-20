@@ -21,7 +21,9 @@ import (
 	"github.com/k8s-dashboard/backend/internal/db"
 	mw "github.com/k8s-dashboard/backend/internal/middleware"
 	"github.com/k8s-dashboard/backend/internal/plugin"
+	"github.com/k8s-dashboard/backend/internal/proxy"
 	"github.com/k8s-dashboard/backend/internal/rbac"
+	"github.com/k8s-dashboard/backend/internal/terminal"
 	"github.com/k8s-dashboard/backend/internal/ws"
 	pluginCalico "github.com/k8s-dashboard/backend/plugins/calico"
 	pluginCeph "github.com/k8s-dashboard/backend/plugins/ceph"
@@ -145,8 +147,16 @@ func main() {
 	pluginEngine.RegisterAllRoutes(protected, clusterMgr)
 	pluginEngine.RegisterAllWatchers(hub, clusterMgr)
 
+	// K8s Reverse Proxy (protected)
+	k8sProxy := proxy.NewK8sProxy(clusterMgr)
+	k8sProxy.RegisterRoutes(protected)
+
 	// WebSocket
 	wsHandler.RegisterRoutes(r)
+
+	// Terminal WebSocket (auth handled inside handler)
+	terminalHandler := terminal.NewHandler(jwtService, clusterMgr)
+	terminalHandler.RegisterRoutes(r)
 
 	// Start health check ticker
 	go func() {
