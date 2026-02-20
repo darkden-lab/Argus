@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/k8s-dashboard/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/auth"
 )
 
 func TestAuthMiddlewareMissingHeader(t *testing.T) {

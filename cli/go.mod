@@ -1,4 +1,4 @@
-module github.com/k8s-dashboard/cli
+module github.com/darkden-lab/argus/cli
 
 go 1.25.0
 

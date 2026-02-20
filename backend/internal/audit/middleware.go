@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/k8s-dashboard/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/auth"
 )
 
 // Middleware records all write operations (POST, PUT, DELETE) to the audit_log table.

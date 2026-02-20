@@ -5,7 +5,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/k8s-dashboard/backend/internal/ws"
+	"github.com/darkden-lab/argus/backend/internal/ws"
 )
 
 // collectingBroker is a test double that records published events.

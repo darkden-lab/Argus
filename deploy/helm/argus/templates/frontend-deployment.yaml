@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "k8s-dashboard.fullname" . }}-frontend
+  name: {{ include "argus.fullname" . }}-frontend
   labels:
-    {{- include "k8s-dashboard.labels" . | nindent 4 }}
+    {{- include "argus.labels" . | nindent 4 }}
     app.kubernetes.io/component: frontend
 spec:
   replicas: {{ .Values.frontend.replicas }}
   selector:
     matchLabels:
-      {{- include "k8s-dashboard.selectorLabels" . | nindent 6 }}
+      {{- include "argus.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: frontend
   template:
     metadata:
       labels:
-        {{- include "k8s-dashboard.selectorLabels" . | nindent 8 }}
+        {{- include "argus.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: frontend
     spec:
       containers:
@@ -29,7 +29,7 @@ spec:
             - name: NEXT_PUBLIC_API_URL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: apiUrl
           resources:
             {{- toYaml .Values.frontend.resources | nindent 12 }}

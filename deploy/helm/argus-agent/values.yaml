@@ -1,5 +1,5 @@
 image:
-  repository: k8s-dashboard/agent
+  repository: argus/agent
   tag: latest
   pullPolicy: IfNotPresent
 

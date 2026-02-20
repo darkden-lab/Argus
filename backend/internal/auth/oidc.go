@@ -13,7 +13,7 @@ import (
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gorilla/mux"
-	"github.com/k8s-dashboard/backend/internal/db"
+	"github.com/darkden-lab/argus/backend/internal/db"
 	"golang.org/x/oauth2"
 )
 

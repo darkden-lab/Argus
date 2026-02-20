@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
-	"github.com/k8s-dashboard/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/cluster"
 )
 
 // Mode identifies how the terminal processes commands.

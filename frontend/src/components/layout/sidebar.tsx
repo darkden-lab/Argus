@@ -93,7 +93,7 @@ export function Sidebar({ navItems = [] }: SidebarProps) {
       <div className="flex h-14 items-center justify-between px-4">
         {!collapsed && (
           <span className="text-sm font-semibold tracking-tight">
-            K8s Dashboard
+            Argus
           </span>
         )}
         <Button

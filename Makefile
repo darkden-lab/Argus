@@ -24,7 +24,7 @@ proto:
 	@echo "Generating Go code from proto files..."
 	protoc \
 		--proto_path=proto \
-		--go_out=backend --go_opt=module=github.com/k8s-dashboard/backend \
-		--go-grpc_out=backend --go-grpc_opt=module=github.com/k8s-dashboard/backend \
+		--go_out=backend --go_opt=module=github.com/darkden-lab/argus/backend \
+		--go-grpc_out=backend --go-grpc_opt=module=github.com/darkden-lab/argus/backend \
 		proto/agent/v1/agent.proto
 	@echo "Proto generation complete: backend/pkg/agentpb/"

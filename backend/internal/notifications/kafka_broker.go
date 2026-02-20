@@ -44,7 +44,7 @@ func NewKafkaBroker(config KafkaConfig) (*KafkaBroker, error) {
 		return nil, fmt.Errorf("at least one Kafka broker address is required")
 	}
 	if config.ConsumerGroup == "" {
-		config.ConsumerGroup = "k8s-dashboard-notifications"
+		config.ConsumerGroup = "argus-notifications"
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())

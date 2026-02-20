@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	pb "github.com/k8s-dashboard/backend/pkg/agentpb"
+	pb "github.com/darkden-lab/argus/backend/pkg/agentpb"
 	"k8s.io/client-go/rest"
 )
 

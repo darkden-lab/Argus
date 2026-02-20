@@ -5,7 +5,7 @@ import (
 	"log"
 	"runtime"
 
-	pb "github.com/k8s-dashboard/backend/pkg/agentpb"
+	pb "github.com/darkden-lab/argus/backend/pkg/agentpb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"

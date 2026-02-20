@@ -6,7 +6,7 @@ test.describe('Login Page', () => {
   });
 
   test('shows login form', async ({ page }) => {
-    await expect(page.getByText('K8s Dashboard')).toBeVisible();
+    await expect(page.getByText('Argus')).toBeVisible();
     await expect(page.getByText('Sign in to manage your clusters')).toBeVisible();
     await expect(page.getByLabel('Email')).toBeVisible();
     await expect(page.getByLabel('Password')).toBeVisible();

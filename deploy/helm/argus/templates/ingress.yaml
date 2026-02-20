@@ -2,9 +2,9 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: {{ include "k8s-dashboard.fullname" . }}
+  name: {{ include "argus.fullname" . }}
   labels:
-    {{- include "k8s-dashboard.labels" . | nindent 4 }}
+    {{- include "argus.labels" . | nindent 4 }}
 spec:
   ingressClassName: {{ .Values.ingress.className }}
   {{- if .Values.ingress.tls }}
@@ -19,14 +19,14 @@ spec:
             pathType: Prefix
             backend:
               service:
-                name: {{ include "k8s-dashboard.fullname" . }}-backend
+                name: {{ include "argus.fullname" . }}-backend
                 port:
                   number: 8080
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: {{ include "k8s-dashboard.fullname" . }}-frontend
+                name: {{ include "argus.fullname" . }}-frontend
                 port:
                   number: 3000
 {{- end }}

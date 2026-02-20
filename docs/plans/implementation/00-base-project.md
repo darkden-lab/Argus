@@ -1,7 +1,7 @@
-# Implementation Plan: Base Project - K8s Admin Dashboard
+# Implementation Plan: Base Project - Argus (K8s Admin Dashboard)
 
 **Feature:** Dashboard base de administracion multi-cluster Kubernetes
-**Design doc:** ../2026-02-20-k8s-dashboard-design.md
+**Design doc:** ../2026-02-20-argus-design.md
 **Date:** 2026-02-20
 **Status:** Completado
 

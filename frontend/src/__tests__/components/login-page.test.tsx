@@ -45,7 +45,7 @@ describe('LoginPage', () => {
       renderLoginPage();
     });
 
-    expect(screen.getByText('K8s Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Argus')).toBeInTheDocument();
     expect(screen.getByText('Sign in to manage your clusters')).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();

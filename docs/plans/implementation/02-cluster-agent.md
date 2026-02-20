@@ -102,14 +102,14 @@
 
 ### Task 4.2: Agent Helm chart
 **Files to create:**
-- `deploy/helm/dashboard-agent/Chart.yaml`
-- `deploy/helm/dashboard-agent/values.yaml` - dashboard.url, token, rbac.rules[]
-- `deploy/helm/dashboard-agent/templates/deployment.yaml`
-- `deploy/helm/dashboard-agent/templates/serviceaccount.yaml`
-- `deploy/helm/dashboard-agent/templates/clusterrole.yaml` - Configurable RBAC rules
-- `deploy/helm/dashboard-agent/templates/clusterrolebinding.yaml`
-- `deploy/helm/dashboard-agent/templates/configmap.yaml`
-- `deploy/helm/dashboard-agent/templates/secret.yaml`
+- `deploy/helm/argus-agent/Chart.yaml`
+- `deploy/helm/argus-agent/values.yaml` - dashboard.url, token, rbac.rules[]
+- `deploy/helm/argus-agent/templates/deployment.yaml`
+- `deploy/helm/argus-agent/templates/serviceaccount.yaml`
+- `deploy/helm/argus-agent/templates/clusterrole.yaml` - Configurable RBAC rules
+- `deploy/helm/argus-agent/templates/clusterrolebinding.yaml`
+- `deploy/helm/argus-agent/templates/configmap.yaml`
+- `deploy/helm/argus-agent/templates/secret.yaml`
 
 ### Task 4.3: Install script
 **Files to create:**

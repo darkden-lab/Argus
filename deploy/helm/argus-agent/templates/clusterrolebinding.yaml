@@ -1,14 +1,14 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: {{ include "k8s-dashboard.fullname" . }}
+  name: {{ include "argus-agent.fullname" . }}
   labels:
-    {{- include "k8s-dashboard.labels" . | nindent 4 }}
+    {{- include "argus-agent.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: {{ include "k8s-dashboard.fullname" . }}
+  name: {{ include "argus-agent.fullname" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "k8s-dashboard.serviceAccountName" . }}
+    name: {{ include "argus-agent.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}

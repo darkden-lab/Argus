@@ -1,6 +1,0 @@
-apiVersion: v2
-name: dashboard-agent
-description: K8s Dashboard cluster agent - connects remote clusters to the dashboard via gRPC
-type: application
-version: 0.1.0
-appVersion: "0.1.0"

@@ -3,7 +3,7 @@ package keda
 import (
 	"testing"
 
-	"github.com/k8s-dashboard/backend/internal/plugin"
+	"github.com/darkden-lab/argus/backend/internal/plugin"
 	k8swatch "k8s.io/apimachinery/pkg/watch"
 )
 

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/k8s-dashboard/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/cluster"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"

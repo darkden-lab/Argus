@@ -1,4 +1,4 @@
-module github.com/k8s-dashboard/backend
+module github.com/darkden-lab/argus/backend
 
 go 1.25.0
 

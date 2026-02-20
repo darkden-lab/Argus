@@ -7,7 +7,7 @@ import (
 	"math"
 	"time"
 
-	pb "github.com/k8s-dashboard/backend/pkg/agentpb"
+	pb "github.com/darkden-lab/argus/backend/pkg/agentpb"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"

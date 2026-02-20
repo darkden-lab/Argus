@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/k8s-dashboard/backend/internal/ai"
+	"github.com/darkden-lab/argus/backend/internal/ai"
 )
 
 // Ollama implements ai.LLMProvider using the Ollama HTTP API for local models.

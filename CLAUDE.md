@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Multi-cluster Kubernetes admin dashboard with plugin-based architecture. Go backend (REST + gRPC + WebSocket) + Next.js 16 frontend + PostgreSQL. Includes AI chat assistant, cluster agent system, web terminal, and async notification system with Kafka.
+Argus - Multi-cluster Kubernetes admin dashboard with plugin-based architecture. Go backend (REST + gRPC + WebSocket) + Next.js 16 frontend + PostgreSQL. Includes AI chat assistant, cluster agent system, web terminal, and async notification system with Kafka.
 
 ## Build & Run Commands
 
@@ -107,7 +107,7 @@ Standalone Go binary that connects to dashboard via gRPC bidirectional streaming
 ### Deployment (`deploy/`)
 
 - `deploy/docker/` — Multi-stage Dockerfiles (Go alpine builder + alpine runtime for backend, Next.js for frontend)
-- `deploy/helm/` — Helm charts: `k8s-dashboard` (main app) and `dashboard-agent` (cluster agent)
+- `deploy/helm/` — Helm charts: `argus` (main app) and `argus-agent` (cluster agent)
 - `Jenkinsfile` + `jenkins/` — Jenkins CI/CD pipeline (lint, test, docker build/push to ghcr.io, Helm deploy)
 - `.github/workflows/` — GitHub Actions CI (ci.yml, release.yml)
 

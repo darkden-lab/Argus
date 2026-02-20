@@ -1,4 +1,4 @@
-# K8s Dashboard - Ideas Backlog
+# Argus - Ideas Backlog
 
 Ideas pendientes de diseñar e implementar.
 
@@ -40,7 +40,7 @@ Ideas pendientes de diseñar e implementar.
 - **Agente en el cluster:** Pod ligero que se despliega en el cluster objetivo. Se registra automaticamente contra el dashboard usando un token de registro.
 - **Conexion inversa:** El agente abre una conexion WebSocket/gRPC hacia el dashboard (no al reves), evitando problemas de firewall y NAT.
 - **Proxy de API:** El agente actua como proxy local al API server del cluster, reenviando peticiones del dashboard sin exponer el API server externamente.
-- **Dos metodos coexistentes:** Añadir clusters via kubeconfig (como ahora) O desplegando el agente (helm install dashboard-agent).
+- **Dos metodos coexistentes:** Añadir clusters via kubeconfig (como ahora) O desplegando el agente (helm install argus-agent).
 - **Auto-discovery:** El agente reporta info del cluster (version, nodos, namespaces) automaticamente al registrarse.
 - Respetar RBAC del dashboard + ServiceAccount RBAC del agente en el cluster.
 

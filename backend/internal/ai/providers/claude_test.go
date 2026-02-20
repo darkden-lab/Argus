@@ -3,7 +3,7 @@ package providers
 import (
 	"testing"
 
-	"github.com/k8s-dashboard/backend/internal/ai"
+	"github.com/darkden-lab/argus/backend/internal/ai"
 )
 
 func TestClaudeName(t *testing.T) {

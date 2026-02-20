@@ -27,8 +27,8 @@ spec:
 
     environment {
         REGISTRY      = 'ghcr.io'
-        IMAGE_OWNER   = 'k8s-dashboard'
-        BACKEND_IMAGE = "${REGISTRY}/${IMAGE_OWNER}/backend"
+        IMAGE_OWNER   = 'darkden-lab'
+        BACKEND_IMAGE = "${REGISTRY}/${IMAGE_OWNER}/argus-backend"
         IMAGE_TAG     = "${env.TAG_NAME ?: env.BUILD_NUMBER}"
     }
 

@@ -1,6 +1,6 @@
 backend:
   image:
-    repository: k8s-dashboard/backend
+    repository: argus/backend
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 2
@@ -18,7 +18,7 @@ backend:
 
 frontend:
   image:
-    repository: k8s-dashboard/frontend
+    repository: argus/frontend
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 2
@@ -42,14 +42,14 @@ postgresql:
     size: 10Gi
     storageClass: ""
   env:
-    database: k8sdashboard
+    database: argus
     username: dashboard
     password: devpassword
 
 ingress:
   enabled: false
   className: nginx
-  host: k8s-dashboard.local
+  host: argus.local
   tls: []
 
 serviceAccount:

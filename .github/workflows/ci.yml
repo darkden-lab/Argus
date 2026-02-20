@@ -60,7 +60,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build backend image
-        run: docker build -f deploy/docker/Dockerfile.backend -t k8s-dashboard/backend:ci ./backend
+        run: docker build -f deploy/docker/Dockerfile.backend -t argus-backend:ci ./backend
 
       - name: Build frontend image
-        run: docker build -f deploy/docker/Dockerfile.frontend -t k8s-dashboard/frontend:ci ./frontend
+        run: docker build -f deploy/docker/Dockerfile.frontend -t argus-frontend:ci ./frontend

@@ -6,9 +6,9 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/k8s-dashboard/backend/internal/cluster"
-	"github.com/k8s-dashboard/backend/internal/plugin"
-	"github.com/k8s-dashboard/backend/internal/ws"
+	"github.com/darkden-lab/argus/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/plugin"
+	"github.com/darkden-lab/argus/backend/internal/ws"
 )
 
 var manifest = plugin.Manifest{

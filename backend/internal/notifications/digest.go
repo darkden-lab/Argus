@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/k8s-dashboard/backend/internal/notifications/channels"
+	"github.com/darkden-lab/argus/backend/internal/notifications/channels"
 )
 
 // DigestAggregator collects notification events and periodically sends

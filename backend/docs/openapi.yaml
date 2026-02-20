@@ -1,10 +1,10 @@
 openapi: "3.0.3"
 info:
-  title: K8s Dashboard API
+  title: Argus API
   description: Multi-cluster Kubernetes admin dashboard with plugin system
   version: "1.0.0"
   contact:
-    name: K8s Dashboard Team
+    name: Argus Team
 
 servers:
   - url: http://localhost:8080

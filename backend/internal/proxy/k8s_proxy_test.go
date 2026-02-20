@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/gorilla/mux"
-	"github.com/k8s-dashboard/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/auth"
 )
 
 func TestHandleProxy_NoAuth(t *testing.T) {

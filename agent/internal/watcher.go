@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	pb "github.com/k8s-dashboard/backend/pkg/agentpb"
+	pb "github.com/darkden-lab/argus/backend/pkg/agentpb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"

@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/gorilla/mux"
-	"github.com/k8s-dashboard/backend/internal/auth"
-	"github.com/k8s-dashboard/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/cluster"
 	"k8s.io/client-go/transport"
 )
 

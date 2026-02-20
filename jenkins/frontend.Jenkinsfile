@@ -27,8 +27,8 @@ spec:
 
     environment {
         REGISTRY       = 'ghcr.io'
-        IMAGE_OWNER    = 'k8s-dashboard'
-        FRONTEND_IMAGE = "${REGISTRY}/${IMAGE_OWNER}/frontend"
+        IMAGE_OWNER   = 'darkden-lab'
+        FRONTEND_IMAGE = "${REGISTRY}/${IMAGE_OWNER}/argus-frontend"
         IMAGE_TAG      = "${env.TAG_NAME ?: env.BUILD_NUMBER}"
     }
 

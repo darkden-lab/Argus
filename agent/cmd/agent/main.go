@@ -7,7 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/k8s-dashboard/agent/internal"
+	"github.com/darkden-lab/argus/agent/internal"
 )
 
 func main() {

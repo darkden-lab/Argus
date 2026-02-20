@@ -1,4 +1,4 @@
-# K8s Dashboard - Features Expansion Design
+# Argus - Features Expansion Design
 
 **Date:** 2026-02-20
 **Status:** Approved
@@ -129,7 +129,7 @@ CREATE INDEX idx_notifications_user_unread ON notifications(user_id, read) WHERE
 
 ```
 KAFKA_BROKERS=kafka:9092           # Si vacio, usa InMemoryBroker
-KAFKA_CONSUMER_GROUP=k8s-dashboard
+KAFKA_CONSUMER_GROUP=argus
 SMTP_HOST=smtp.example.com
 SMTP_PORT=587
 SMTP_USER=...
@@ -174,7 +174,7 @@ SMTP_PASSWORD=...
    ```
    O alternativa Helm:
    ```bash
-   helm install dashboard-agent oci://dashboard.example.com/charts/dashboard-agent \
+   helm install argus-agent oci://dashboard.example.com/charts/argus-agent \
      --set token=eyJhbGci... \
      --set dashboard.url=grpc.dashboard.example.com:443 \
      --set cluster.name=production-cluster
@@ -303,7 +303,7 @@ CREATE TABLE agent_tokens (
 );
 ```
 
-### Helm Chart del Agente (deploy/helm/dashboard-agent/)
+### Helm Chart del Agente (deploy/helm/argus-agent/)
 
 - ServiceAccount con ClusterRole/ClusterRoleBinding configurable
 - Deployment 1 replica

@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/k8s-dashboard/backend/internal/ai"
+	"github.com/darkden-lab/argus/backend/internal/ai"
 )
 
 const openaiAPIURL = "https://api.openai.com/v1"

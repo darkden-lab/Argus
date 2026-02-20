@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/k8s-dashboard/backend/internal/notifications/channels"
+	"github.com/darkden-lab/argus/backend/internal/notifications/channels"
 )
 
 // Router routes incoming notification events to the appropriate channels based

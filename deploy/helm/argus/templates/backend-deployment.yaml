@@ -1,23 +1,23 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "k8s-dashboard.fullname" . }}-backend
+  name: {{ include "argus.fullname" . }}-backend
   labels:
-    {{- include "k8s-dashboard.labels" . | nindent 4 }}
+    {{- include "argus.labels" . | nindent 4 }}
     app.kubernetes.io/component: backend
 spec:
   replicas: {{ .Values.backend.replicas }}
   selector:
     matchLabels:
-      {{- include "k8s-dashboard.selectorLabels" . | nindent 6 }}
+      {{- include "argus.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: backend
   template:
     metadata:
       labels:
-        {{- include "k8s-dashboard.selectorLabels" . | nindent 8 }}
+        {{- include "argus.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: backend
     spec:
-      serviceAccountName: {{ include "k8s-dashboard.serviceAccountName" . }}
+      serviceAccountName: {{ include "argus.serviceAccountName" . }}
       containers:
         - name: backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -30,102 +30,102 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-secret
+                  name: {{ include "argus.fullname" . }}-secret
                   key: databaseURL
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-secret
+                  name: {{ include "argus.fullname" . }}-secret
                   key: jwtSecret
             - name: ENCRYPTION_KEY
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-secret
+                  name: {{ include "argus.fullname" . }}-secret
                   key: encryptionKey
             {{- if .Values.oidc.enabled }}
             - name: OIDC_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-secret
+                  name: {{ include "argus.fullname" . }}-secret
                   key: oidcClientSecret
             {{- end }}
             # Plugin feature flags loaded from ConfigMap
             - name: PLUGIN_ISTIO_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: PLUGIN_ISTIO_ENABLED
             - name: PLUGIN_PROMETHEUS_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: PLUGIN_PROMETHEUS_ENABLED
             - name: PLUGIN_CALICO_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: PLUGIN_CALICO_ENABLED
             - name: PLUGIN_CNPG_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: PLUGIN_CNPG_ENABLED
             - name: PLUGIN_MARIADB_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: PLUGIN_MARIADB_ENABLED
             - name: PLUGIN_KEDA_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: PLUGIN_KEDA_ENABLED
             - name: PLUGIN_CEPH_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: PLUGIN_CEPH_ENABLED
             - name: PLUGIN_HELM_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: PLUGIN_HELM_ENABLED
             # OIDC configuration (non-sensitive)
             - name: OIDC_ENABLED
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: OIDC_ENABLED
             {{- if .Values.oidc.enabled }}
             - name: OIDC_ISSUER_URL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: OIDC_ISSUER_URL
             - name: OIDC_CLIENT_ID
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: OIDC_CLIENT_ID
             - name: OIDC_REDIRECT_URL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: OIDC_REDIRECT_URL
             - name: OIDC_SCOPES
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: OIDC_SCOPES
             - name: OIDC_USERNAME_CLAIM
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: OIDC_USERNAME_CLAIM
             - name: OIDC_GROUPS_CLAIM
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-config
+                  name: {{ include "argus.fullname" . }}-config
                   key: OIDC_GROUPS_CLAIM
             {{- end }}
           resources:

@@ -5,7 +5,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/k8s-dashboard/backend/internal/ws"
+	"github.com/darkden-lab/argus/backend/internal/ws"
 )
 
 // EventProducer translates system events (K8s watch events, audit actions,

@@ -59,7 +59,7 @@ func GenerateServiceMonitor(cfg ServiceMonitorConfig) *unstructured.Unstructured
 				"name":      cfg.Name,
 				"namespace": cfg.Namespace,
 				"labels": map[string]interface{}{
-					"app.kubernetes.io/managed-by": "k8s-dashboard",
+					"app.kubernetes.io/managed-by": "argus",
 				},
 			},
 			"spec": map[string]interface{}{

@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "K8s Dashboard",
+  title: "Argus",
   description: "Kubernetes Multi-Cluster Management Dashboard",
 };
 

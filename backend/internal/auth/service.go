@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/k8s-dashboard/backend/internal/db"
+	"github.com/darkden-lab/argus/backend/internal/db"
 	"golang.org/x/crypto/bcrypt"
 )
 

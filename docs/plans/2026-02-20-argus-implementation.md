@@ -1,14 +1,14 @@
-# K8s Admin Dashboard - Implementation Plan
+# Argus - Implementation Plan
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Build a multi-cluster Kubernetes admin dashboard with a plugin-based architecture (Istio, Prometheus Operator, Calico) using Next.js 16 frontend and Go backend.
+**Goal:** Build Argus, a multi-cluster Kubernetes admin dashboard with a plugin-based architecture (Istio, Prometheus Operator, Calico) using Next.js 16 frontend and Go backend.
 
 **Architecture:** Monorepo with two main services: a Next.js 16 App Router frontend (TypeScript, Tailwind, shadcn/ui) and a Go REST/WebSocket backend (client-go, PostgreSQL). Plugins are manifest-driven: backend implements a Go `Plugin` interface, frontend renders UI dynamically from manifests.
 
 **Tech Stack:** Next.js 16, TypeScript, Tailwind CSS, shadcn/ui, Zustand, Go 1.22+, client-go, gorilla/mux, gorilla/websocket, pgx, PostgreSQL 16, Docker, Helm
 
-**Design doc:** `docs/plans/2026-02-20-k8s-dashboard-design.md`
+**Design doc:** `docs/plans/2026-02-20-argus-design.md`
 
 ---
 
@@ -108,7 +108,7 @@ git add frontend/ && git commit -m "chore: scaffold Next.js 16 frontend"
 **Step 1: Initialize Go module**
 ```bash
 cd backend
-go mod init github.com/your-org/k8s-dashboard/backend
+go mod init github.com/your-org/argus/backend
 ```
 
 **Step 2: Create package structure**
@@ -193,7 +193,7 @@ services:
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: k8sdashboard
+      POSTGRES_DB: argus
       POSTGRES_USER: dashboard
       POSTGRES_PASSWORD: devpassword
     ports:
@@ -208,7 +208,7 @@ services:
     ports:
       - "8080:8080"
     environment:
-      DATABASE_URL: postgres://dashboard:devpassword@postgres:5432/k8sdashboard?sslmode=disable
+      DATABASE_URL: postgres://dashboard:devpassword@postgres:5432/argus?sslmode=disable
       JWT_SECRET: dev-secret-change-in-prod
       ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
     depends_on:
@@ -881,9 +881,9 @@ class K8sWebSocket {
 
 **Agent:** DevOps/CI-CD + Kubernetes Expert
 **Files:**
-- Create: `deploy/helm/k8s-dashboard/Chart.yaml`
-- Create: `deploy/helm/k8s-dashboard/values.yaml`
-- Create: `deploy/helm/k8s-dashboard/templates/` (deployment, service, ingress, configmap, secret, serviceaccount, rbac)
+- Create: `deploy/helm/argus/Chart.yaml`
+- Create: `deploy/helm/argus/values.yaml`
+- Create: `deploy/helm/argus/templates/` (deployment, service, ingress, configmap, secret, serviceaccount, rbac)
 
 **Step 1: Write Chart.yaml** with frontend + backend as subcharts or single chart
 **Step 2: Write values.yaml** with configurable: replicas, image tags, ingress, PostgreSQL, auth config

@@ -191,7 +191,7 @@ export function WebTerminal() {
     fitAddonRef.current = fitAddon;
 
     // Welcome message
-    term.writeln("\x1b[1;36mK8s Dashboard Terminal\x1b[0m");
+    term.writeln("\x1b[1;36mArgus Terminal\x1b[0m");
     term.writeln(
       "\x1b[90mSelect a cluster and namespace to begin.\x1b[0m"
     );

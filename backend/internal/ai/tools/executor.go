@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/k8s-dashboard/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/cluster"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -307,7 +307,7 @@ func (e *Executor) applyYAML(ctx context.Context, args map[string]string) (strin
 		ctx,
 		obj.GetName(),
 		&obj,
-		metav1.ApplyOptions{FieldManager: "k8s-dashboard-ai"},
+		metav1.ApplyOptions{FieldManager: "argus-ai"},
 	)
 	if err != nil {
 		return "", fmt.Errorf("failed to apply: %w", err)

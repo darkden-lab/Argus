@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/k8s-dashboard/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/cluster"
 )
 
 // Indexer periodically indexes content sources into the vector store for RAG.

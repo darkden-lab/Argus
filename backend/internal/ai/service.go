@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/k8s-dashboard/backend/internal/ai/rag"
-	"github.com/k8s-dashboard/backend/internal/ai/tools"
-	"github.com/k8s-dashboard/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/ai/rag"
+	"github.com/darkden-lab/argus/backend/internal/ai/tools"
+	"github.com/darkden-lab/argus/backend/internal/cluster"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

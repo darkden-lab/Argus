@@ -7,7 +7,7 @@ import (
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/k8s-dashboard/backend/internal/crypto"
+	"github.com/darkden-lab/argus/backend/internal/crypto"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"

@@ -4,7 +4,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/k8s-dashboard/backend/internal/ai/tools"
+	"github.com/darkden-lab/argus/backend/internal/ai/tools"
 )
 
 // Role represents who sent a message in a conversation.

@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
-	"github.com/k8s-dashboard/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/auth"
 )
 
 func RBACMiddleware(engine *Engine, resource, action string) func(http.Handler) http.Handler {

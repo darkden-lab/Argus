@@ -1,9 +1,9 @@
-module github.com/k8s-dashboard/agent
+module github.com/darkden-lab/argus/agent
 
 go 1.25.0
 
 require (
-	github.com/k8s-dashboard/backend v0.0.0
+	github.com/darkden-lab/argus/backend v0.0.0
 	google.golang.org/grpc v1.74.2
 	google.golang.org/protobuf v1.36.8
 	k8s.io/apimachinery v0.35.1
@@ -49,4 +49,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace github.com/k8s-dashboard/backend => ../backend
+replace github.com/darkden-lab/argus/backend => ../backend

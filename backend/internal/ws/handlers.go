@@ -6,7 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
-	"github.com/k8s-dashboard/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/auth"
 )
 
 var upgrader = websocket.Upgrader{

@@ -1,20 +1,20 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "dashboard-agent.fullname" . }}
+  name: {{ include "argus-agent.fullname" . }}
   labels:
-    {{- include "dashboard-agent.labels" . | nindent 4 }}
+    {{- include "argus-agent.labels" . | nindent 4 }}
 spec:
   replicas: {{ .Values.replicas }}
   selector:
     matchLabels:
-      {{- include "dashboard-agent.selectorLabels" . | nindent 6 }}
+      {{- include "argus-agent.selectorLabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        {{- include "dashboard-agent.selectorLabels" . | nindent 8 }}
+        {{- include "argus-agent.selectorLabels" . | nindent 8 }}
     spec:
-      serviceAccountName: {{ include "dashboard-agent.serviceAccountName" . }}
+      serviceAccountName: {{ include "argus-agent.serviceAccountName" . }}
       containers:
         - name: agent
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -23,17 +23,17 @@ spec:
             - name: DASHBOARD_URL
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "dashboard-agent.fullname" . }}-config
+                  name: {{ include "argus-agent.fullname" . }}-config
                   key: DASHBOARD_URL
             - name: CLUSTER_NAME
               valueFrom:
                 configMapKeyRef:
-                  name: {{ include "dashboard-agent.fullname" . }}-config
+                  name: {{ include "argus-agent.fullname" . }}-config
                   key: CLUSTER_NAME
             - name: DASHBOARD_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "dashboard-agent.fullname" . }}-secret
+                  name: {{ include "argus-agent.fullname" . }}-secret
                   key: DASHBOARD_TOKEN
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

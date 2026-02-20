@@ -28,7 +28,7 @@ func TestNewKafkaBroker_DefaultConsumerGroup(t *testing.T) {
 	}
 	defer broker.Close()
 
-	if broker.config.ConsumerGroup != "k8s-dashboard-notifications" {
+	if broker.config.ConsumerGroup != "argus-notifications" {
 		t.Errorf("expected default consumer group, got %s", broker.config.ConsumerGroup)
 	}
 }

@@ -51,7 +51,7 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold">K8s Dashboard</CardTitle>
+          <CardTitle className="text-2xl font-bold">Argus</CardTitle>
           <CardDescription>Sign in to manage your clusters</CardDescription>
         </CardHeader>
         <CardContent>

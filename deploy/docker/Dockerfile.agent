@@ -7,14 +7,14 @@ WORKDIR /app/agent
 RUN go mod download
 
 COPY agent/ /app/agent/
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /dashboard-agent ./cmd/agent/
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /argus-agent ./cmd/agent/
 
 FROM alpine:3.19
 RUN apk --no-cache add ca-certificates && \
     addgroup -S agentgroup && adduser -S agentuser -G agentgroup
-COPY --from=builder /dashboard-agent /dashboard-agent
+COPY --from=builder /argus-agent /argus-agent
 EXPOSE 8443
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
   CMD wget --no-verbose --tries=1 --spider http://localhost:8443/healthz || exit 1
 USER agentuser:agentgroup
-ENTRYPOINT ["/dashboard-agent"]
+ENTRYPOINT ["/argus-agent"]

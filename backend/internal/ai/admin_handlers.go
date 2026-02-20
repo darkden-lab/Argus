@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
-	"github.com/k8s-dashboard/backend/internal/ai/rag"
+	"github.com/darkden-lab/argus/backend/internal/ai/rag"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 

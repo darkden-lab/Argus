@@ -2,21 +2,21 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: {{ include "k8s-dashboard.fullname" . }}-postgres
+  name: {{ include "argus.fullname" . }}-postgres
   labels:
-    {{- include "k8s-dashboard.labels" . | nindent 4 }}
+    {{- include "argus.labels" . | nindent 4 }}
     app.kubernetes.io/component: postgres
 spec:
-  serviceName: {{ include "k8s-dashboard.fullname" . }}-postgres
+  serviceName: {{ include "argus.fullname" . }}-postgres
   replicas: 1
   selector:
     matchLabels:
-      {{- include "k8s-dashboard.selectorLabels" . | nindent 6 }}
+      {{- include "argus.selectorLabels" . | nindent 6 }}
       app.kubernetes.io/component: postgres
   template:
     metadata:
       labels:
-        {{- include "k8s-dashboard.selectorLabels" . | nindent 8 }}
+        {{- include "argus.selectorLabels" . | nindent 8 }}
         app.kubernetes.io/component: postgres
     spec:
       containers:
@@ -35,7 +35,7 @@ spec:
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: {{ include "k8s-dashboard.fullname" . }}-secret
+                  name: {{ include "argus.fullname" . }}-secret
                   key: dbPassword
           volumeMounts:
             - name: data

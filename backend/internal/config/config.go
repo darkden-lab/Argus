@@ -32,7 +32,7 @@ type Config struct {
 func Load() *Config {
 	return &Config{
 		Port:           getEnv("PORT", "8080"),
-		DatabaseURL:    getEnv("DATABASE_URL", "postgres://dashboard:devpassword@localhost:5432/k8sdashboard?sslmode=disable"),
+		DatabaseURL:    getEnv("DATABASE_URL", "postgres://dashboard:devpassword@localhost:5432/argus?sslmode=disable"),
 		JWTSecret:      getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
 		EncryptionKey:  getEnv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
 		MigrationsPath:   getEnv("MIGRATIONS_PATH", "migrations"),
@@ -42,7 +42,7 @@ func Load() *Config {
 		OIDCRedirectURL:  getEnv("OIDC_REDIRECT_URL", "http://localhost:8080/api/auth/oidc/callback"),
 
 		KafkaBrokers:       getEnv("KAFKA_BROKERS", ""),
-		KafkaConsumerGroup: getEnv("KAFKA_CONSUMER_GROUP", "k8s-dashboard-notifications"),
+		KafkaConsumerGroup: getEnv("KAFKA_CONSUMER_GROUP", "argus-notifications"),
 		SMTPHost:           getEnv("SMTP_HOST", ""),
 		SMTPPort:           getEnv("SMTP_PORT", "587"),
 		SMTPUser:           getEnv("SMTP_USER", ""),

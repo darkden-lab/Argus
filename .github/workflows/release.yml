@@ -55,7 +55,7 @@ jobs:
         env:
           CHART_VERSION: ${{ steps.version.outputs.VERSION }}
         run: |
-          helm package deploy/helm/k8s-dashboard \
+          helm package deploy/helm/argus \
             --version "$CHART_VERSION" \
             --app-version "$CHART_VERSION"
 

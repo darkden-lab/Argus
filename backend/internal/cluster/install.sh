@@ -8,7 +8,7 @@ set -euo pipefail
 DASHBOARD_URL=""
 TOKEN=""
 CLUSTER_NAME=""
-NAMESPACE="k8s-dashboard"
+NAMESPACE="argus"
 RBAC_PRESET="read-only"
 CHART_VERSION=""
 IMAGE_TAG="latest"
@@ -26,7 +26,7 @@ Required:
   --cluster-name     Name for this cluster in the dashboard
 
 Options:
-  --namespace        Kubernetes namespace (default: k8s-dashboard)
+  --namespace        Kubernetes namespace (default: argus)
   --rbac-preset      RBAC preset: read-only, operator, admin, custom (default: read-only)
   --chart-version    Helm chart version (default: latest)
   --image-tag        Agent image tag (default: latest)
@@ -80,7 +80,7 @@ kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -
 # Build helm install command
 HELM_ARGS=(
   upgrade --install dashboard-agent
-  oci://registry.k8s-dashboard.io/charts/dashboard-agent
+  oci://registry.argus.io/charts/dashboard-agent
   --namespace "$NAMESPACE"
   --set "dashboard.url=$DASHBOARD_URL"
   --set "dashboard.token=$TOKEN"

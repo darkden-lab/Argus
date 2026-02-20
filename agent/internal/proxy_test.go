@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	pb "github.com/k8s-dashboard/backend/pkg/agentpb"
+	pb "github.com/darkden-lab/argus/backend/pkg/agentpb"
 )
 
 func TestProxyHandleRequest_NoCluster(t *testing.T) {

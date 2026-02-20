@@ -35,9 +35,9 @@ spec:
 
     environment {
         REGISTRY       = 'ghcr.io'
-        IMAGE_OWNER    = 'k8s-dashboard'
-        BACKEND_IMAGE  = "${REGISTRY}/${IMAGE_OWNER}/backend"
-        FRONTEND_IMAGE = "${REGISTRY}/${IMAGE_OWNER}/frontend"
+        IMAGE_OWNER   = 'darkden-lab'
+        BACKEND_IMAGE  = "${REGISTRY}/${IMAGE_OWNER}/argus-backend"
+        FRONTEND_IMAGE = "${REGISTRY}/${IMAGE_OWNER}/argus-frontend"
         IMAGE_TAG      = "${env.TAG_NAME ?: env.BUILD_NUMBER}"
     }
 
@@ -114,7 +114,7 @@ spec:
             steps {
                 container('helm') {
                     sh """
-                        helm upgrade --install k8s-dashboard deploy/helm/k8s-dashboard \
+                        helm upgrade --install argus deploy/helm/argus \
                             --set backend.image.repository=${BACKEND_IMAGE} \
                             --set backend.image.tag=${IMAGE_TAG} \
                             --set frontend.image.repository=${FRONTEND_IMAGE} \

@@ -4,7 +4,7 @@ import (
 	"log"
 	"strings"
 
-	"github.com/k8s-dashboard/backend/internal/config"
+	"github.com/darkden-lab/argus/backend/internal/config"
 )
 
 // NewBroker creates a MessageBroker based on the application configuration.
