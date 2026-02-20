@@ -1,0 +1,58 @@
+backend:
+  image:
+    repository: k8s-dashboard/backend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  env:
+    databaseURL: ""
+    jwtSecret: ""
+    encryptionKey: ""
+
+frontend:
+  image:
+    repository: k8s-dashboard/frontend
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 2
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+  env:
+    apiUrl: http://localhost:8080
+
+postgresql:
+  enabled: true
+  image:
+    repository: postgres
+    tag: "16-alpine"
+    pullPolicy: IfNotPresent
+  persistence:
+    size: 10Gi
+    storageClass: ""
+  env:
+    database: k8sdashboard
+    username: dashboard
+    password: devpassword
+
+ingress:
+  enabled: false
+  className: nginx
+  host: k8s-dashboard.local
+  tls: []
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}

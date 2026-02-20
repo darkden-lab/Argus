@@ -1,0 +1,19 @@
+{{- if .Values.postgresql.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "k8s-dashboard.fullname" . }}-postgres
+  labels:
+    {{- include "k8s-dashboard.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: tcp-postgres
+      protocol: TCP
+      name: tcp-postgres
+  selector:
+    {{- include "k8s-dashboard.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+{{- end }}
