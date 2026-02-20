@@ -139,6 +139,67 @@ func (h *Handlers) DeleteResource(resource string) http.HandlerFunc {
 	}
 }
 
+func (h *Handlers) CreateServiceMonitorWizard(w http.ResponseWriter, r *http.Request) {
+	clusterID := mux.Vars(r)["cluster"]
+
+	client, err := h.cm.GetClient(clusterID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": "cluster not found"})
+		return
+	}
+
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	var cfg ServiceMonitorConfig
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	if cfg.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
+	}
+
+	cfg.ClusterID = clusterID
+	obj := GenerateServiceMonitor(cfg)
+
+	namespace := obj.GetNamespace()
+	created, err := client.DynClient.Resource(h.gvr("servicemonitors")).Namespace(namespace).Create(context.Background(), obj, metav1.CreateOptions{})
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, created)
+}
+
+func (h *Handlers) PreviewServiceMonitorWizard(w http.ResponseWriter, r *http.Request) {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid body"})
+		return
+	}
+
+	var cfg ServiceMonitorConfig
+	if err := json.Unmarshal(body, &cfg); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+		return
+	}
+
+	if cfg.Name == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		return
+	}
+
+	obj := GenerateServiceMonitor(cfg)
+	writeJSON(w, http.StatusOK, obj)
+}
+
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)

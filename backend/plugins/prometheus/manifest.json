@@ -19,7 +19,9 @@
       {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/prometheusrules/{namespace}/{name}", "handler": "GetPrometheusRule"},
       {"method": "DELETE", "path": "/api/plugins/prometheus/{cluster}/prometheusrules/{namespace}/{name}", "handler": "DeletePrometheusRule"},
       {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/alertmanagers", "handler": "ListAlertmanagers"},
-      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/alertmanagers/{namespace}/{name}", "handler": "GetAlertmanager"}
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/alertmanagers/{namespace}/{name}", "handler": "GetAlertmanager"},
+      {"method": "POST", "path": "/api/plugins/prometheus/{cluster}/wizard/servicemonitor", "handler": "CreateServiceMonitorWizard"},
+      {"method": "POST", "path": "/api/plugins/prometheus/{cluster}/wizard/servicemonitor/preview", "handler": "PreviewServiceMonitorWizard"}
     ],
     "watchers": [
       {"group": "monitoring.coreos.com", "version": "v1", "resource": "servicemonitors"},

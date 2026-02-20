@@ -78,6 +78,10 @@ func (p *PrometheusPlugin) RegisterRoutes(router *mux.Router, cm *cluster.Manage
 
 	sub.HandleFunc("/{cluster}/alertmanagers", h.ListResources("alertmanagers")).Methods("GET")
 	sub.HandleFunc("/{cluster}/alertmanagers/{namespace}/{name}", h.GetResource("alertmanagers")).Methods("GET")
+
+	// Wizard routes
+	sub.HandleFunc("/{cluster}/wizard/servicemonitor", h.CreateServiceMonitorWizard).Methods("POST")
+	sub.HandleFunc("/{cluster}/wizard/servicemonitor/preview", h.PreviewServiceMonitorWizard).Methods("POST")
 }
 
 func (p *PrometheusPlugin) RegisterWatchers(hub *ws.Hub, cm *cluster.Manager) {
