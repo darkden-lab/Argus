@@ -22,6 +22,11 @@ func subscriptionKey(clusterID, resource, namespace string) string {
 	return clusterID + "/" + namespace + "/" + resource
 }
 
+// EventHook is a callback invoked whenever a WatchEvent is broadcast through
+// the Hub. It can be used by external systems (e.g. the notification producer)
+// to react to K8s watch events.
+type EventHook func(event WatchEvent)
+
 // Hub manages the lifecycle of WebSocket clients and broadcasts events to
 // subscribers. It is safe for concurrent use.
 type Hub struct {
@@ -30,6 +35,8 @@ type Hub struct {
 	unregister chan *Client
 	broadcast  chan broadcastMsg
 	mu         sync.RWMutex
+	hooksMu    sync.RWMutex
+	hooks      []EventHook
 }
 
 type broadcastMsg struct {
@@ -84,10 +91,26 @@ func (h *Hub) Run() {
 	}
 }
 
+// OnEvent registers a hook that is called for every WatchEvent broadcast
+// through the hub. Hooks are called synchronously from BroadcastToSubscribers,
+// so they should not block.
+func (h *Hub) OnEvent(hook EventHook) {
+	h.hooksMu.Lock()
+	defer h.hooksMu.Unlock()
+	h.hooks = append(h.hooks, hook)
+}
+
 // BroadcastToSubscribers encodes event as JSON and enqueues it for delivery
 // to every client that has subscribed to the matching (cluster, resource,
-// namespace) tuple.
+// namespace) tuple. It also invokes any registered event hooks.
 func (h *Hub) BroadcastToSubscribers(subKey string, event WatchEvent) {
+	// Invoke hooks
+	h.hooksMu.RLock()
+	for _, hook := range h.hooks {
+		hook(event)
+	}
+	h.hooksMu.RUnlock()
+
 	data, err := json.Marshal(event)
 	if err != nil {
 		log.Printf("ws: failed to marshal event: %v", err)
