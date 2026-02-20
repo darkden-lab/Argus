@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/k8s-dashboard/backend/internal/audit"
 	"github.com/k8s-dashboard/backend/internal/auth"
 	"github.com/k8s-dashboard/backend/internal/cluster"
 	"github.com/k8s-dashboard/backend/internal/config"
@@ -66,6 +67,10 @@ func main() {
 	authService := auth.NewAuthService(database, jwtService)
 	authHandlers := auth.NewHandlers(authService)
 
+	// Audit Log
+	auditStore := audit.NewStore(pool)
+	auditHandlers := audit.NewHandlers(auditStore)
+
 	// Plugin Engine
 	pluginEngine := plugin.NewEngine(pool)
 	registerPlugins(pluginEngine)
@@ -90,6 +95,9 @@ func main() {
 	// Protected routes
 	protected := r.PathPrefix("").Subrouter()
 	protected.Use(mw.AuthMiddleware(jwtService))
+	if pool != nil {
+		protected.Use(audit.Middleware(auditStore))
+	}
 
 	// Cluster routes
 	clusterHandlers := cluster.NewHandlers(clusterMgr)
@@ -102,6 +110,9 @@ func main() {
 	// Convenience routes (namespaces, nodes, events)
 	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr)
 	convenienceHandlers.RegisterRoutes(protected)
+
+	// Audit log routes
+	auditHandlers.RegisterRoutes(protected)
 
 	// Plugin management routes
 	pluginHandlers := plugin.NewHandlers(pluginEngine)

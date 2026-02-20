@@ -67,11 +67,11 @@ function toYaml(obj: unknown, indent = 0): string {
 }
 
 interface ReleaseDetailProps {
-  name: string;
-  namespace: string;
+  name?: string;
+  namespace?: string;
 }
 
-export function HelmReleaseDetail({ name, namespace }: ReleaseDetailProps) {
+export function HelmReleaseDetail({ name = "", namespace = "" }: ReleaseDetailProps) {
   const [release, setRelease] = useState<HelmRelease | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"values" | "history" | "conditions">("values");
