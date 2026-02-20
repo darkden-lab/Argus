@@ -13,8 +13,9 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import { Trash2, Save } from "lucide-react";
+import { Trash2, Save, MessageSquare } from "lucide-react";
 import { YamlEditor } from "./yaml-editor";
+import { useAiChatStore } from "@/stores/ai-chat";
 
 interface KeyValue {
   key: string;
@@ -54,6 +55,19 @@ export function ResourceDetail({
   const [editedYaml, setEditedYaml] = useState(yaml);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const yamlChanged = editedYaml !== yaml;
+  const openChat = useAiChatStore((s) => s.open);
+  const setPageContext = useAiChatStore((s) => s.setPageContext);
+  const setInputValue = useAiChatStore((s) => s.setInputValue);
+
+  const handleAskAi = () => {
+    setPageContext({
+      resourceKind: kind,
+      resourceName: name,
+      namespace,
+    });
+    setInputValue(`Tell me about this ${kind} "${name}"${namespace ? ` in namespace "${namespace}"` : ""}`);
+    openChat();
+  };
 
   return (
     <div className="space-y-4">
@@ -66,6 +80,11 @@ export function ResourceDetail({
             <Badge variant="outline">{namespace}</Badge>
           )}
         </div>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleAskAi}>
+            <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+            Ask AI
+          </Button>
         {onDelete && (
           <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
             <DialogTrigger asChild>
@@ -101,6 +120,7 @@ export function ResourceDetail({
             </DialogContent>
           </Dialog>
         )}
+        </div>
       </div>
 
       {/* Tabs */}

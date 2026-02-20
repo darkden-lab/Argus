@@ -7,7 +7,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResourceTable, StatusBadge, type Column } from "@/components/resources/resource-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Download, MessageSquare, Terminal, Copy, Check } from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import { useAiChatStore } from "@/stores/ai-chat";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useK8sWildcard } from "@/hooks/use-k8s-websocket";
 import type { WatchEvent } from "@/lib/ws";
@@ -109,6 +111,10 @@ export default function ClusterDetailPage() {
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [namespaces, setNamespaces] = useState<string[]>([]);
   const [nodeCount, setNodeCount] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const openChat = useAiChatStore((s) => s.open);
+  const setPageContext = useAiChatStore((s) => s.setPageContext);
 
   const handleWsEvent = useCallback(
     (event: WatchEvent) => {
@@ -186,6 +192,42 @@ export default function ClusterDetailPage() {
     }
   }
 
+  const handleDownloadKubeconfig = async () => {
+    setIsDownloading(true);
+    try {
+      const token = localStorage.getItem("access_token");
+      const res = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/proxy/kubeconfig?cluster_id=${clusterId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error("Download failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `kubeconfig-${clusterId}.yaml`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // api error handling will show toast
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
+  const handleAskAi = () => {
+    setPageContext({ cluster: clusterId });
+    openChat();
+  };
+
+  const cliSetupCommand = `k8s-dash login --server ${typeof window !== "undefined" ? window.location.origin : "https://dashboard.example.com"}`;
+
+  const handleCopyCommand = () => {
+    navigator.clipboard.writeText(cliSetupCommand);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -207,7 +249,30 @@ export default function ClusterDetailPage() {
             </p>
           </div>
         </div>
-        <LiveIndicator isConnected={isConnected} lastUpdated={lastUpdated} />
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={handleAskAi}>
+            <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+            Ask AI
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadKubeconfig}
+            disabled={isDownloading}
+          >
+            <Download className="mr-1.5 h-3.5 w-3.5" />
+            {isDownloading ? "Downloading..." : "Kubeconfig"}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => router.push("/terminal")}
+          >
+            <Terminal className="mr-1.5 h-3.5 w-3.5" />
+            Terminal
+          </Button>
+          <LiveIndicator isConnected={isConnected} lastUpdated={lastUpdated} />
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
@@ -244,6 +309,39 @@ export default function ClusterDetailPage() {
                   {ns}
                 </Badge>
               ))}
+            </div>
+          </div>
+
+          <Separator />
+
+          {/* CLI Setup */}
+          <div className="rounded-md border p-4 space-y-3">
+            <p className="text-sm font-medium">CLI Setup</p>
+            <p className="text-xs text-muted-foreground">
+              Use the k8s-dash CLI to interact with this cluster from your terminal.
+            </p>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs font-mono">
+                {cliSetupCommand}
+              </code>
+              <Button
+                variant="outline"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                onClick={handleCopyCommand}
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-green-500" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </Button>
+            </div>
+            <div className="space-y-1 text-xs text-muted-foreground">
+              <p>After logging in, configure kubectl for this cluster:</p>
+              <code className="block rounded-md bg-muted px-3 py-2 font-mono">
+                k8s-dash use {clusterId}
+              </code>
             </div>
           </div>
         </TabsContent>
