@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,6 +15,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/k8s-dashboard/backend/docs"
+	"github.com/k8s-dashboard/backend/internal/agentpb"
 	"github.com/k8s-dashboard/backend/internal/audit"
 	"github.com/k8s-dashboard/backend/internal/auth"
 	"github.com/k8s-dashboard/backend/internal/cluster"
@@ -25,6 +28,8 @@ import (
 	"github.com/k8s-dashboard/backend/internal/rbac"
 	"github.com/k8s-dashboard/backend/internal/terminal"
 	"github.com/k8s-dashboard/backend/internal/ws"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	pluginCalico "github.com/k8s-dashboard/backend/plugins/calico"
 	pluginCeph "github.com/k8s-dashboard/backend/plugins/ceph"
 	pluginCnpg "github.com/k8s-dashboard/backend/plugins/cnpg"
@@ -61,6 +66,11 @@ func main() {
 			log.Printf("WARNING: failed to load existing clusters: %v", err)
 		}
 	}
+
+	// gRPC Agent Server
+	agentStore := cluster.NewStore(pool)
+	agentServer := cluster.NewAgentServer(pool, agentStore, cfg.JWTSecret)
+	go startGRPCServer(cfg, agentServer)
 
 	// RBAC Engine
 	rbacEngine := rbac.NewEngine(pool)
@@ -236,6 +246,35 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+}
+
+func startGRPCServer(cfg *config.Config, agentSrv *cluster.AgentServer) {
+	var opts []grpc.ServerOption
+
+	if cfg.GRPCTLSCert != "" && cfg.GRPCTLSKey != "" {
+		cert, err := tls.LoadX509KeyPair(cfg.GRPCTLSCert, cfg.GRPCTLSKey)
+		if err != nil {
+			log.Printf("WARNING: failed to load gRPC TLS cert: %v (running insecure)", err)
+		} else {
+			opts = append(opts, grpc.Creds(credentials.NewTLS(&tls.Config{
+				Certificates: []tls.Certificate{cert},
+				MinVersion:   tls.VersionTLS12,
+			})))
+		}
+	}
+
+	grpcServer := grpc.NewServer(opts...)
+	agentpb.RegisterClusterAgentServer(grpcServer, agentSrv)
+
+	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
+	if err != nil {
+		log.Fatalf("Failed to listen on gRPC port %s: %v", cfg.GRPCPort, err)
+	}
+
+	log.Printf("gRPC agent server listening on :%s", cfg.GRPCPort)
+	if err := grpcServer.Serve(lis); err != nil {
+		log.Fatalf("gRPC server failed: %v", err)
+	}
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
