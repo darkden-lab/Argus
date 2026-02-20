@@ -1,0 +1,54 @@
+{
+  "id": "mariadb",
+  "name": "MariaDB Operator",
+  "version": "1.0.0",
+  "description": "Manage MariaDB instances, backups, restores, databases, users, and grants via the MariaDB Operator",
+  "permissions": ["mariadb:*"],
+  "backend": {
+    "routes": [
+      {"method": "GET",    "path": "/api/plugins/mariadb/instances",            "handler": "ListMariaDBs"},
+      {"method": "GET",    "path": "/api/plugins/mariadb/instances/{name}",     "handler": "GetMariaDB"},
+      {"method": "POST",   "path": "/api/plugins/mariadb/instances",            "handler": "CreateMariaDB"},
+      {"method": "PUT",    "path": "/api/plugins/mariadb/instances/{name}",     "handler": "UpdateMariaDB"},
+      {"method": "DELETE", "path": "/api/plugins/mariadb/instances/{name}",     "handler": "DeleteMariaDB"},
+      {"method": "GET",    "path": "/api/plugins/mariadb/backups",              "handler": "ListBackups"},
+      {"method": "POST",   "path": "/api/plugins/mariadb/backups",              "handler": "CreateBackup"},
+      {"method": "DELETE", "path": "/api/plugins/mariadb/backups/{name}",       "handler": "DeleteBackup"},
+      {"method": "GET",    "path": "/api/plugins/mariadb/restores",             "handler": "ListRestores"},
+      {"method": "POST",   "path": "/api/plugins/mariadb/restores",             "handler": "CreateRestore"},
+      {"method": "DELETE", "path": "/api/plugins/mariadb/restores/{name}",      "handler": "DeleteRestore"},
+      {"method": "GET",    "path": "/api/plugins/mariadb/connections",          "handler": "ListConnections"},
+      {"method": "POST",   "path": "/api/plugins/mariadb/connections",          "handler": "CreateConnection"},
+      {"method": "DELETE", "path": "/api/plugins/mariadb/connections/{name}",   "handler": "DeleteConnection"},
+      {"method": "GET",    "path": "/api/plugins/mariadb/databases",            "handler": "ListDatabases"},
+      {"method": "POST",   "path": "/api/plugins/mariadb/databases",            "handler": "CreateDatabase"},
+      {"method": "DELETE", "path": "/api/plugins/mariadb/databases/{name}",     "handler": "DeleteDatabase"},
+      {"method": "GET",    "path": "/api/plugins/mariadb/users",                "handler": "ListUsers"},
+      {"method": "POST",   "path": "/api/plugins/mariadb/users",               "handler": "CreateUser"},
+      {"method": "DELETE", "path": "/api/plugins/mariadb/users/{name}",         "handler": "DeleteUser"},
+      {"method": "GET",    "path": "/api/plugins/mariadb/grants",               "handler": "ListGrants"},
+      {"method": "POST",   "path": "/api/plugins/mariadb/grants",               "handler": "CreateGrant"},
+      {"method": "DELETE", "path": "/api/plugins/mariadb/grants/{name}",        "handler": "DeleteGrant"}
+    ],
+    "watchers": [
+      {"group": "k8s.mariadb.com", "version": "v1alpha1", "resource": "mariadbs"},
+      {"group": "k8s.mariadb.com", "version": "v1alpha1", "resource": "backups"},
+      {"group": "k8s.mariadb.com", "version": "v1alpha1", "resource": "restores"},
+      {"group": "k8s.mariadb.com", "version": "v1alpha1", "resource": "connections"},
+      {"group": "k8s.mariadb.com", "version": "v1alpha1", "resource": "databases"},
+      {"group": "k8s.mariadb.com", "version": "v1alpha1", "resource": "users"},
+      {"group": "k8s.mariadb.com", "version": "v1alpha1", "resource": "grants"}
+    ]
+  },
+  "frontend": {
+    "navigation": [{"label": "MariaDB", "icon": "database", "path": "/plugins/mariadb"}],
+    "routes": [
+      {"path": "/plugins/mariadb",            "component": "MariaDBOverview"},
+      {"path": "/plugins/mariadb/instances",   "component": "MariaDBInstanceList"},
+      {"path": "/plugins/mariadb/backups",     "component": "MariaDBBackupList"},
+      {"path": "/plugins/mariadb/databases",   "component": "MariaDBDatabaseList"},
+      {"path": "/plugins/mariadb/users",       "component": "MariaDBUserList"}
+    ],
+    "widgets": [{"id": "mariadb-status", "type": "dashboard-card", "component": "MariaDBStatus"}]
+  }
+}
