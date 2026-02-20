@@ -1,0 +1,48 @@
+{
+  "id": "keda",
+  "name": "KEDA Autoscaling",
+  "version": "1.0.0",
+  "description": "Manage KEDA event-driven autoscaling: ScaledObjects, ScaledJobs, TriggerAuthentications",
+  "permissions": ["keda:*"],
+  "backend": {
+    "routes": [
+      {"method": "GET",    "path": "/api/plugins/keda/scaledobjects",                   "handler": "ListScaledObjects"},
+      {"method": "GET",    "path": "/api/plugins/keda/scaledobjects/{name}",            "handler": "GetScaledObject"},
+      {"method": "POST",   "path": "/api/plugins/keda/scaledobjects",                   "handler": "CreateScaledObject"},
+      {"method": "PUT",    "path": "/api/plugins/keda/scaledobjects/{name}",            "handler": "UpdateScaledObject"},
+      {"method": "DELETE", "path": "/api/plugins/keda/scaledobjects/{name}",            "handler": "DeleteScaledObject"},
+      {"method": "GET",    "path": "/api/plugins/keda/scaledjobs",                      "handler": "ListScaledJobs"},
+      {"method": "GET",    "path": "/api/plugins/keda/scaledjobs/{name}",               "handler": "GetScaledJob"},
+      {"method": "POST",   "path": "/api/plugins/keda/scaledjobs",                      "handler": "CreateScaledJob"},
+      {"method": "PUT",    "path": "/api/plugins/keda/scaledjobs/{name}",               "handler": "UpdateScaledJob"},
+      {"method": "DELETE", "path": "/api/plugins/keda/scaledjobs/{name}",               "handler": "DeleteScaledJob"},
+      {"method": "GET",    "path": "/api/plugins/keda/triggerauthentications",          "handler": "ListTriggerAuthentications"},
+      {"method": "GET",    "path": "/api/plugins/keda/triggerauthentications/{name}",   "handler": "GetTriggerAuthentication"},
+      {"method": "POST",   "path": "/api/plugins/keda/triggerauthentications",          "handler": "CreateTriggerAuthentication"},
+      {"method": "DELETE", "path": "/api/plugins/keda/triggerauthentications/{name}",   "handler": "DeleteTriggerAuthentication"},
+      {"method": "GET",    "path": "/api/plugins/keda/clustertriggerauthentications",       "handler": "ListClusterTriggerAuthentications"},
+      {"method": "GET",    "path": "/api/plugins/keda/clustertriggerauthentications/{name}", "handler": "GetClusterTriggerAuthentication"},
+      {"method": "DELETE", "path": "/api/plugins/keda/clustertriggerauthentications/{name}", "handler": "DeleteClusterTriggerAuthentication"}
+    ],
+    "watchers": [
+      {"group": "keda.sh", "version": "v1alpha1", "resource": "scaledobjects"},
+      {"group": "keda.sh", "version": "v1alpha1", "resource": "scaledjobs"},
+      {"group": "keda.sh", "version": "v1alpha1", "resource": "triggerauthentications"},
+      {"group": "keda.sh", "version": "v1alpha1", "resource": "clustertriggerauthentications"}
+    ]
+  },
+  "frontend": {
+    "navigation": [
+      {"label": "KEDA", "icon": "scaling", "path": "/plugins/keda"}
+    ],
+    "routes": [
+      {"path": "/plugins/keda",                    "component": "KedaOverview"},
+      {"path": "/plugins/keda/scaledobjects",      "component": "ScaledObjectList"},
+      {"path": "/plugins/keda/scaledjobs",         "component": "ScaledJobList"},
+      {"path": "/plugins/keda/triggerauths",       "component": "TriggerAuthList"}
+    ],
+    "widgets": [
+      {"id": "keda-scaler-status", "type": "dashboard-card", "component": "KedaScalerStatus"}
+    ]
+  }
+}
