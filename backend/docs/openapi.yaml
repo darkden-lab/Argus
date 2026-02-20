@@ -1,0 +1,760 @@
+openapi: "3.0.3"
+info:
+  title: K8s Dashboard API
+  description: Multi-cluster Kubernetes admin dashboard with plugin system
+  version: "1.0.0"
+  contact:
+    name: K8s Dashboard Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Auth
+    description: Authentication endpoints (JWT, OIDC)
+  - name: Clusters
+    description: Multi-cluster management
+  - name: Resources
+    description: Core Kubernetes resource CRUD
+  - name: Plugins
+    description: Plugin management
+  - name: Prometheus
+    description: Prometheus Operator plugin
+  - name: Calico
+    description: Calico networking plugin
+  - name: Istio
+    description: Istio service mesh plugin
+  - name: Helm
+    description: Helm releases management plugin
+  - name: Audit
+    description: Audit log
+  - name: WebSocket
+    description: Real-time event streaming
+
+paths:
+  /healthz:
+    get:
+      summary: Health check
+      operationId: healthz
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new local user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, display_name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                display_name:
+                  type: string
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "409":
+          description: User already exists
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "401":
+          description: Invalid credentials
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh access token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Token refreshed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  access_token:
+                    type: string
+        "401":
+          description: Invalid refresh token
+
+  /api/auth/me:
+    get:
+      tags: [Auth]
+      summary: Get current user info
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: User info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
+  /api/auth/oidc/authorize:
+    get:
+      tags: [Auth]
+      summary: Initiate OIDC login flow
+      description: Redirects to the OIDC provider's authorize endpoint
+      responses:
+        "302":
+          description: Redirect to OIDC provider
+
+  /api/auth/oidc/callback:
+    get:
+      tags: [Auth]
+      summary: OIDC callback
+      description: Handles code exchange, validates ID token, creates/updates user, issues JWT
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: Redirect to frontend with tokens
+
+  /api/auth/oidc/info:
+    get:
+      tags: [Auth]
+      summary: Get OIDC provider info
+      responses:
+        "200":
+          description: OIDC configuration status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  authorize_url:
+                    type: string
+
+  /api/clusters:
+    get:
+      tags: [Clusters]
+      summary: List all clusters
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Cluster list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Cluster"
+    post:
+      tags: [Clusters]
+      summary: Add a new cluster
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, api_server_url, kubeconfig]
+              properties:
+                name:
+                  type: string
+                api_server_url:
+                  type: string
+                kubeconfig:
+                  type: string
+                  format: byte
+      responses:
+        "201":
+          description: Cluster added
+
+  /api/clusters/{id}:
+    get:
+      tags: [Clusters]
+      summary: Get cluster details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterId"
+      responses:
+        "200":
+          description: Cluster details
+    delete:
+      tags: [Clusters]
+      summary: Remove a cluster
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterId"
+      responses:
+        "204":
+          description: Cluster removed
+
+  /api/clusters/{id}/resources/{group}/{version}/{resource}:
+    get:
+      tags: [Resources]
+      summary: List Kubernetes resources
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterId"
+        - name: group
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: resource
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: namespace
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resource list
+    post:
+      tags: [Resources]
+      summary: Create a Kubernetes resource
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterId"
+        - name: group
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: version
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: resource
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "201":
+          description: Resource created
+
+  /api/plugins/enabled:
+    get:
+      tags: [Plugins]
+      summary: List enabled plugins
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Enabled plugin manifests
+
+  /api/plugins/prometheus/{cluster}/wizard/servicemonitor:
+    post:
+      tags: [Prometheus]
+      summary: Create ServiceMonitor via wizard
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceMonitorConfig"
+      responses:
+        "201":
+          description: ServiceMonitor created
+
+  /api/plugins/prometheus/{cluster}/wizard/servicemonitor/preview:
+    post:
+      tags: [Prometheus]
+      summary: Preview generated ServiceMonitor YAML
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ServiceMonitorConfig"
+      responses:
+        "200":
+          description: Generated ServiceMonitor object
+
+  /api/plugins/helm/{cluster}/releases:
+    get:
+      tags: [Helm]
+      summary: List Helm releases
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - name: namespace
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Release list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ReleaseInfo"
+    post:
+      tags: [Helm]
+      summary: Install a Helm release
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InstallRequest"
+      responses:
+        "201":
+          description: Release installed
+
+  /api/plugins/helm/{cluster}/releases/{name}:
+    get:
+      tags: [Helm]
+      summary: Get Helm release details
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Release details
+    put:
+      tags: [Helm]
+      summary: Upgrade a Helm release
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Release upgraded
+    delete:
+      tags: [Helm]
+      summary: Uninstall a Helm release
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Release uninstalled
+
+  /api/plugins/helm/{cluster}/releases/{name}/rollback:
+    post:
+      tags: [Helm]
+      summary: Rollback a Helm release
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                revision:
+                  type: integer
+      responses:
+        "200":
+          description: Release rolled back
+
+  /api/plugins/helm/{cluster}/releases/{name}/history:
+    get:
+      tags: [Helm]
+      summary: Get release revision history
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Revision history
+
+  /api/plugins/helm/{cluster}/releases/{name}/values:
+    get:
+      tags: [Helm]
+      summary: Get release values
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: all
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Release values
+
+  /api/audit-log:
+    get:
+      tags: [Audit]
+      summary: Query audit log entries
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: user_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: cluster_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: from_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: to_date
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 100
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Audit log entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEntry"
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /ws:
+    get:
+      tags: [WebSocket]
+      summary: WebSocket connection for real-time K8s watch events
+      description: |
+        Connect via WebSocket with JWT token as query parameter.
+        Subscribe to resource watches and receive ADDED/MODIFIED/DELETED events.
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema:
+            type: string
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ClusterId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ClusterVar:
+      name: cluster
+      in: path
+      required: true
+      schema:
+        type: string
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        auth_provider:
+          type: string
+          enum: [local, oidc, ldap]
+        created_at:
+          type: string
+          format: date-time
+        last_login:
+          type: string
+          format: date-time
+
+    AuthResponse:
+      type: object
+      properties:
+        user:
+          $ref: "#/components/schemas/User"
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+
+    Cluster:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        api_server_url:
+          type: string
+        status:
+          type: string
+          enum: [connected, disconnected, error, unreachable]
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        created_at:
+          type: string
+          format: date-time
+
+    ServiceMonitorConfig:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+          default: default
+        service_name:
+          type: string
+        port:
+          type: string
+        path:
+          type: string
+          default: /metrics
+        interval:
+          type: string
+          default: "30s"
+        labels:
+          type: object
+          additionalProperties:
+            type: string
+        cluster_id:
+          type: string
+
+    ReleaseInfo:
+      type: object
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+        revision:
+          type: integer
+        status:
+          type: string
+        chart:
+          type: string
+        app_version:
+          type: string
+        updated:
+          type: string
+
+    InstallRequest:
+      type: object
+      required: [chart_ref, release_name]
+      properties:
+        chart_ref:
+          type: string
+        release_name:
+          type: string
+        namespace:
+          type: string
+          default: default
+        values:
+          type: object
+        repo_url:
+          type: string
+
+    AuditEntry:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        cluster_id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        resource:
+          type: string
+        details:
+          type: object
+        timestamp:
+          type: string
+          format: date-time

@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/k8s-dashboard/backend/docs"
 	"github.com/k8s-dashboard/backend/internal/audit"
 	"github.com/k8s-dashboard/backend/internal/auth"
 	"github.com/k8s-dashboard/backend/internal/cluster"
@@ -99,6 +100,9 @@ func main() {
 
 	// Health check (no auth)
 	r.HandleFunc("/healthz", healthzHandler).Methods("GET")
+
+	// API documentation (no auth)
+	docs.RegisterRoutes(r)
 
 	// Auth routes (no auth middleware)
 	authHandlers.RegisterRoutes(r)
