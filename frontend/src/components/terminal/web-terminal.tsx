@@ -41,7 +41,6 @@ interface Namespace {
 }
 
 const COMMAND_HISTORY_KEY = "k8s-terminal-history";
-const MAX_HISTORY = 100;
 
 function loadHistory(): string[] {
   if (typeof window === "undefined") return [];
@@ -50,17 +49,6 @@ function loadHistory(): string[] {
     return raw ? JSON.parse(raw) : [];
   } catch {
     return [];
-  }
-}
-
-function _saveHistory(history: string[]) {
-  try {
-    localStorage.setItem(
-      COMMAND_HISTORY_KEY,
-      JSON.stringify(history.slice(-MAX_HISTORY))
-    );
-  } catch {
-    // localStorage full
   }
 }
 
@@ -75,10 +63,6 @@ export function WebTerminal() {
   const [selectedNamespace, setSelectedNamespace] = useState("default");
   const [mode, setMode] = useState<TerminalMode>("smart");
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [_commandHistory] = useState<string[]>(loadHistory);
-  const _historyIndexRef = useRef(-1);
-  const _currentLineRef = useRef("");
-
   const handleOutput = useCallback((data: string) => {
     xtermRef.current?.write(data);
   }, []);
