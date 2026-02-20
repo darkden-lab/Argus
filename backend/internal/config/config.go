@@ -12,6 +12,16 @@ type Config struct {
 	OIDCClientID   string
 	OIDCClientSecret string
 	OIDCRedirectURL  string
+
+	// Kafka / Notifications
+	KafkaBrokers       string
+	KafkaConsumerGroup string
+	SMTPHost           string
+	SMTPPort           string
+	SMTPUser           string
+	SMTPPass           string
+	SMTPFrom           string
+	NotificationFrom   string
 }
 
 func Load() *Config {
@@ -25,6 +35,15 @@ func Load() *Config {
 		OIDCClientID:     getEnv("OIDC_CLIENT_ID", ""),
 		OIDCClientSecret: getEnv("OIDC_CLIENT_SECRET", ""),
 		OIDCRedirectURL:  getEnv("OIDC_REDIRECT_URL", "http://localhost:8080/api/auth/oidc/callback"),
+
+		KafkaBrokers:       getEnv("KAFKA_BROKERS", ""),
+		KafkaConsumerGroup: getEnv("KAFKA_CONSUMER_GROUP", "k8s-dashboard-notifications"),
+		SMTPHost:           getEnv("SMTP_HOST", ""),
+		SMTPPort:           getEnv("SMTP_PORT", "587"),
+		SMTPUser:           getEnv("SMTP_USER", ""),
+		SMTPPass:           getEnv("SMTP_PASS", ""),
+		SMTPFrom:           getEnv("SMTP_FROM", ""),
+		NotificationFrom:   getEnv("NOTIFICATION_FROM_NAME", "K8s Dashboard"),
 	}
 }
 
