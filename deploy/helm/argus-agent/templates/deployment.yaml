@@ -13,12 +13,25 @@ spec:
     metadata:
       labels:
         {{- include "argus-agent.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
     spec:
       serviceAccountName: {{ include "argus-agent.serviceAccountName" . }}
+      automountServiceAccountToken: true
+      {{- with .Values.podSecurityContext }}
+      securityContext:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
       containers:
         - name: agent
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          {{- with .Values.securityContext }}
+          securityContext:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
           env:
             - name: DASHBOARD_URL
               valueFrom:
@@ -30,6 +43,11 @@ spec:
                 configMapKeyRef:
                   name: {{ include "argus-agent.fullname" . }}-config
                   key: CLUSTER_NAME
+            - name: DASHBOARD_TLS_ENABLED
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ include "argus-agent.fullname" . }}-config
+                  key: DASHBOARD_TLS_ENABLED
             - name: DASHBOARD_TOKEN
               valueFrom:
                 secretKeyRef:

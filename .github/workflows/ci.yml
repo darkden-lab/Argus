@@ -24,6 +24,12 @@ jobs:
       - name: Test
         run: cd backend && go test ./... -v -coverprofile=coverage.out
 
+      - name: Coverage summary
+        if: always()
+        run: |
+          echo "### Backend Coverage" >> $GITHUB_STEP_SUMMARY
+          cd backend && go tool cover -func=coverage.out | tail -1 >> $GITHUB_STEP_SUMMARY
+
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
@@ -75,7 +81,24 @@ jobs:
         run: cd frontend && npm run build
 
       - name: Test
-        run: cd frontend && npm test -- --passWithNoTests
+        run: cd frontend && npm test -- --passWithNoTests --coverage
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f frontend/coverage/coverage-summary.json ]; then
+            echo "### Frontend Coverage" >> $GITHUB_STEP_SUMMARY
+            node -e "
+              const c = require('./frontend/coverage/coverage-summary.json');
+              const t = c.total;
+              console.log('| Metric | Coverage |');
+              console.log('|--------|----------|');
+              console.log('| Statements | ' + t.statements.pct + '% |');
+              console.log('| Branches | ' + t.branches.pct + '% |');
+              console.log('| Functions | ' + t.functions.pct + '% |');
+              console.log('| Lines | ' + t.lines.pct + '% |');
+            " >> $GITHUB_STEP_SUMMARY
+          fi
 
   docker-build:
     runs-on: ubuntu-latest

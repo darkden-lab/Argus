@@ -2,12 +2,10 @@ package keda
 
 import (
 	"context"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
-	"runtime"
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -18,6 +16,9 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	k8swatch "k8s.io/apimachinery/pkg/watch"
 )
+
+//go:embed manifest.json
+var manifestJSON []byte
 
 // KEDA CRD GVRs (keda.sh/v1alpha1)
 var (
@@ -151,20 +152,10 @@ func (p *KedaPlugin) OnDisable(_ context.Context, _ *pgxpool.Pool) error {
 	return nil
 }
 
+// loadManifest parses the embedded manifest.json.
 func loadManifest() (plugin.Manifest, error) {
-	_, filename, _, ok := runtime.Caller(0)
-	if !ok {
-		return plugin.Manifest{}, fmt.Errorf("keda: could not determine plugin source path")
-	}
-	manifestPath := filepath.Join(filepath.Dir(filename), "manifest.json")
-
-	data, err := os.ReadFile(manifestPath)
-	if err != nil {
-		return plugin.Manifest{}, fmt.Errorf("keda: failed to read manifest: %w", err)
-	}
-
 	var m plugin.Manifest
-	if err := json.Unmarshal(data, &m); err != nil {
+	if err := json.Unmarshal(manifestJSON, &m); err != nil {
 		return plugin.Manifest{}, fmt.Errorf("keda: failed to parse manifest: %w", err)
 	}
 	return m, nil

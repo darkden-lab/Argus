@@ -22,6 +22,7 @@ const config = {
     '!src/components/ui/**',
     '!src/app/**/layout.tsx',
   ],
+  coverageReporters: ['text', 'text-summary', 'json-summary', 'lcov'],
 };
 
 export default config;

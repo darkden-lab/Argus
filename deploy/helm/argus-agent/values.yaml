@@ -15,12 +15,31 @@ resources:
 
 # Dashboard connection settings
 dashboard:
-  # URL of the dashboard gRPC endpoint (required)
+  # gRPC endpoint of the Argus dashboard (required), e.g. "argus-backend.argus.svc.cluster.local:9090"
   url: ""
   # Registration token provided by the dashboard (required)
   token: ""
   # Name for this cluster in the dashboard
   clusterName: ""
+  # Enable TLS for gRPC connection to the dashboard
+  tlsEnabled: false
+
+# Security context for the agent pod and container
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  capabilities:
+    drop:
+      - ALL
 
 # RBAC configuration for the agent's access to local cluster resources
 rbac:
@@ -41,3 +60,4 @@ serviceAccount:
 nodeSelector: {}
 tolerations: []
 affinity: {}
+podAnnotations: {}

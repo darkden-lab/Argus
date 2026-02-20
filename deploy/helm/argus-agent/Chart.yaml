@@ -4,3 +4,9 @@ description: Argus cluster agent - connects remote clusters to the dashboard via
 type: application
 version: 0.1.0
 appVersion: "0.1.0"
+keywords:
+  - kubernetes
+  - agent
+  - grpc
+  - monitoring
+home: https://github.com/argus/argus

@@ -7,3 +7,4 @@ metadata:
 data:
   DASHBOARD_URL: {{ .Values.dashboard.url | quote }}
   CLUSTER_NAME: {{ .Values.dashboard.clusterName | quote }}
+  DASHBOARD_TLS_ENABLED: {{ .Values.dashboard.tlsEnabled | quote }}
