@@ -6,8 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
+	"time"
 )
 
 func TestTeamsChannel_Send(t *testing.T) {
@@ -28,16 +27,17 @@ func TestTeamsChannel_Send(t *testing.T) {
 		t.Fatalf("NewTeamsChannel failed: %v", err)
 	}
 
-	event := notifications.NewEvent(
-		notifications.TopicNodeNotReady,
-		notifications.CategoryNode,
-		notifications.SeverityWarning,
-		"Node not ready",
-		"node-3 reporting NotReady condition",
-		nil,
-	)
+	msg := Message{
+		ID:        "evt-1",
+		Topic:     "node.not_ready",
+		Category:  "node",
+		Severity:  "warning",
+		Title:     "Node not ready",
+		Body:      "node-3 reporting NotReady condition",
+		Timestamp: time.Now(),
+	}
 
-	if err := ch.Send(event, nil); err != nil {
+	if err := ch.Send(msg, nil); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 
@@ -63,9 +63,9 @@ func TestTeamsChannel_ServerError(t *testing.T) {
 	defer server.Close()
 
 	ch, _ := NewTeamsChannel("test-teams", TeamsConfig{WebhookURL: server.URL})
-	event := notifications.NewEvent(notifications.TopicClusterHealth, notifications.CategoryCluster, notifications.SeverityInfo, "Test", "Test", nil)
+	msg := Message{Severity: "info", Title: "Test", Body: "Test", Timestamp: time.Now()}
 
-	if err := ch.Send(event, nil); err == nil {
+	if err := ch.Send(msg, nil); err == nil {
 		t.Error("expected error for server error response")
 	}
 }
@@ -89,12 +89,12 @@ func TestNewTeamsChannel_Validation(t *testing.T) {
 
 func TestTeamsSeverityColor(t *testing.T) {
 	tests := []struct {
-		severity notifications.Severity
+		severity string
 		style    string
 	}{
-		{notifications.SeverityCritical, "attention"},
-		{notifications.SeverityWarning, "warning"},
-		{notifications.SeverityInfo, "accent"},
+		{"critical", "attention"},
+		{"warning", "warning"},
+		{"info", "accent"},
 	}
 
 	for _, tt := range tests {

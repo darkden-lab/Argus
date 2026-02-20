@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
 )
 
 // SlackConfig holds the configuration for a Slack webhook channel.
@@ -34,8 +32,8 @@ func NewSlackChannel(name string, config SlackConfig) (*SlackChannel, error) {
 	}, nil
 }
 
-func (c *SlackChannel) Send(event notifications.Event, _ []string) error {
-	payload := buildSlackPayload(event)
+func (c *SlackChannel) Send(msg Message, _ []string) error {
+	payload := buildSlackPayload(msg)
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -57,9 +55,9 @@ func (c *SlackChannel) Send(event notifications.Event, _ []string) error {
 func (c *SlackChannel) Name() string { return c.name }
 func (c *SlackChannel) Type() string { return "slack" }
 
-func buildSlackPayload(event notifications.Event) map[string]interface{} {
-	emoji := severityEmoji(event.Severity)
-	color := severityColor(event.Severity)
+func buildSlackPayload(msg Message) map[string]interface{} {
+	emoji := severityEmoji(msg.Severity)
+	color := severityColor(msg.Severity)
 
 	return map[string]interface{}{
 		"blocks": []map[string]interface{}{
@@ -67,14 +65,14 @@ func buildSlackPayload(event notifications.Event) map[string]interface{} {
 				"type": "header",
 				"text": map[string]interface{}{
 					"type": "plain_text",
-					"text": fmt.Sprintf("%s %s", emoji, event.Title),
+					"text": fmt.Sprintf("%s %s", emoji, msg.Title),
 				},
 			},
 			{
 				"type": "section",
 				"text": map[string]interface{}{
 					"type": "mrkdwn",
-					"text": event.Body,
+					"text": msg.Body,
 				},
 			},
 			{
@@ -83,9 +81,9 @@ func buildSlackPayload(event notifications.Event) map[string]interface{} {
 					{
 						"type": "mrkdwn",
 						"text": fmt.Sprintf("*Category:* %s | *Severity:* %s | *Time:* %s",
-							event.Category,
-							strings.ToUpper(string(event.Severity)),
-							event.Timestamp.Format("2006-01-02 15:04:05 UTC")),
+							msg.Category,
+							strings.ToUpper(msg.Severity),
+							msg.Timestamp.Format("2006-01-02 15:04:05 UTC")),
 					},
 				},
 			},
@@ -96,22 +94,22 @@ func buildSlackPayload(event notifications.Event) map[string]interface{} {
 	}
 }
 
-func severityEmoji(s notifications.Severity) string {
-	switch s {
-	case notifications.SeverityCritical:
+func severityEmoji(severity string) string {
+	switch severity {
+	case "critical":
 		return "\xF0\x9F\x94\xB4" // red circle
-	case notifications.SeverityWarning:
+	case "warning":
 		return "\xF0\x9F\x9F\xA1" // yellow circle
 	default:
 		return "\xF0\x9F\x94\xB5" // blue circle
 	}
 }
 
-func severityColor(s notifications.Severity) string {
-	switch s {
-	case notifications.SeverityCritical:
+func severityColor(severity string) string {
+	switch severity {
+	case "critical":
 		return "#ef4444"
-	case notifications.SeverityWarning:
+	case "warning":
 		return "#f59e0b"
 	default:
 		return "#3b82f6"

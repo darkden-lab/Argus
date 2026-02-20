@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
 )
 
 // TeamsConfig holds the configuration for a Microsoft Teams webhook channel.
@@ -35,8 +33,8 @@ func NewTeamsChannel(name string, config TeamsConfig) (*TeamsChannel, error) {
 	}, nil
 }
 
-func (c *TeamsChannel) Send(event notifications.Event, _ []string) error {
-	payload := buildTeamsPayload(event)
+func (c *TeamsChannel) Send(msg Message, _ []string) error {
+	payload := buildTeamsPayload(msg)
 
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -58,8 +56,8 @@ func (c *TeamsChannel) Send(event notifications.Event, _ []string) error {
 func (c *TeamsChannel) Name() string { return c.name }
 func (c *TeamsChannel) Type() string { return "teams" }
 
-func buildTeamsPayload(event notifications.Event) map[string]interface{} {
-	color := teamsSeverityColor(event.Severity)
+func buildTeamsPayload(msg Message) map[string]interface{} {
+	color := teamsSeverityColor(msg.Severity)
 
 	return map[string]interface{}{
 		"type": "message",
@@ -72,13 +70,13 @@ func buildTeamsPayload(event notifications.Event) map[string]interface{} {
 					"version": "1.4",
 					"body": []map[string]interface{}{
 						{
-							"type":   "Container",
-							"style":  color,
-							"bleed":  true,
+							"type":  "Container",
+							"style": color,
+							"bleed": true,
 							"items": []map[string]interface{}{
 								{
 									"type":   "TextBlock",
-									"text":   event.Title,
+									"text":   msg.Title,
 									"weight": "Bolder",
 									"size":   "Medium",
 									"color":  "Default",
@@ -87,7 +85,7 @@ func buildTeamsPayload(event notifications.Event) map[string]interface{} {
 						},
 						{
 							"type": "TextBlock",
-							"text": event.Body,
+							"text": msg.Body,
 							"wrap": true,
 						},
 						{
@@ -99,10 +97,10 @@ func buildTeamsPayload(event notifications.Event) map[string]interface{} {
 									"width": "auto",
 									"items": []map[string]interface{}{
 										{
-											"type":  "TextBlock",
-											"text":  fmt.Sprintf("**Category:** %s", event.Category),
+											"type":     "TextBlock",
+											"text":     fmt.Sprintf("**Category:** %s", msg.Category),
 											"isSubtle": true,
-											"size":  "Small",
+											"size":     "Small",
 										},
 									},
 								},
@@ -111,10 +109,10 @@ func buildTeamsPayload(event notifications.Event) map[string]interface{} {
 									"width": "auto",
 									"items": []map[string]interface{}{
 										{
-											"type":  "TextBlock",
-											"text":  fmt.Sprintf("**Severity:** %s", strings.ToUpper(string(event.Severity))),
+											"type":     "TextBlock",
+											"text":     fmt.Sprintf("**Severity:** %s", strings.ToUpper(msg.Severity)),
 											"isSubtle": true,
-											"size":  "Small",
+											"size":     "Small",
 										},
 									},
 								},
@@ -123,10 +121,10 @@ func buildTeamsPayload(event notifications.Event) map[string]interface{} {
 									"width": "auto",
 									"items": []map[string]interface{}{
 										{
-											"type":  "TextBlock",
-											"text":  event.Timestamp.Format("2006-01-02 15:04:05 UTC"),
+											"type":     "TextBlock",
+											"text":     msg.Timestamp.Format("2006-01-02 15:04:05 UTC"),
 											"isSubtle": true,
-											"size":  "Small",
+											"size":     "Small",
 										},
 									},
 								},
@@ -139,11 +137,11 @@ func buildTeamsPayload(event notifications.Event) map[string]interface{} {
 	}
 }
 
-func teamsSeverityColor(s notifications.Severity) string {
-	switch s {
-	case notifications.SeverityCritical:
+func teamsSeverityColor(severity string) string {
+	switch severity {
+	case "critical":
 		return "attention"
-	case notifications.SeverityWarning:
+	case "warning":
 		return "warning"
 	default:
 		return "accent"

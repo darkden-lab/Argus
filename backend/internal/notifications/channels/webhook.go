@@ -7,8 +7,6 @@ import (
 	"net/http"
 	"strings"
 	"text/template"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
 )
 
 // WebhookConfig holds the configuration for a generic webhook channel.
@@ -22,10 +20,10 @@ type WebhookConfig struct {
 // WebhookChannel sends notifications via a generic HTTP webhook with a
 // configurable payload template.
 type WebhookChannel struct {
-	name     string
-	config   WebhookConfig
-	client   *http.Client
-	tmpl     *template.Template
+	name   string
+	config WebhookConfig
+	client *http.Client
+	tmpl   *template.Template
 }
 
 // NewWebhookChannel creates a WebhookChannel from the given config.
@@ -55,18 +53,18 @@ func NewWebhookChannel(name string, config WebhookConfig) (*WebhookChannel, erro
 	return ch, nil
 }
 
-func (c *WebhookChannel) Send(event notifications.Event, _ []string) error {
+func (c *WebhookChannel) Send(msg Message, _ []string) error {
 	var body []byte
 	var err error
 
 	if c.tmpl != nil {
 		var buf bytes.Buffer
-		if err := c.tmpl.Execute(&buf, event); err != nil {
+		if err := c.tmpl.Execute(&buf, msg); err != nil {
 			return fmt.Errorf("execute payload template: %w", err)
 		}
 		body = buf.Bytes()
 	} else {
-		body, err = json.Marshal(defaultWebhookPayload(event))
+		body, err = json.Marshal(defaultWebhookPayload(msg))
 		if err != nil {
 			return fmt.Errorf("marshal default payload: %w", err)
 		}
@@ -97,15 +95,15 @@ func (c *WebhookChannel) Send(event notifications.Event, _ []string) error {
 func (c *WebhookChannel) Name() string { return c.name }
 func (c *WebhookChannel) Type() string { return "webhook" }
 
-func defaultWebhookPayload(event notifications.Event) map[string]interface{} {
+func defaultWebhookPayload(msg Message) map[string]interface{} {
 	return map[string]interface{}{
-		"id":        event.ID,
-		"topic":     event.Topic,
-		"category":  string(event.Category),
-		"severity":  string(event.Severity),
-		"title":     event.Title,
-		"body":      event.Body,
-		"metadata":  event.Metadata,
-		"timestamp": event.Timestamp.Format("2006-01-02T15:04:05Z"),
+		"id":        msg.ID,
+		"topic":     msg.Topic,
+		"category":  msg.Category,
+		"severity":  msg.Severity,
+		"title":     msg.Title,
+		"body":      msg.Body,
+		"metadata":  msg.Metadata,
+		"timestamp": msg.Timestamp.Format("2006-01-02T15:04:05Z"),
 	}
 }

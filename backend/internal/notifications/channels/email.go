@@ -8,8 +8,6 @@ import (
 	"net/http"
 	"net/smtp"
 	"strings"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
 )
 
 // EmailConfig holds the configuration for the email channel.
@@ -61,9 +59,9 @@ func NewEmailChannel(name string, config EmailConfig) (*EmailChannel, error) {
 	return ch, nil
 }
 
-func (c *EmailChannel) Send(event notifications.Event, recipients []string) error {
-	subject := fmt.Sprintf("[%s] %s", strings.ToUpper(string(event.Severity)), event.Title)
-	htmlBody, err := renderEmailTemplate(event)
+func (c *EmailChannel) Send(msg Message, recipients []string) error {
+	subject := fmt.Sprintf("[%s] %s", strings.ToUpper(msg.Severity), msg.Title)
+	htmlBody, err := renderEmailTemplate(msg)
 	if err != nil {
 		return fmt.Errorf("render email template: %w", err)
 	}
@@ -174,9 +172,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; pa
 </body>
 </html>`))
 
-func renderEmailTemplate(event notifications.Event) (string, error) {
+func renderEmailTemplate(msg Message) (string, error) {
 	var buf bytes.Buffer
-	if err := emailTmpl.Execute(&buf, event); err != nil {
+	if err := emailTmpl.Execute(&buf, msg); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

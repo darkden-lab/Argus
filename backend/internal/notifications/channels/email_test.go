@@ -3,8 +3,7 @@ package channels
 import (
 	"strings"
 	"testing"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
+	"time"
 )
 
 // mockSender records sent emails for assertions.
@@ -30,16 +29,17 @@ func TestEmailChannel_Send(t *testing.T) {
 		sender: mock,
 	}
 
-	event := notifications.NewEvent(
-		notifications.TopicClusterHealth,
-		notifications.CategoryCluster,
-		notifications.SeverityWarning,
-		"Cluster unhealthy",
-		"Cluster prod-1 is unreachable",
-		nil,
-	)
+	msg := Message{
+		ID:        "evt-1",
+		Topic:     "cluster.health",
+		Category:  "cluster",
+		Severity:  "warning",
+		Title:     "Cluster unhealthy",
+		Body:      "Cluster prod-1 is unreachable",
+		Timestamp: time.Now(),
+	}
 
-	err := ch.Send(event, []string{"user@example.com", "admin@example.com"})
+	err := ch.Send(msg, []string{"user@example.com", "admin@example.com"})
 	if err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
@@ -48,7 +48,6 @@ func TestEmailChannel_Send(t *testing.T) {
 		t.Fatalf("expected 2 sends, got %d", len(mock.calls))
 	}
 
-	// Check first email
 	first := mock.calls[0]
 	if first.to != "user@example.com" {
 		t.Errorf("expected to=user@example.com, got %s", first.to)
@@ -116,16 +115,17 @@ func TestNewEmailChannel_UnsupportedProvider(t *testing.T) {
 }
 
 func TestRenderEmailTemplate(t *testing.T) {
-	event := notifications.NewEvent(
-		notifications.TopicWorkloadCrash,
-		notifications.CategoryWorkload,
-		notifications.SeverityCritical,
-		"Pod CrashLoopBackOff",
-		"nginx-abc123 is crashing",
-		nil,
-	)
+	msg := Message{
+		ID:        "evt-2",
+		Topic:     "workload.crash",
+		Category:  "workload",
+		Severity:  "critical",
+		Title:     "Pod CrashLoopBackOff",
+		Body:      "nginx-abc123 is crashing",
+		Timestamp: time.Now(),
+	}
 
-	html, err := renderEmailTemplate(event)
+	html, err := renderEmailTemplate(msg)
 	if err != nil {
 		t.Fatalf("render failed: %v", err)
 	}

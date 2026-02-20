@@ -6,8 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
+	"time"
 )
 
 func TestSlackChannel_Send(t *testing.T) {
@@ -31,16 +30,17 @@ func TestSlackChannel_Send(t *testing.T) {
 		t.Fatalf("NewSlackChannel failed: %v", err)
 	}
 
-	event := notifications.NewEvent(
-		notifications.TopicWorkloadCrash,
-		notifications.CategoryWorkload,
-		notifications.SeverityCritical,
-		"Pod crashed",
-		"nginx-abc123 OOMKilled",
-		nil,
-	)
+	msg := Message{
+		ID:        "evt-1",
+		Topic:     "workload.crash",
+		Category:  "workload",
+		Severity:  "critical",
+		Title:     "Pod crashed",
+		Body:      "nginx-abc123 OOMKilled",
+		Timestamp: time.Now(),
+	}
 
-	if err := ch.Send(event, nil); err != nil {
+	if err := ch.Send(msg, nil); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 
@@ -49,7 +49,6 @@ func TestSlackChannel_Send(t *testing.T) {
 		t.Fatal("expected at least 2 blocks in Slack payload")
 	}
 
-	// Check header block contains title
 	header := blocks[0].(map[string]interface{})
 	text := header["text"].(map[string]interface{})
 	if textVal, ok := text["text"].(string); !ok || textVal == "" {
@@ -64,9 +63,9 @@ func TestSlackChannel_ServerError(t *testing.T) {
 	defer server.Close()
 
 	ch, _ := NewSlackChannel("test-slack", SlackConfig{WebhookURL: server.URL})
-	event := notifications.NewEvent(notifications.TopicClusterHealth, notifications.CategoryCluster, notifications.SeverityInfo, "Test", "Test", nil)
+	msg := Message{Severity: "info", Title: "Test", Body: "Test", Timestamp: time.Now()}
 
-	if err := ch.Send(event, nil); err == nil {
+	if err := ch.Send(msg, nil); err == nil {
 		t.Error("expected error for server error response")
 	}
 }
@@ -90,17 +89,17 @@ func TestNewSlackChannel_Validation(t *testing.T) {
 
 func TestBuildSlackPayload_SeverityColors(t *testing.T) {
 	tests := []struct {
-		severity notifications.Severity
+		severity string
 		color    string
 	}{
-		{notifications.SeverityCritical, "#ef4444"},
-		{notifications.SeverityWarning, "#f59e0b"},
-		{notifications.SeverityInfo, "#3b82f6"},
+		{"critical", "#ef4444"},
+		{"warning", "#f59e0b"},
+		{"info", "#3b82f6"},
 	}
 
 	for _, tt := range tests {
-		event := notifications.NewEvent(notifications.TopicClusterHealth, notifications.CategoryCluster, tt.severity, "Test", "Body", nil)
-		payload := buildSlackPayload(event)
+		msg := Message{Severity: tt.severity, Title: "Test", Body: "Body", Category: "cluster", Timestamp: time.Now()}
+		payload := buildSlackPayload(msg)
 
 		attachments := payload["attachments"].([]map[string]interface{})
 		if attachments[0]["color"] != tt.color {

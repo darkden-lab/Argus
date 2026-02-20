@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
 )
 
 // TelegramConfig holds the configuration for a Telegram Bot channel.
@@ -40,8 +38,8 @@ func NewTelegramChannel(name string, config TelegramConfig) (*TelegramChannel, e
 	}, nil
 }
 
-func (c *TelegramChannel) Send(event notifications.Event, _ []string) error {
-	text := formatTelegramMessage(event)
+func (c *TelegramChannel) Send(msg Message, _ []string) error {
+	text := formatTelegramMessage(msg)
 
 	url := fmt.Sprintf("%s/bot%s/sendMessage", c.baseURL, c.config.BotToken)
 
@@ -71,25 +69,25 @@ func (c *TelegramChannel) Send(event notifications.Event, _ []string) error {
 func (c *TelegramChannel) Name() string { return c.name }
 func (c *TelegramChannel) Type() string { return "telegram" }
 
-func formatTelegramMessage(event notifications.Event) string {
-	icon := telegramSeverityIcon(event.Severity)
+func formatTelegramMessage(msg Message) string {
+	icon := telegramSeverityIcon(msg.Severity)
 
 	var sb strings.Builder
-	sb.WriteString(fmt.Sprintf("%s <b>%s</b>\n\n", icon, event.Title))
-	sb.WriteString(event.Body)
+	sb.WriteString(fmt.Sprintf("%s <b>%s</b>\n\n", icon, msg.Title))
+	sb.WriteString(msg.Body)
 	sb.WriteString(fmt.Sprintf("\n\n<i>Category:</i> %s | <i>Severity:</i> %s\n",
-		event.Category,
-		strings.ToUpper(string(event.Severity))))
-	sb.WriteString(fmt.Sprintf("<i>%s</i>", event.Timestamp.Format("2006-01-02 15:04:05 UTC")))
+		msg.Category,
+		strings.ToUpper(msg.Severity)))
+	sb.WriteString(fmt.Sprintf("<i>%s</i>", msg.Timestamp.Format("2006-01-02 15:04:05 UTC")))
 
 	return sb.String()
 }
 
-func telegramSeverityIcon(s notifications.Severity) string {
-	switch s {
-	case notifications.SeverityCritical:
+func telegramSeverityIcon(severity string) string {
+	switch severity {
+	case "critical":
 		return "\xE2\x9B\x94" // no entry
-	case notifications.SeverityWarning:
+	case "warning":
 		return "\xE2\x9A\xA0\xEF\xB8\x8F" // warning
 	default:
 		return "\xE2\x84\xB9\xEF\xB8\x8F" // info

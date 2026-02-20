@@ -6,8 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
+	"time"
 )
 
 func TestWebhookChannel_SendDefaultPayload(t *testing.T) {
@@ -33,16 +32,17 @@ func TestWebhookChannel_SendDefaultPayload(t *testing.T) {
 		t.Fatalf("NewWebhookChannel failed: %v", err)
 	}
 
-	event := notifications.NewEvent(
-		notifications.TopicPluginInstall,
-		notifications.CategoryPlugin,
-		notifications.SeverityInfo,
-		"Plugin installed",
-		"Prometheus plugin installed on cluster-1",
-		nil,
-	)
+	msg := Message{
+		ID:        "evt-1",
+		Topic:     "plugin.install",
+		Category:  "plugin",
+		Severity:  "info",
+		Title:     "Plugin installed",
+		Body:      "Prometheus plugin installed on cluster-1",
+		Timestamp: time.Now(),
+	}
 
-	if err := ch.Send(event, nil); err != nil {
+	if err := ch.Send(msg, nil); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 
@@ -80,16 +80,17 @@ func TestWebhookChannel_SendWithTemplate(t *testing.T) {
 		t.Fatalf("NewWebhookChannel failed: %v", err)
 	}
 
-	event := notifications.NewEvent(
-		notifications.TopicClusterHealth,
-		notifications.CategoryCluster,
-		notifications.SeverityCritical,
-		"Cluster down",
-		"prod-1 unreachable",
-		nil,
-	)
+	msg := Message{
+		ID:        "evt-2",
+		Topic:     "cluster.health",
+		Category:  "cluster",
+		Severity:  "critical",
+		Title:     "Cluster down",
+		Body:      "prod-1 unreachable",
+		Timestamp: time.Now(),
+	}
 
-	if err := ch.Send(event, nil); err != nil {
+	if err := ch.Send(msg, nil); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 
@@ -111,9 +112,9 @@ func TestWebhookChannel_CustomMethod(t *testing.T) {
 	defer server.Close()
 
 	ch, _ := NewWebhookChannel("test", WebhookConfig{URL: server.URL, Method: "put"})
-	event := notifications.NewEvent(notifications.TopicClusterHealth, notifications.CategoryCluster, notifications.SeverityInfo, "Test", "Test", nil)
+	msg := Message{Severity: "info", Title: "Test", Body: "Test", Timestamp: time.Now()}
 
-	if err := ch.Send(event, nil); err != nil {
+	if err := ch.Send(msg, nil); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 
@@ -129,9 +130,9 @@ func TestWebhookChannel_ServerError(t *testing.T) {
 	defer server.Close()
 
 	ch, _ := NewWebhookChannel("test", WebhookConfig{URL: server.URL})
-	event := notifications.NewEvent(notifications.TopicClusterHealth, notifications.CategoryCluster, notifications.SeverityInfo, "Test", "Test", nil)
+	msg := Message{Severity: "info", Title: "Test", Body: "Test", Timestamp: time.Now()}
 
-	if err := ch.Send(event, nil); err == nil {
+	if err := ch.Send(msg, nil); err == nil {
 		t.Error("expected error for server error response")
 	}
 }

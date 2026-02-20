@@ -7,8 +7,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/k8s-dashboard/backend/internal/notifications"
+	"time"
 )
 
 func TestTelegramChannel_Send(t *testing.T) {
@@ -33,16 +32,17 @@ func TestTelegramChannel_Send(t *testing.T) {
 	}
 	ch.baseURL = server.URL
 
-	event := notifications.NewEvent(
-		notifications.TopicWorkloadCrash,
-		notifications.CategoryWorkload,
-		notifications.SeverityCritical,
-		"Pod crashed",
-		"nginx-abc123 OOMKilled",
-		nil,
-	)
+	msg := Message{
+		ID:        "evt-1",
+		Topic:     "workload.crash",
+		Category:  "workload",
+		Severity:  "critical",
+		Title:     "Pod crashed",
+		Body:      "nginx-abc123 OOMKilled",
+		Timestamp: time.Now(),
+	}
 
-	if err := ch.Send(event, nil); err != nil {
+	if err := ch.Send(msg, nil); err != nil {
 		t.Fatalf("Send failed: %v", err)
 	}
 
@@ -74,8 +74,8 @@ func TestTelegramChannel_ServerError(t *testing.T) {
 	ch, _ := NewTelegramChannel("test-tg", TelegramConfig{BotToken: "bad", ChatID: "123"})
 	ch.baseURL = server.URL
 
-	event := notifications.NewEvent(notifications.TopicClusterHealth, notifications.CategoryCluster, notifications.SeverityInfo, "Test", "Test", nil)
-	if err := ch.Send(event, nil); err == nil {
+	msg := Message{Severity: "info", Title: "Test", Body: "Test", Timestamp: time.Now()}
+	if err := ch.Send(msg, nil); err == nil {
 		t.Error("expected error for server error response")
 	}
 }
@@ -108,23 +108,24 @@ func TestNewTelegramChannel_Validation(t *testing.T) {
 }
 
 func TestFormatTelegramMessage(t *testing.T) {
-	event := notifications.NewEvent(
-		notifications.TopicNodeNotReady,
-		notifications.CategoryNode,
-		notifications.SeverityWarning,
-		"Node not ready",
-		"node-3 reporting NotReady",
-		nil,
-	)
+	msg := Message{
+		ID:        "evt-2",
+		Topic:     "node.not_ready",
+		Category:  "node",
+		Severity:  "warning",
+		Title:     "Node not ready",
+		Body:      "node-3 reporting NotReady",
+		Timestamp: time.Now(),
+	}
 
-	msg := formatTelegramMessage(event)
-	if !strings.Contains(msg, "<b>Node not ready</b>") {
-		t.Errorf("expected bold title in message, got %q", msg)
+	text := formatTelegramMessage(msg)
+	if !strings.Contains(text, "<b>Node not ready</b>") {
+		t.Errorf("expected bold title in message, got %q", text)
 	}
-	if !strings.Contains(msg, "node-3 reporting NotReady") {
-		t.Errorf("expected body in message, got %q", msg)
+	if !strings.Contains(text, "node-3 reporting NotReady") {
+		t.Errorf("expected body in message, got %q", text)
 	}
-	if !strings.Contains(msg, "WARNING") {
-		t.Errorf("expected WARNING severity in message, got %q", msg)
+	if !strings.Contains(text, "WARNING") {
+		t.Errorf("expected WARNING severity in message, got %q", text)
 	}
 }
