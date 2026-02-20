@@ -970,7 +970,7 @@ const file_agent_v1_agent_proto_rawDesc = "" +
 	"\ragent_version\x18\x06 \x01(\tR\fagentVersion2\x93\x01\n" +
 	"\fClusterAgent\x12A\n" +
 	"\bRegister\x12\x19.agent.v1.RegisterRequest\x1a\x1a.agent.v1.RegisterResponse\x12@\n" +
-	"\x06Stream\x12\x16.agent.v1.AgentMessage\x1a\x1a.agent.v1.DashboardMessage(\x010\x01B;Z9github.com/k8s-dashboard/backend/internal/agentpb;agentpbb\x06proto3"
+	"\x06Stream\x12\x16.agent.v1.AgentMessage\x1a\x1a.agent.v1.DashboardMessage(\x010\x01B6Z4github.com/k8s-dashboard/backend/pkg/agentpb;agentpbb\x06proto3"
 
 var (
 	file_agent_v1_agent_proto_rawDescOnce sync.Once

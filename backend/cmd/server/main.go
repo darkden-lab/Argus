@@ -15,7 +15,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/k8s-dashboard/backend/docs"
-	"github.com/k8s-dashboard/backend/internal/agentpb"
+	"github.com/k8s-dashboard/backend/pkg/agentpb"
 	"github.com/k8s-dashboard/backend/internal/audit"
 	"github.com/k8s-dashboard/backend/internal/auth"
 	"github.com/k8s-dashboard/backend/internal/cluster"

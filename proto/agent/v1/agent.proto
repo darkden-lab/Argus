@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package agent.v1;
 
-option go_package = "github.com/k8s-dashboard/backend/internal/agentpb;agentpb";
+option go_package = "github.com/k8s-dashboard/backend/pkg/agentpb;agentpb";
 
 import "google/protobuf/timestamp.proto";
 
