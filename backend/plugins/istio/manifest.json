@@ -1,0 +1,41 @@
+{
+  "id": "istio",
+  "name": "Istio Service Mesh",
+  "version": "1.0.0",
+  "description": "Manage Istio service mesh: virtual services, gateways, destination rules, service entries",
+  "permissions": ["istio:*"],
+  "backend": {
+    "routes": [
+      {"method": "GET",    "path": "/api/plugins/istio/virtualservices",       "handler": "ListVirtualServices"},
+      {"method": "GET",    "path": "/api/plugins/istio/virtualservices/{name}", "handler": "GetVirtualService"},
+      {"method": "POST",   "path": "/api/plugins/istio/virtualservices",       "handler": "CreateVirtualService"},
+      {"method": "PUT",    "path": "/api/plugins/istio/virtualservices/{name}", "handler": "UpdateVirtualService"},
+      {"method": "DELETE", "path": "/api/plugins/istio/virtualservices/{name}", "handler": "DeleteVirtualService"},
+      {"method": "GET",    "path": "/api/plugins/istio/gateways",              "handler": "ListGateways"},
+      {"method": "GET",    "path": "/api/plugins/istio/gateways/{name}",       "handler": "GetGateway"},
+      {"method": "POST",   "path": "/api/plugins/istio/gateways",              "handler": "CreateGateway"},
+      {"method": "DELETE", "path": "/api/plugins/istio/gateways/{name}",       "handler": "DeleteGateway"},
+      {"method": "GET",    "path": "/api/plugins/istio/destinationrules",      "handler": "ListDestinationRules"},
+      {"method": "GET",    "path": "/api/plugins/istio/serviceentries",        "handler": "ListServiceEntries"}
+    ],
+    "watchers": [
+      {"group": "networking.istio.io", "version": "v1", "resource": "virtualservices"},
+      {"group": "networking.istio.io", "version": "v1", "resource": "gateways"},
+      {"group": "networking.istio.io", "version": "v1", "resource": "destinationrules"},
+      {"group": "networking.istio.io", "version": "v1", "resource": "serviceentries"}
+    ]
+  },
+  "frontend": {
+    "navigation": [
+      {"label": "Istio", "icon": "network", "path": "/plugins/istio"}
+    ],
+    "routes": [
+      {"path": "/plugins/istio",              "component": "IstioOverview"},
+      {"path": "/plugins/istio/virtualservices", "component": "VirtualServiceList"},
+      {"path": "/plugins/istio/gateways",     "component": "GatewayList"}
+    ],
+    "widgets": [
+      {"id": "istio-mesh-status", "type": "dashboard-card", "component": "IstioMeshStatus"}
+    ]
+  }
+}

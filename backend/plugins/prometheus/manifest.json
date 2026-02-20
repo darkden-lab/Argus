@@ -1,0 +1,47 @@
+{
+  "id": "prometheus",
+  "name": "Prometheus Operator",
+  "version": "1.0.0",
+  "description": "Monitor Kubernetes clusters with Prometheus Operator CRDs",
+  "permissions": ["read:monitoring", "write:monitoring"],
+  "backend": {
+    "routes": [
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/servicemonitors", "handler": "ListServiceMonitors"},
+      {"method": "POST", "path": "/api/plugins/prometheus/{cluster}/servicemonitors", "handler": "CreateServiceMonitor"},
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/servicemonitors/{namespace}/{name}", "handler": "GetServiceMonitor"},
+      {"method": "DELETE", "path": "/api/plugins/prometheus/{cluster}/servicemonitors/{namespace}/{name}", "handler": "DeleteServiceMonitor"},
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/podmonitors", "handler": "ListPodMonitors"},
+      {"method": "POST", "path": "/api/plugins/prometheus/{cluster}/podmonitors", "handler": "CreatePodMonitor"},
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/podmonitors/{namespace}/{name}", "handler": "GetPodMonitor"},
+      {"method": "DELETE", "path": "/api/plugins/prometheus/{cluster}/podmonitors/{namespace}/{name}", "handler": "DeletePodMonitor"},
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/prometheusrules", "handler": "ListPrometheusRules"},
+      {"method": "POST", "path": "/api/plugins/prometheus/{cluster}/prometheusrules", "handler": "CreatePrometheusRule"},
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/prometheusrules/{namespace}/{name}", "handler": "GetPrometheusRule"},
+      {"method": "DELETE", "path": "/api/plugins/prometheus/{cluster}/prometheusrules/{namespace}/{name}", "handler": "DeletePrometheusRule"},
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/alertmanagers", "handler": "ListAlertmanagers"},
+      {"method": "GET", "path": "/api/plugins/prometheus/{cluster}/alertmanagers/{namespace}/{name}", "handler": "GetAlertmanager"}
+    ],
+    "watchers": [
+      {"group": "monitoring.coreos.com", "version": "v1", "resource": "servicemonitors"},
+      {"group": "monitoring.coreos.com", "version": "v1", "resource": "podmonitors"},
+      {"group": "monitoring.coreos.com", "version": "v1", "resource": "prometheusrules"},
+      {"group": "monitoring.coreos.com", "version": "v1", "resource": "alertmanagers"}
+    ]
+  },
+  "frontend": {
+    "navigation": [
+      {"label": "Prometheus", "icon": "prometheus", "path": "/plugins/prometheus"}
+    ],
+    "routes": [
+      {"path": "/plugins/prometheus", "component": "PrometheusOverview"},
+      {"path": "/plugins/prometheus/servicemonitors", "component": "ServiceMonitorList"},
+      {"path": "/plugins/prometheus/podmonitors", "component": "PodMonitorList"},
+      {"path": "/plugins/prometheus/rules", "component": "PrometheusRuleList"},
+      {"path": "/plugins/prometheus/alertmanagers", "component": "AlertmanagerList"}
+    ],
+    "widgets": [
+      {"id": "prometheus-alerts", "type": "dashboard", "component": "PrometheusAlertWidget"},
+      {"id": "prometheus-targets", "type": "dashboard", "component": "PrometheusTargetWidget"}
+    ]
+  }
+}

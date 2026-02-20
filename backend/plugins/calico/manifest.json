@@ -1,0 +1,45 @@
+{
+  "id": "calico",
+  "name": "Calico Network Policy",
+  "version": "1.0.0",
+  "description": "Manage Calico network policies and IP pools",
+  "permissions": ["read:networking", "write:networking"],
+  "backend": {
+    "routes": [
+      {"method": "GET", "path": "/api/plugins/calico/{cluster}/networkpolicies", "handler": "ListNetworkPolicies"},
+      {"method": "POST", "path": "/api/plugins/calico/{cluster}/networkpolicies", "handler": "CreateNetworkPolicy"},
+      {"method": "GET", "path": "/api/plugins/calico/{cluster}/networkpolicies/{namespace}/{name}", "handler": "GetNetworkPolicy"},
+      {"method": "DELETE", "path": "/api/plugins/calico/{cluster}/networkpolicies/{namespace}/{name}", "handler": "DeleteNetworkPolicy"},
+      {"method": "GET", "path": "/api/plugins/calico/{cluster}/globalnetworkpolicies", "handler": "ListGlobalNetworkPolicies"},
+      {"method": "POST", "path": "/api/plugins/calico/{cluster}/globalnetworkpolicies", "handler": "CreateGlobalNetworkPolicy"},
+      {"method": "GET", "path": "/api/plugins/calico/{cluster}/globalnetworkpolicies/{name}", "handler": "GetGlobalNetworkPolicy"},
+      {"method": "DELETE", "path": "/api/plugins/calico/{cluster}/globalnetworkpolicies/{name}", "handler": "DeleteGlobalNetworkPolicy"},
+      {"method": "GET", "path": "/api/plugins/calico/{cluster}/hostendpoints", "handler": "ListHostEndpoints"},
+      {"method": "GET", "path": "/api/plugins/calico/{cluster}/hostendpoints/{name}", "handler": "GetHostEndpoint"},
+      {"method": "GET", "path": "/api/plugins/calico/{cluster}/ippools", "handler": "ListIPPools"},
+      {"method": "GET", "path": "/api/plugins/calico/{cluster}/ippools/{name}", "handler": "GetIPPool"}
+    ],
+    "watchers": [
+      {"group": "crd.projectcalico.org", "version": "v1", "resource": "networkpolicies"},
+      {"group": "crd.projectcalico.org", "version": "v1", "resource": "globalnetworkpolicies"},
+      {"group": "crd.projectcalico.org", "version": "v1", "resource": "hostendpoints"},
+      {"group": "crd.projectcalico.org", "version": "v1", "resource": "ippools"}
+    ]
+  },
+  "frontend": {
+    "navigation": [
+      {"label": "Calico", "icon": "calico", "path": "/plugins/calico"}
+    ],
+    "routes": [
+      {"path": "/plugins/calico", "component": "CalicoOverview"},
+      {"path": "/plugins/calico/networkpolicies", "component": "NetworkPolicyList"},
+      {"path": "/plugins/calico/globalnetworkpolicies", "component": "GlobalNetworkPolicyList"},
+      {"path": "/plugins/calico/hostendpoints", "component": "HostEndpointList"},
+      {"path": "/plugins/calico/ippools", "component": "IPPoolList"}
+    ],
+    "widgets": [
+      {"id": "calico-policies", "type": "dashboard", "component": "CalicoPolicyWidget"},
+      {"id": "calico-endpoints", "type": "dashboard", "component": "CalicoEndpointWidget"}
+    ]
+  }
+}
