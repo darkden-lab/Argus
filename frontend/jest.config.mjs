@@ -1,11 +1,10 @@
-import type { Config } from '@jest/types';
-
-const config: Config.InitialOptions = {
+/** @type {import('@jest/types').Config.InitialOptions} */
+const config = {
   testEnvironment: 'jsdom',
   roots: ['<rootDir>/src'],
   testMatch: ['**/__tests__/**/*.test.{ts,tsx}'],
   transform: {
-    '^.+\\.tsx?$': [
+    '^.+\.tsx?$': [
       'ts-jest',
       {
         tsconfig: 'tsconfig.json',
