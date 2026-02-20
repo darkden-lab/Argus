@@ -1,12 +1,18 @@
 FROM golang:1.22-alpine AS builder
 WORKDIR /app
+
 COPY go.mod go.sum ./
 RUN go mod download
+
 COPY . .
-RUN CGO_ENABLED=0 go build -o /server ./cmd/server/
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /server ./cmd/server/
 
 FROM alpine:3.19
-RUN apk --no-cache add ca-certificates
+RUN apk --no-cache add ca-certificates wget && \
+    addgroup -S appgroup && adduser -S appuser -G appgroup
 COPY --from=builder /server /server
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD wget --no-verbose --tries=1 --spider http://localhost:8080/healthz || exit 1
+USER appuser:appgroup
 ENTRYPOINT ["/server"]

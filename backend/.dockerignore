@@ -1,0 +1,16 @@
+**/.git
+**/.gitignore
+**/README.md
+**/docs
+**/LICENSE
+**/.env
+**/.env.*
+**/bin
+**/tmp
+**/coverage
+**/.DS_Store
+**/*.log
+**/Dockerfile*
+**/.dockerignore
+**/*_test.go
+**/testdata

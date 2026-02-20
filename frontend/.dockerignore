@@ -1,0 +1,16 @@
+**/.git
+**/.gitignore
+**/README.md
+**/LICENSE
+**/.env
+**/.env.*
+**/.env*.local
+**/node_modules
+**/.next
+**/dist
+**/coverage
+**/.DS_Store
+**/*.log
+**/Dockerfile*
+**/.dockerignore
+**/.eslintcache
