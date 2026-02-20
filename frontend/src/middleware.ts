@@ -1,3 +1,8 @@
+// TODO: Next.js 16 has deprecated middleware.ts in favor of the proxy convention (src/proxy.ts)
+// for request proxying/rewriting. However, auth redirect logic like this should be migrated
+// to server components or layout-level checks using the cookies() API.
+// For now, middleware.ts still works (deprecation warning only) — migrate when Next.js
+// provides a stable alternative for auth redirects.
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 

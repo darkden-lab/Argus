@@ -1,0 +1,17 @@
+.git
+.github
+node_modules
+frontend/node_modules
+frontend/.next
+**/coverage*
+**/*.log
+.env
+.env.*
+*.md
+!README.md
+deploy/
+cli/
+docs/
+e2e/
+.vscode/
+.idea/

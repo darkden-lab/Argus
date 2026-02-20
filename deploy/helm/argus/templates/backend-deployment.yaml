@@ -18,13 +18,24 @@ spec:
         app.kubernetes.io/component: backend
     spec:
       serviceAccountName: {{ include "argus.serviceAccountName" . }}
+      securityContext:
+        runAsNonRoot: true
+        fsGroup: 1000
       containers:
         - name: backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
           imagePullPolicy: {{ .Values.backend.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+            readOnlyRootFilesystem: true
           ports:
             - name: http
               containerPort: 8080
+              protocol: TCP
+            - name: grpc
+              containerPort: 9090
               protocol: TCP
           env:
             - name: DATABASE_URL

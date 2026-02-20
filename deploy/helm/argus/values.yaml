@@ -30,7 +30,7 @@ frontend:
       cpu: 500m
       memory: 256Mi
   env:
-    apiUrl: http://localhost:8080
+    apiUrl: http://argus-backend:8080
 
 postgresql:
   enabled: true
@@ -75,6 +75,10 @@ oidc:
   usernameClaim: "email"
   # JWT claim to use as the groups field for RBAC (optional, default: "groups")
   groupsClaim: "groups"
+
+# Network policies for restricting pod-to-pod traffic
+networkPolicy:
+  enabled: false
 
 # Plugin enable/disable configuration
 # Each plugin can be individually enabled or disabled

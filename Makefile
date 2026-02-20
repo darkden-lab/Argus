@@ -1,11 +1,26 @@
-.PHONY: dev build test test-backend test-frontend docker-up docker-down proto
+.PHONY: dev build test test-backend test-frontend lint lint-backend lint-frontend \
+       coverage coverage-backend coverage-frontend clean \
+       docker-up docker-down proto \
+       migrate-up migrate-down helm-lint
 
+# ---------------------------------------------------------------------------
+# Docker Compose
+# ---------------------------------------------------------------------------
 dev:
 	docker compose up
 
 build:
 	docker compose build
 
+docker-up:
+	docker compose up -d
+
+docker-down:
+	docker compose down
+
+# ---------------------------------------------------------------------------
+# Testing
+# ---------------------------------------------------------------------------
 test-backend:
 	cd backend && go test ./...
 
@@ -14,12 +29,58 @@ test-frontend:
 
 test: test-backend test-frontend
 
-docker-up:
-	docker compose up -d
+# ---------------------------------------------------------------------------
+# Linting
+# ---------------------------------------------------------------------------
+lint-backend:
+	cd backend && go vet ./...
 
-docker-down:
-	docker compose down
+lint-frontend:
+	cd frontend && npm run lint
 
+lint: lint-backend lint-frontend
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+coverage-backend:
+	cd backend && go test -coverprofile=coverage.out ./... && go tool cover -func=coverage.out
+
+coverage-frontend:
+	cd frontend && npm run test:coverage
+
+coverage: coverage-backend coverage-frontend
+
+# ---------------------------------------------------------------------------
+# Clean
+# ---------------------------------------------------------------------------
+clean:
+	rm -f backend/coverage.out
+	rm -rf frontend/coverage
+	rm -rf frontend/.next
+	rm -rf frontend/node_modules/.cache
+
+# ---------------------------------------------------------------------------
+# Database migrations (requires golang-migrate CLI)
+# ---------------------------------------------------------------------------
+DATABASE_URL ?= postgres://dashboard:devpassword@localhost:5432/argus?sslmode=disable
+
+migrate-up:
+	migrate -database "$(DATABASE_URL)" -path backend/migrations up
+
+migrate-down:
+	migrate -database "$(DATABASE_URL)" -path backend/migrations down 1
+
+# ---------------------------------------------------------------------------
+# Helm
+# ---------------------------------------------------------------------------
+helm-lint:
+	helm lint deploy/helm/argus
+	helm lint deploy/helm/argus-agent
+
+# ---------------------------------------------------------------------------
+# Protobuf
+# ---------------------------------------------------------------------------
 proto:
 	@echo "Generating Go code from proto files..."
 	protoc \
