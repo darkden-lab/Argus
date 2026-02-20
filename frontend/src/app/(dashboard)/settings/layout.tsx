@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Shield, Puzzle, KeyRound, ScrollText, Bell, Bot } from "lucide-react";
+import { Users, Shield, Puzzle, KeyRound, ScrollText, Bell, Bot, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const settingsNav = [
@@ -12,6 +12,7 @@ const settingsNav = [
   { label: "OIDC", href: "/settings/oidc", icon: KeyRound },
   { label: "Audit Log", href: "/settings/audit", icon: ScrollText },
   { label: "Notifications", href: "/settings/notifications", icon: Bell },
+  { label: "Channels", href: "/settings/notification-channels", icon: Radio },
   { label: "AI Assistant", href: "/settings/ai", icon: Bot },
 ];
 
