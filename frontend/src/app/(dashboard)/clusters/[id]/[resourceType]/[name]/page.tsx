@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 import { ResourceDetail } from "@/components/resources/resource-detail";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
+import { usePermission } from "@/hooks/use-permissions";
 
 const resourceTypeToGVR: Record<string, string> = {
   pods: "_/v1/pods",
@@ -97,6 +98,7 @@ export default function ResourceDetailPage() {
 
   const gvr = resourceTypeToGVR[resourceType] ?? `_/v1/${resourceType}`;
   const kind = resourceType.charAt(0).toUpperCase() + resourceType.slice(1).replace(/s$/, "");
+  const canDelete = usePermission("clusters", "delete", clusterId);
 
   useEffect(() => {
     api
@@ -166,7 +168,7 @@ export default function ResourceDetailPage() {
         overview={resourceToOverview(resource)}
         yaml={toYaml(resource)}
         events={[]}
-        onDelete={handleDelete}
+        onDelete={canDelete ? handleDelete : undefined}
         onSaveYaml={handleSaveYaml}
         deleting={deleting}
       />

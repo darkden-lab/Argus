@@ -18,6 +18,34 @@ import { NetworkPolicyList } from "@/plugins/calico/network-policies";
 import { IPPoolList } from "@/plugins/calico/ip-pools";
 import { CalicoStatus } from "@/plugins/calico/overview";
 
+// CNPG components
+import { CnpgOverview, CnpgStatus } from "@/plugins/cnpg/overview";
+import { CnpgClusterList } from "@/plugins/cnpg/clusters";
+import { CnpgBackupList, CnpgScheduledBackupList } from "@/plugins/cnpg/backups";
+import { CnpgPoolerList } from "@/plugins/cnpg/poolers";
+
+// MariaDB components
+import { MariadbOverview, MariadbStatus } from "@/plugins/mariadb/overview";
+import { MariadbInstanceList } from "@/plugins/mariadb/instances";
+import { MariadbDatabaseList } from "@/plugins/mariadb/databases";
+import { MariadbBackupList } from "@/plugins/mariadb/backups";
+
+// KEDA components
+import { KedaOverview, KedaScalerStatus } from "@/plugins/keda/overview";
+import { ScaledObjectList } from "@/plugins/keda/scaled-objects";
+import { ScaledJobList } from "@/plugins/keda/scaled-jobs";
+
+// Ceph components
+import { CephOverview, CephStatus } from "@/plugins/ceph/overview";
+import { CephClusterList } from "@/plugins/ceph/clusters";
+import { CephBlockPoolList } from "@/plugins/ceph/block-pools";
+import { CephFilesystemList } from "@/plugins/ceph/filesystems";
+
+// Helm components
+import { HelmOverview, HelmStatus } from "@/plugins/helm/overview";
+import { HelmReleaseList } from "@/plugins/helm/releases";
+import { HelmReleaseDetail } from "@/plugins/helm/release-detail";
+
 // Registry maps plugin ID -> component name -> React component
 const componentRegistry: Record<string, Record<string, React.ComponentType>> =
   {
@@ -38,6 +66,40 @@ const componentRegistry: Record<string, Record<string, React.ComponentType>> =
       NetworkPolicyList,
       IPPoolList,
       CalicoStatus,
+    },
+    cnpg: {
+      CnpgOverview,
+      CnpgStatus,
+      CnpgClusterList,
+      CnpgBackupList,
+      CnpgScheduledBackupList,
+      CnpgPoolerList,
+    },
+    mariadb: {
+      MariadbOverview,
+      MariadbStatus,
+      MariadbInstanceList,
+      MariadbDatabaseList,
+      MariadbBackupList,
+    },
+    keda: {
+      KedaOverview,
+      KedaScalerStatus,
+      ScaledObjectList,
+      ScaledJobList,
+    },
+    ceph: {
+      CephOverview,
+      CephStatus,
+      CephClusterList,
+      CephBlockPoolList,
+      CephFilesystemList,
+    },
+    helm: {
+      HelmOverview,
+      HelmStatus,
+      HelmReleaseList,
+      HelmReleaseDetail,
     },
   };
 

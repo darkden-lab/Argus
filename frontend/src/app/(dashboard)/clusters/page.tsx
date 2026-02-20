@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
+import { RBACGate } from "@/components/auth/rbac-gate";
 
 interface Cluster {
   id: string;
@@ -83,69 +84,71 @@ export default function ClustersPage() {
             Manage your Kubernetes clusters.
           </p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button size="sm">
-              <Plus className="mr-1.5 h-4 w-4" />
-              Add Cluster
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add Cluster</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-2">
-              <div className="space-y-2">
-                <Label htmlFor="cluster-name">Cluster Name</Label>
-                <Input
-                  id="cluster-name"
-                  placeholder="production"
-                  value={form.name}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, name: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="api-server">API Server URL</Label>
-                <Input
-                  id="api-server"
-                  placeholder="https://k8s.example.com:6443"
-                  value={form.api_server_url}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, api_server_url: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="kubeconfig">Kubeconfig</Label>
-                <Textarea
-                  id="kubeconfig"
-                  placeholder="Paste kubeconfig YAML..."
-                  className="min-h-[150px] font-mono text-xs"
-                  value={form.kubeconfig}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, kubeconfig: e.target.value }))
-                  }
-                />
-              </div>
-            </div>
-            <DialogFooter>
-              <Button
-                variant="outline"
-                onClick={() => setDialogOpen(false)}
-              >
-                Cancel
+        <RBACGate resource="clusters" action="write">
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button size="sm">
+                <Plus className="mr-1.5 h-4 w-4" />
+                Add Cluster
               </Button>
-              <Button
-                onClick={handleAdd}
-                disabled={adding || !form.name || !form.api_server_url}
-              >
-                {adding ? "Adding..." : "Add Cluster"}
-              </Button>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+            </DialogTrigger>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Add Cluster</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-2">
+                <div className="space-y-2">
+                  <Label htmlFor="cluster-name">Cluster Name</Label>
+                  <Input
+                    id="cluster-name"
+                    placeholder="production"
+                    value={form.name}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, name: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="api-server">API Server URL</Label>
+                  <Input
+                    id="api-server"
+                    placeholder="https://k8s.example.com:6443"
+                    value={form.api_server_url}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, api_server_url: e.target.value }))
+                    }
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="kubeconfig">Kubeconfig</Label>
+                  <Textarea
+                    id="kubeconfig"
+                    placeholder="Paste kubeconfig YAML..."
+                    className="min-h-[150px] font-mono text-xs"
+                    value={form.kubeconfig}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, kubeconfig: e.target.value }))
+                    }
+                  />
+                </div>
+              </div>
+              <DialogFooter>
+                <Button
+                  variant="outline"
+                  onClick={() => setDialogOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleAdd}
+                  disabled={adding || !form.name || !form.api_server_url}
+                >
+                  {adding ? "Adding..." : "Add Cluster"}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+        </RBACGate>
       </div>
 
       <ResourceTable
