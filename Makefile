@@ -1,4 +1,4 @@
-.PHONY: dev build test test-backend test-frontend docker-up docker-down
+.PHONY: dev build test test-backend test-frontend docker-up docker-down proto
 
 dev:
 	docker compose up
@@ -19,3 +19,10 @@ docker-up:
 
 docker-down:
 	docker compose down
+
+proto:
+	protoc \
+		--proto_path=proto \
+		--go_out=backend --go_opt=module=github.com/k8s-dashboard/backend \
+		--go-grpc_out=backend --go-grpc_opt=module=github.com/k8s-dashboard/backend \
+		proto/agent/v1/agent.proto
