@@ -1,0 +1,43 @@
+image:
+  repository: k8s-dashboard/agent
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicas: 1
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi
+
+# Dashboard connection settings
+dashboard:
+  # URL of the dashboard gRPC endpoint (required)
+  url: ""
+  # Registration token provided by the dashboard (required)
+  token: ""
+  # Name for this cluster in the dashboard
+  clusterName: ""
+
+# RBAC configuration for the agent's access to local cluster resources
+rbac:
+  # Preset: read-only, operator, admin, custom
+  preset: "read-only"
+  # Custom rules (used when preset is "custom")
+  customRules: []
+  #  - apiGroups: [""]
+  #    resources: ["pods", "services"]
+  #    verbs: ["get", "list", "watch"]
+
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
+# Pod-level settings
+nodeSelector: {}
+tolerations: []
+affinity: {}

@@ -104,6 +104,10 @@ func main() {
 	// API documentation (no auth)
 	docs.RegisterRoutes(r)
 
+	// Agent install script (no auth - must be curl-able)
+	agentHandlers := cluster.NewAgentHandlers(clusterMgr)
+	agentHandlers.RegisterRoutes(r)
+
 	// Auth routes (no auth middleware)
 	authHandlers.RegisterRoutes(r)
 	if oidcService != nil && oidcService.Enabled() {
