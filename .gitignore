@@ -8,5 +8,6 @@ tmp/
 vendor/
 dist/
 coverage/
+*.out
 .DS_Store
 *.log
