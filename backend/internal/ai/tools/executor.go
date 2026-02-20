@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/k8s-dashboard/backend/internal/ai"
 	"github.com/k8s-dashboard/backend/internal/cluster"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,7 +37,7 @@ func NewExecutor(clusterMgr *cluster.Manager) *Executor {
 
 // Execute runs a single tool call and returns the result. Write operations
 // should only be executed after user confirmation (checked by the caller).
-func (e *Executor) Execute(ctx context.Context, call ai.ToolCall) ToolResult {
+func (e *Executor) Execute(ctx context.Context, call ToolCall) ToolResult {
 	result, err := e.dispatch(ctx, call)
 	if err != nil {
 		return ToolResult{
@@ -53,7 +52,7 @@ func (e *Executor) Execute(ctx context.Context, call ai.ToolCall) ToolResult {
 	}
 }
 
-func (e *Executor) dispatch(ctx context.Context, call ai.ToolCall) (string, error) {
+func (e *Executor) dispatch(ctx context.Context, call ToolCall) (string, error) {
 	var args map[string]string
 	if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
 		return "", fmt.Errorf("invalid tool arguments: %w", err)

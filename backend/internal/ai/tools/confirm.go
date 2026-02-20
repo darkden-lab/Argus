@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/k8s-dashboard/backend/internal/ai"
 )
 
 const confirmationTimeout = 60 * time.Second
@@ -27,7 +26,7 @@ const (
 // destructive tool call.
 type ConfirmationRequest struct {
 	ID        string             `json:"id"`
-	ToolCall  ai.ToolCall        `json:"tool_call"`
+	ToolCall  ToolCall            `json:"tool_call"`
 	Status    ConfirmationStatus `json:"status"`
 	UserID    string             `json:"user_id"`
 	CreatedAt time.Time          `json:"created_at"`
@@ -54,7 +53,7 @@ func NewConfirmationManager() *ConfirmationManager {
 
 // RequestConfirmation creates a new confirmation request and blocks until
 // the user responds or the timeout expires. Returns the confirmation status.
-func (m *ConfirmationManager) RequestConfirmation(ctx context.Context, userID string, call ai.ToolCall) (ConfirmationStatus, error) {
+func (m *ConfirmationManager) RequestConfirmation(ctx context.Context, userID string, call ToolCall) (ConfirmationStatus, error) {
 	reqID := uuid.New().String()
 
 	pc := &pendingConfirmation{

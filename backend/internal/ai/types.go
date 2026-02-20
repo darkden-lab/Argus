@@ -3,6 +3,8 @@ package ai
 import (
 	"context"
 	"io"
+
+	"github.com/k8s-dashboard/backend/internal/ai/tools"
 )
 
 // Role represents who sent a message in a conversation.
@@ -23,33 +25,12 @@ type Message struct {
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 }
 
-// ToolCall represents a request from the LLM to invoke a tool.
-type ToolCall struct {
-	ID        string `json:"id"`
-	Name      string `json:"name"`
-	Arguments string `json:"arguments"` // JSON-encoded arguments
-}
-
-// Tool describes a function that the LLM can invoke.
-type Tool struct {
-	Name        string     `json:"name"`
-	Description string     `json:"description"`
-	Parameters  ToolParams `json:"parameters"`
-}
-
-// ToolParams describes the JSON Schema for a tool's parameters.
-type ToolParams struct {
-	Type       string                `json:"type"` // "object"
-	Properties map[string]ToolParam  `json:"properties"`
-	Required   []string              `json:"required,omitempty"`
-}
-
-// ToolParam describes a single parameter in a tool's schema.
-type ToolParam struct {
-	Type        string   `json:"type"`
-	Description string   `json:"description"`
-	Enum        []string `json:"enum,omitempty"`
-}
+// Type aliases for tool types defined in the tools subpackage.
+// This avoids an import cycle: tools does not import ai.
+type ToolCall = tools.ToolCall
+type Tool = tools.Tool
+type ToolParams = tools.ToolParams
+type ToolParam = tools.ToolParam
 
 // ChatRequest is the input to an LLM chat completion call.
 type ChatRequest struct {
