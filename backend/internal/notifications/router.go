@@ -32,6 +32,11 @@ func (r *Router) RegisterChannel(id string, ch channels.Channel) {
 	r.channels[id] = ch
 }
 
+// GetChannels returns the registered channels map. Used by DigestAggregator.
+func (r *Router) GetChannels() map[string]channels.Channel {
+	return r.channels
+}
+
 // Route processes a notification event: stores it for all matching users and
 // dispatches it to the configured channels based on their preferences.
 func (r *Router) Route(ctx context.Context, event Event) {

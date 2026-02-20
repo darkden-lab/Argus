@@ -23,6 +23,7 @@ import (
 	"github.com/k8s-dashboard/backend/internal/core"
 	"github.com/k8s-dashboard/backend/internal/db"
 	mw "github.com/k8s-dashboard/backend/internal/middleware"
+	"github.com/k8s-dashboard/backend/internal/notifications"
 	"github.com/k8s-dashboard/backend/internal/plugin"
 	"github.com/k8s-dashboard/backend/internal/proxy"
 	"github.com/k8s-dashboard/backend/internal/rbac"
@@ -105,6 +106,38 @@ func main() {
 	go hub.Run()
 	wsHandler := ws.NewWSHandler(hub, jwtService)
 
+	// Notifications System
+	broker, err := notifications.NewBroker(cfg)
+	if err != nil {
+		log.Printf("WARNING: notification broker setup failed: %v", err)
+	}
+	var notifHandlers *notifications.Handlers
+	if broker != nil {
+		defer broker.Close()
+
+		notifStore := notifications.NewNotificationStore(pool)
+		prefStore := notifications.NewPreferencesStore(pool)
+		chanStore := notifications.NewChannelStore(pool)
+		notifRouter := notifications.NewRouter(notifStore, prefStore, chanStore)
+
+		// EventProducer: hooks into K8s watch events and publishes to broker
+		producer := notifications.NewEventProducer(broker)
+		producer.HookIntoHub(hub)
+
+		// Consumer: subscribes to all topics and routes to channels
+		consumer := notifications.NewConsumer(broker, notifRouter)
+		if err := consumer.Start(); err != nil {
+			log.Printf("WARNING: notification consumer failed to start: %v", err)
+		}
+
+		// Digest aggregator
+		digest := notifications.NewDigestAggregator(prefStore, chanStore, notifStore, notifRouter.GetChannels())
+		digest.Start()
+
+		notifHandlers = notifications.NewHandlers(notifStore, prefStore, chanStore, notifRouter)
+		log.Println("Notifications system initialized")
+	}
+
 	// Router
 	r := mux.NewRouter()
 
@@ -153,6 +186,11 @@ func main() {
 
 	// Audit log routes
 	auditHandlers.RegisterRoutes(protected)
+
+	// Notification routes
+	if notifHandlers != nil {
+		notifHandlers.RegisterRoutes(protected)
+	}
 
 	// Plugin management routes
 	pluginHandlers := plugin.NewHandlers(pluginEngine)
