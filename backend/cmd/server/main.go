@@ -22,7 +22,12 @@ import (
 	"github.com/k8s-dashboard/backend/internal/rbac"
 	"github.com/k8s-dashboard/backend/internal/ws"
 	pluginCalico "github.com/k8s-dashboard/backend/plugins/calico"
+	pluginCeph "github.com/k8s-dashboard/backend/plugins/ceph"
+	pluginCnpg "github.com/k8s-dashboard/backend/plugins/cnpg"
+	pluginHelm "github.com/k8s-dashboard/backend/plugins/helm"
 	pluginIstio "github.com/k8s-dashboard/backend/plugins/istio"
+	pluginKeda "github.com/k8s-dashboard/backend/plugins/keda"
+	pluginMariadb "github.com/k8s-dashboard/backend/plugins/mariadb"
 	pluginPrometheus "github.com/k8s-dashboard/backend/plugins/prometheus"
 )
 
@@ -153,23 +158,33 @@ func main() {
 }
 
 func registerPlugins(engine *plugin.Engine) {
-	promPlugin := pluginPrometheus.New()
-	if err := engine.Register(promPlugin); err != nil {
+	// Simple constructors (no error)
+	if err := engine.Register(pluginPrometheus.New()); err != nil {
 		log.Printf("WARNING: failed to register prometheus plugin: %v", err)
 	}
-
-	calicoPlugin := pluginCalico.New()
-	if err := engine.Register(calicoPlugin); err != nil {
+	if err := engine.Register(pluginCalico.New()); err != nil {
 		log.Printf("WARNING: failed to register calico plugin: %v", err)
 	}
+	if err := engine.Register(pluginHelm.New()); err != nil {
+		log.Printf("WARNING: failed to register helm plugin: %v", err)
+	}
 
-	istioPlugin, err := pluginIstio.New()
+	// Constructors that return (plugin, error)
+	registerPluginWithError(engine, "istio", pluginIstio.New)
+	registerPluginWithError(engine, "cnpg", pluginCnpg.New)
+	registerPluginWithError(engine, "mariadb", pluginMariadb.New)
+	registerPluginWithError(engine, "keda", pluginKeda.New)
+	registerPluginWithError(engine, "ceph", pluginCeph.New)
+}
+
+func registerPluginWithError[T plugin.Plugin](engine *plugin.Engine, name string, newFn func() (T, error)) {
+	p, err := newFn()
 	if err != nil {
-		log.Printf("WARNING: failed to create istio plugin: %v", err)
-	} else {
-		if err := engine.Register(istioPlugin); err != nil {
-			log.Printf("WARNING: failed to register istio plugin: %v", err)
-		}
+		log.Printf("WARNING: failed to create %s plugin: %v", name, err)
+		return
+	}
+	if err := engine.Register(p); err != nil {
+		log.Printf("WARNING: failed to register %s plugin: %v", name, err)
 	}
 }
 
