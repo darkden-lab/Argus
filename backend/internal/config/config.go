@@ -8,6 +8,10 @@ type Config struct {
 	JWTSecret      string
 	EncryptionKey  string
 	MigrationsPath string
+	OIDCIssuer     string
+	OIDCClientID   string
+	OIDCClientSecret string
+	OIDCRedirectURL  string
 }
 
 func Load() *Config {
@@ -16,7 +20,11 @@ func Load() *Config {
 		DatabaseURL:    getEnv("DATABASE_URL", "postgres://dashboard:devpassword@localhost:5432/k8sdashboard?sslmode=disable"),
 		JWTSecret:      getEnv("JWT_SECRET", "dev-secret-change-in-prod"),
 		EncryptionKey:  getEnv("ENCRYPTION_KEY", "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"),
-		MigrationsPath: getEnv("MIGRATIONS_PATH", "migrations"),
+		MigrationsPath:   getEnv("MIGRATIONS_PATH", "migrations"),
+		OIDCIssuer:       getEnv("OIDC_ISSUER", ""),
+		OIDCClientID:     getEnv("OIDC_CLIENT_ID", ""),
+		OIDCClientSecret: getEnv("OIDC_CLIENT_SECRET", ""),
+		OIDCRedirectURL:  getEnv("OIDC_REDIRECT_URL", "http://localhost:8080/api/auth/oidc/callback"),
 	}
 }
 

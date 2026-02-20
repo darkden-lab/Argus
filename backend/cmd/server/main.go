@@ -67,6 +67,17 @@ func main() {
 	authService := auth.NewAuthService(database, jwtService)
 	authHandlers := auth.NewHandlers(authService)
 
+	// OIDC (optional)
+	oidcService, err := auth.NewOIDCService(ctx, auth.OIDCConfig{
+		Issuer:       cfg.OIDCIssuer,
+		ClientID:     cfg.OIDCClientID,
+		ClientSecret: cfg.OIDCClientSecret,
+		RedirectURL:  cfg.OIDCRedirectURL,
+	}, database, jwtService)
+	if err != nil {
+		log.Printf("WARNING: OIDC setup failed: %v (OIDC disabled)", err)
+	}
+
 	// Audit Log
 	auditStore := audit.NewStore(pool)
 	auditHandlers := audit.NewHandlers(auditStore)
@@ -91,6 +102,10 @@ func main() {
 
 	// Auth routes (no auth middleware)
 	authHandlers.RegisterRoutes(r)
+	if oidcService != nil && oidcService.Enabled() {
+		oidcService.RegisterRoutes(r)
+		log.Println("OIDC authentication enabled")
+	}
 
 	// Protected routes
 	protected := r.PathPrefix("").Subrouter()
