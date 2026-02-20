@@ -328,11 +328,11 @@ CREATE TABLE agent_tokens (
 ```
 BROWSER                          USUARIO LOCAL
    |                                  |
-xterm.js (WebSocket)           CLI "k8s-dash" (Go binary)
+xterm.js (WebSocket)           CLI "argus" (Go binary)
    |                                  |
 Backend: /api/terminal          Backend: /api/proxy/k8s/*
    |                                  |
-   +-- Modo Smart:                    +-- k8s-dash login -> JWT
+   +-- Modo Smart:                    +-- argus login -> JWT
    |   Parsea kubectl                 |   (genera kubeconfig)
    |   -> client-go API call          |
    |                                  +-- kubectl get pods ->
@@ -346,7 +346,7 @@ Backend: /api/terminal          Backend: /api/proxy/k8s/*
 |---|---|
 | Terminal web | xterm.js + WebSocket, dos modos (smart + raw shell) |
 | Auth proxy | Reverse proxy HTTP en backend, CLI Go para login/config |
-| Configuracion cliente | CLI propio `k8s-dash` que genera kubeconfig |
+| Configuracion cliente | CLI propio `argus` que genera kubeconfig |
 
 ### Componentes Backend
 
@@ -364,20 +364,20 @@ Backend: /api/terminal          Backend: /api/proxy/k8s/*
   - Reenvía al cluster con client-go
 - `internal/proxy/kubeconfig.go` - Genera kubeconfig apuntando al proxy del dashboard
 
-### CLI k8s-dash (binario Go separado, ~10MB)
+### CLI argus (binario Go separado, ~10MB)
 
 ```
-k8s-dash login --server https://dashboard.example.com
+argus login --server https://dashboard.example.com
     -> Abre browser para login OAuth/JWT
     -> Recibe token, genera kubeconfig en ~/.kube/config (nuevo context)
 
-k8s-dash contexts
+argus contexts
     -> Lista clusters disponibles desde el dashboard
 
-k8s-dash use <cluster-name>
+argus use <cluster-name>
     -> Cambia kubectl context al cluster seleccionado
 
-k8s-dash logout
+argus logout
     -> Limpia tokens y contexts generados
 ```
 

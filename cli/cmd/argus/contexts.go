@@ -37,6 +37,6 @@ func runContexts(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  %-36s  %s\n", c.ID, c.Name)
 	}
 
-	fmt.Printf("\nUse 'kubectl --context k8s-dash/<cluster-name>' to interact with a cluster.\n")
+	fmt.Printf("\nUse 'kubectl --context argus/<cluster-name>' to interact with a cluster.\n")
 	return nil
 }

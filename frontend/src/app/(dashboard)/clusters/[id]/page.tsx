@@ -220,7 +220,7 @@ export default function ClusterDetailPage() {
     openChat();
   };
 
-  const cliSetupCommand = `k8s-dash login --server ${typeof window !== "undefined" ? window.location.origin : "https://dashboard.example.com"}`;
+  const cliSetupCommand = `argus login --server ${typeof window !== "undefined" ? window.location.origin : "https://dashboard.example.com"}`;
 
   const handleCopyCommand = () => {
     navigator.clipboard.writeText(cliSetupCommand);
@@ -318,7 +318,7 @@ export default function ClusterDetailPage() {
           <div className="rounded-md border p-4 space-y-3">
             <p className="text-sm font-medium">CLI Setup</p>
             <p className="text-xs text-muted-foreground">
-              Use the k8s-dash CLI to interact with this cluster from your terminal.
+              Use the argus CLI to interact with this cluster from your terminal.
             </p>
             <div className="flex items-center gap-2">
               <code className="flex-1 rounded-md bg-muted px-3 py-2 text-xs font-mono">
@@ -340,7 +340,7 @@ export default function ClusterDetailPage() {
             <div className="space-y-1 text-xs text-muted-foreground">
               <p>After logging in, configure kubectl for this cluster:</p>
               <code className="block rounded-md bg-muted px-3 py-2 font-mono">
-                k8s-dash use {clusterId}
+                argus use {clusterId}
               </code>
             </div>
           </div>

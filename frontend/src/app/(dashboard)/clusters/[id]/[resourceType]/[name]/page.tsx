@@ -120,6 +120,7 @@ export default function ResourceDetailPage() {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   async function handleSaveYaml(_yaml: string) {
     // In a real implementation, this would parse YAML and PUT to the API
   }

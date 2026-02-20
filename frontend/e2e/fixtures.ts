@@ -12,6 +12,7 @@ export const test = base.extend<TestFixtures>({
       localStorage.setItem('access_token', 'test-token');
       localStorage.setItem('refresh_token', 'test-refresh-token');
     });
+    // eslint-disable-next-line react-hooks/rules-of-hooks
     await use(page as never);
   },
 });

@@ -67,3 +67,19 @@ Ideas pendientes de diseñar e implementar.
 - Posibilidad futura: webhook, Slack, Telegram ademas de email.
 
 **Estado:** Por diseñar
+
+---
+
+## 5. Argus Operator (Kubernetes Operator)
+
+**Idea:** Construir un Kubernetes Operator que gestione las instancias de Argus desplegadas. Permite controlar el ciclo de vida, licencias, upgrades y configuracion de forma declarativa via CRDs.
+
+**Concepto:**
+- **CRD `ArgusInstance`:** Define una instancia de Argus (version, replicas, config, licencia, plugins habilitados, base de datos, ingress).
+- **Gestion de licencias:** El operator valida la licencia BSL contra un servidor de licencias (o clave embebida). Segun el tier, habilita/limita funcionalidades (numero de clusters, plugins, AI, etc.).
+- **Lifecycle management:** El operator gestiona deploy, upgrade, rollback, backup de la base de datos, y health checks de cada instancia.
+- **Multi-tenancy:** Posibilidad de gestionar multiples instancias de Argus en un mismo cluster (para SaaS o diferentes equipos).
+- **Auto-upgrade:** El operator puede detectar nuevas versiones y aplicar upgrades automaticos (configurable).
+- **Built with:** kubebuilder o operator-sdk (Go), controller-runtime.
+
+**Estado:** Por diseñar

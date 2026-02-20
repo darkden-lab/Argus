@@ -17,7 +17,7 @@ import (
 func newLoginCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "login",
-		Short: "Authenticate with the K8s Dashboard and configure kubeconfig",
+		Short: "Authenticate with the Argus Dashboard and configure kubeconfig",
 		Long: `Opens a browser for dashboard login. After authentication, generates
 kubeconfig entries for each accessible cluster.`,
 		RunE: runLogin,
@@ -38,7 +38,7 @@ type clusterInfo struct {
 func runLogin(cmd *cobra.Command, args []string) error {
 	srv := getServer()
 	if srv == "" {
-		return fmt.Errorf("--server is required or set K8S_DASH_SERVER environment variable")
+		return fmt.Errorf("--server is required or set ARGUS_SERVER environment variable")
 	}
 
 	fmt.Printf("Authenticating with %s...\n", srv)
@@ -104,7 +104,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		clusters, err := fetchClusters(srv, cb.Token)
 		if err != nil {
 			fmt.Printf("Warning: could not fetch clusters: %v\n", err)
-			fmt.Println("Login saved. Run 'k8s-dash contexts' later to see available clusters.")
+			fmt.Println("Login saved. Run 'argus contexts' later to see available clusters.")
 			return nil
 		}
 
@@ -113,7 +113,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 			fmt.Printf("  - %s (%s)\n", c.Name, c.ID)
 		}
 
-		fmt.Println("\nLogin successful! Use 'k8s-dash contexts' to see clusters.")
+		fmt.Println("\nLogin successful! Use 'argus contexts' to see clusters.")
 		return nil
 
 	case err := <-errCh:
@@ -159,7 +159,7 @@ type cliConfig struct {
 
 func configDir() string {
 	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".k8s-dash")
+	return filepath.Join(home, ".argus")
 }
 
 func configPath() string {
@@ -181,7 +181,7 @@ func saveConfig(cfg cliConfig) error {
 func loadConfig() (*cliConfig, error) {
 	data, err := os.ReadFile(configPath())
 	if err != nil {
-		return nil, fmt.Errorf("not logged in (run 'k8s-dash login' first)")
+		return nil, fmt.Errorf("not logged in (run 'argus login' first)")
 	}
 	var cfg cliConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
@@ -194,7 +194,7 @@ func getServer() string {
 	if server != "" {
 		return server
 	}
-	if s := os.Getenv("K8S_DASH_SERVER"); s != "" {
+	if s := os.Getenv("ARGUS_SERVER"); s != "" {
 		return s
 	}
 	cfg, err := loadConfig()

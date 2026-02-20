@@ -82,6 +82,23 @@ func (m *SecurityMiddleware) SanitizeInput(input string) string {
 		}
 	}
 
+	// Check for pipe-to-shell patterns with optional spaces (e.g. "curl ... | bash")
+	pipeShells := []string{"bash", "sh", "zsh", "python", "perl", "ruby"}
+	if strings.Contains(lower, "|") {
+		parts := strings.SplitN(lower, "|", 2)
+		if len(parts) == 2 {
+			left := strings.TrimSpace(parts[0])
+			right := strings.TrimSpace(parts[1])
+			for _, shell := range pipeShells {
+				if (strings.HasPrefix(left, "curl") || strings.HasPrefix(left, "wget")) &&
+					(right == shell || strings.HasPrefix(right, shell+" ")) {
+					log.Printf("terminal security: blocked pipe-to-shell pattern: %s | %s", left, right)
+					return "Command blocked: piping download to shell interpreter"
+				}
+			}
+		}
+	}
+
 	// Check for common shell injection patterns
 	if strings.Contains(input, "$(") || strings.Contains(input, "`") {
 		// Allow backticks and subshells in general, but log them

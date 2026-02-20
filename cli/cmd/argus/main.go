@@ -14,9 +14,9 @@ var (
 
 func main() {
 	rootCmd := &cobra.Command{
-		Use:   "k8s-dash",
-		Short: "CLI for K8s Dashboard - authenticate and manage clusters via the dashboard proxy",
-		Long: `k8s-dash connects your local kubectl to the K8s Dashboard's authenticated proxy.
+		Use:   "argus",
+		Short: "CLI for Argus Dashboard - authenticate and manage clusters via the dashboard proxy",
+		Long: `argus connects your local kubectl to the Argus Dashboard's authenticated proxy.
 After logging in, kubectl commands are routed through the dashboard with full RBAC enforcement.`,
 		Version: version,
 	}

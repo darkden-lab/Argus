@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { k8sWs, type WatchEvent } from "@/lib/ws";
 
 interface UseK8sWebSocketOptions {

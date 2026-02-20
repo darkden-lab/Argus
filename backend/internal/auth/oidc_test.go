@@ -113,3 +113,171 @@ func TestHandleProviderInfoDisabled(t *testing.T) {
 		t.Error("expected enabled to be false")
 	}
 }
+
+// --- Security Tests ---
+
+// TestOIDCStateReplayAttack verifies that a state token cannot be reused
+// (prevents CSRF replay attacks).
+func TestOIDCStateReplayAttack(t *testing.T) {
+	svc := &OIDCService{
+		states: make(map[string]time.Time),
+	}
+
+	state, _ := svc.generateState()
+
+	// First use should succeed
+	if !svc.validateState(state) {
+		t.Fatal("first state validation should succeed")
+	}
+
+	// Second use (replay) must fail
+	if svc.validateState(state) {
+		t.Fatal("SECURITY: state token reused - replay attack possible")
+	}
+}
+
+// TestOIDCStateBruteForce verifies that random guesses are rejected.
+func TestOIDCStateBruteForce(t *testing.T) {
+	svc := &OIDCService{
+		states: make(map[string]time.Time),
+	}
+
+	// Generate a valid state to populate the map
+	svc.generateState()
+
+	guesses := []string{
+		"",
+		"guess",
+		"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+		"../../../etc/passwd",
+		"<script>alert(1)</script>",
+	}
+
+	for _, guess := range guesses {
+		if svc.validateState(guess) {
+			t.Errorf("SECURITY: brute force state guess accepted: %q", guess)
+		}
+	}
+}
+
+// TestOIDCStateUniqueness verifies that generated states are cryptographically unique.
+func TestOIDCStateUniqueness(t *testing.T) {
+	svc := &OIDCService{
+		states: make(map[string]time.Time),
+	}
+
+	seen := make(map[string]bool)
+	for i := 0; i < 100; i++ {
+		state, err := svc.generateState()
+		if err != nil {
+			t.Fatalf("generateState failed: %v", err)
+		}
+		if seen[state] {
+			t.Fatalf("SECURITY: duplicate state generated after %d iterations", i)
+		}
+		seen[state] = true
+	}
+}
+
+// TestOIDCCallbackMissingState verifies that the callback rejects requests without state.
+func TestOIDCCallbackMissingState(t *testing.T) {
+	svc := &OIDCService{
+		states: make(map[string]time.Time),
+	}
+
+	req := httptest.NewRequest("GET", "/api/auth/oidc/callback", nil)
+	rec := httptest.NewRecorder()
+
+	svc.HandleCallback(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for missing state, got %d", rec.Code)
+	}
+}
+
+// TestOIDCCallbackInvalidState verifies that the callback rejects forged state values.
+func TestOIDCCallbackInvalidState(t *testing.T) {
+	svc := &OIDCService{
+		states: make(map[string]time.Time),
+	}
+
+	req := httptest.NewRequest("GET", "/api/auth/oidc/callback?state=forged-state&code=fake", nil)
+	rec := httptest.NewRecorder()
+
+	svc.HandleCallback(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid state, got %d", rec.Code)
+	}
+}
+
+// TestOIDCCallbackErrorParam verifies that OIDC error responses are handled.
+func TestOIDCCallbackErrorParam(t *testing.T) {
+	svc := &OIDCService{
+		states: make(map[string]time.Time),
+	}
+
+	// Insert a valid state manually
+	state, _ := svc.generateState()
+
+	req := httptest.NewRequest("GET",
+		"/api/auth/oidc/callback?state="+state+"&error=access_denied&error_description=user+denied", nil)
+	rec := httptest.NewRecorder()
+
+	svc.HandleCallback(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for OIDC error param, got %d", rec.Code)
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rec.Body).Decode(&resp)
+	if resp["error"] == "" {
+		t.Error("expected non-empty error message for OIDC error")
+	}
+}
+
+// TestOIDCStateExpirationTiming verifies that expired states are rejected.
+func TestOIDCStateExpirationTiming(t *testing.T) {
+	svc := &OIDCService{
+		states: make(map[string]time.Time),
+	}
+
+	// Insert state that expired 1 second ago
+	svc.mu.Lock()
+	svc.states["just-expired"] = time.Now().Add(-1 * time.Second)
+	svc.mu.Unlock()
+
+	if svc.validateState("just-expired") {
+		t.Fatal("SECURITY: accepted just-expired state token")
+	}
+}
+
+// TestOIDCCleanupExpiredStates verifies that generateState cleans up expired entries.
+func TestOIDCCleanupExpiredStates(t *testing.T) {
+	svc := &OIDCService{
+		states: make(map[string]time.Time),
+	}
+
+	// Insert many expired states
+	svc.mu.Lock()
+	for i := 0; i < 100; i++ {
+		svc.states["expired-"+time.Now().String()+string(rune(i))] = time.Now().Add(-1 * time.Hour)
+	}
+	svc.mu.Unlock()
+
+	// generateState should clean up expired entries
+	_, err := svc.generateState()
+	if err != nil {
+		t.Fatalf("generateState failed: %v", err)
+	}
+
+	svc.mu.Lock()
+	remaining := len(svc.states)
+	svc.mu.Unlock()
+
+	// Should only have the 1 newly generated state
+	if remaining > 1 {
+		t.Errorf("expected expired states to be cleaned up, but %d remain", remaining)
+	}
+}

@@ -62,27 +62,27 @@
 
 ---
 
-## Phase 3: CLI Binary (k8s-dash)
+## Phase 3: CLI Binary (argus)
 
 ### Task 3.1: CLI core and login command
 **Files to create:**
-- `cli/cmd/k8s-dash/main.go` - Cobra CLI entrypoint
-- `cli/cmd/k8s-dash/login.go` - `k8s-dash login --server URL`:
+- `cli/cmd/argus/main.go` - Cobra CLI entrypoint
+- `cli/cmd/argus/login.go` - `argus login --server URL`:
   - Opens browser for dashboard login (OAuth callback on localhost)
   - Receives JWT token
   - Fetches available clusters from dashboard API
   - Generates kubeconfig entries for each cluster
-- `cli/cmd/k8s-dash/config.go` - CLI config store (~/.k8s-dash/config.json)
+- `cli/cmd/argus/config.go` - CLI config store (~/.argus/config.json)
 - `cli/go.mod`, `cli/go.sum`
 
 **Go dependencies:** `github.com/spf13/cobra`, `github.com/pkg/browser`
 
 ### Task 3.2: CLI context and logout commands
 **Files to create:**
-- `cli/cmd/k8s-dash/contexts.go` - `k8s-dash contexts`: list available clusters from dashboard
-- `cli/cmd/k8s-dash/use.go` - `k8s-dash use <cluster>`: switch kubectl context
-- `cli/cmd/k8s-dash/logout.go` - `k8s-dash logout`: clean tokens and kubeconfig entries
-- `cli/cmd/k8s-dash/version.go` - Version info
+- `cli/cmd/argus/contexts.go` - `argus contexts`: list available clusters from dashboard
+- `cli/cmd/argus/use.go` - `argus use <cluster>`: switch kubectl context
+- `cli/cmd/argus/logout.go` - `argus logout`: clean tokens and kubeconfig entries
+- `cli/cmd/argus/version.go` - Version info
 
 **Dependencies:** Task 3.1
 
@@ -108,7 +108,7 @@
 
 ### Task 4.2: Kubeconfig download UI
 **Files to modify:**
-- `frontend/src/app/(dashboard)/clusters/[id]/page.tsx` - Add "Download kubeconfig" button and "CLI Setup" instructions section showing k8s-dash commands
+- `frontend/src/app/(dashboard)/clusters/[id]/page.tsx` - Add "Download kubeconfig" button and "CLI Setup" instructions section showing argus commands
 
 ---
 

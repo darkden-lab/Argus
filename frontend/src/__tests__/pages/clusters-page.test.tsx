@@ -31,7 +31,7 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
-const { api } = require('@/lib/api');
+import { api } from '@/lib/api';
 
 const mockClusters = [
   {

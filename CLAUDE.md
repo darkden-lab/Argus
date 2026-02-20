@@ -102,7 +102,7 @@ Standalone Go binary that connects to dashboard via gRPC bidirectional streaming
 
 ### CLI (`cli/`)
 
-`k8s-dash` CLI tool for managing clusters from terminal. Supports login, cluster listing, and kubeconfig download.
+`argus` CLI tool for managing clusters from terminal. Supports login, cluster listing, and kubeconfig download.
 
 ### Deployment (`deploy/`)
 

@@ -1,0 +1,19 @@
+name: argus
+arch: "${ARCH}"
+platform: linux
+version: "${VERSION}"
+maintainer: "darkden-lab <https://github.com/darkden-lab>"
+description: |
+  Argus CLI - authenticate and manage Kubernetes clusters via the Argus dashboard proxy.
+  After logging in, kubectl commands are routed through the dashboard with full RBAC enforcement.
+vendor: darkden-lab
+homepage: https://github.com/darkden-lab/argus
+license: BSL-1.1
+section: utils
+priority: optional
+
+contents:
+  - src: ./dist/argus_linux_${ARCH}
+    dst: /usr/local/bin/argus
+    file_info:
+      mode: 0755

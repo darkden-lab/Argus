@@ -47,7 +47,7 @@ export function useAiChat() {
 
   const {
     isOpen,
-    activeConversationId,
+    activeConversationId: _activeConversationId,
     pageContext,
     addMessage,
     appendToMessage,

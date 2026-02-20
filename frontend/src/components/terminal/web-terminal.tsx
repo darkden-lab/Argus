@@ -53,7 +53,7 @@ function loadHistory(): string[] {
   }
 }
 
-function saveHistory(history: string[]) {
+function _saveHistory(history: string[]) {
   try {
     localStorage.setItem(
       COMMAND_HISTORY_KEY,
@@ -75,9 +75,9 @@ export function WebTerminal() {
   const [selectedNamespace, setSelectedNamespace] = useState("default");
   const [mode, setMode] = useState<TerminalMode>("smart");
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [commandHistory] = useState<string[]>(loadHistory);
-  const historyIndexRef = useRef(-1);
-  const currentLineRef = useRef("");
+  const [_commandHistory] = useState<string[]>(loadHistory);
+  const _historyIndexRef = useRef(-1);
+  const _currentLineRef = useRef("");
 
   const handleOutput = useCallback((data: string) => {
     xtermRef.current?.write(data);

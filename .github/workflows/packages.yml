@@ -1,0 +1,112 @@
+name: Build Packages
+
+on:
+  push:
+    tags:
+      - "release-*"
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-cli:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+        exclude:
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: cli/go.mod
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          # Strip leading "v" or "release-v" prefix
+          VERSION="${TAG#release-}"
+          VERSION="${VERSION#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Build CLI binary
+        env:
+          CGO_ENABLED: "0"
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          EXT=""
+          if [ "$GOOS" = "windows" ]; then EXT=".exe"; fi
+          cd cli
+          go build -trimpath \
+            -ldflags "-s -w -X main.version=${{ steps.version.outputs.VERSION }}" \
+            -o "../dist/argus_${GOOS}_${GOARCH}${EXT}" \
+            ./cmd/argus
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: argus-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: dist/argus_*
+
+  package-linux:
+    needs: build-cli
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+        format: [deb, rpm]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#release-}"
+          VERSION="${VERSION#v}"
+          echo "VERSION=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: argus-linux-${{ matrix.arch }}
+          path: packaging/dist/
+
+      - name: Build ${{ matrix.format }} package (${{ matrix.arch }})
+        uses: goreleaser/nfpm-action@v0.4.0
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+          ARCH: ${{ matrix.arch }}
+        with:
+          nfpm: packaging/nfpm.yaml
+          packager: ${{ matrix.format }}
+          target: packaging/dist/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: argus-${{ matrix.format }}-${{ matrix.arch }}
+          path: packaging/dist/*.${{ matrix.format }}
+
+  upload-release-assets:
+    needs: [build-cli, package-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          merge-multiple: true
+
+      - name: List artifacts
+        run: ls -lhR artifacts/
+
+      - name: Upload to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
