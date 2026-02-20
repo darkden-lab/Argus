@@ -10,6 +10,7 @@ import {
   Puzzle,
   ChevronLeft,
   ChevronRight,
+  TerminalSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -56,6 +57,11 @@ const defaultNavSections: NavSection[] = [
         label: "Clusters",
         href: "/clusters",
         icon: <Server className="h-4 w-4" />,
+      },
+      {
+        label: "Terminal",
+        href: "/terminal",
+        icon: <TerminalSquare className="h-4 w-4" />,
       },
     ],
   },

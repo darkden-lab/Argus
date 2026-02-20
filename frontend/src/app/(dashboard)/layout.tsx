@@ -8,6 +8,7 @@ import { usePermissionsStore } from "@/stores/permissions";
 import { k8sWs } from "@/lib/ws";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ToastContainer } from "@/components/ui/toast";
+import { ChatPanel, ChatToggleButton } from "@/components/ai/chat-panel";
 
 export default function DashboardLayout({
   children,
@@ -43,6 +44,8 @@ export default function DashboardLayout({
         </MainContent>
       </div>
       <ToastContainer />
+      <ChatPanel />
+      <ChatToggleButton />
     </div>
   );
 }
