@@ -2,6 +2,7 @@
 
 import { usePathname } from "next/navigation";
 import { LogOut, Settings, User } from "lucide-react";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
@@ -54,8 +55,11 @@ export function Header() {
         <Breadcrumbs />
       </div>
 
-      {/* Right: Cluster selector + User menu */}
+      {/* Right: Notifications + Cluster selector + User menu */}
       <div className="flex items-center gap-3">
+        {/* Notification Bell */}
+        <NotificationBell />
+
         {/* Cluster Selector */}
         <Select defaultValue="default">
           <SelectTrigger className="h-8 w-[180px] text-xs">
