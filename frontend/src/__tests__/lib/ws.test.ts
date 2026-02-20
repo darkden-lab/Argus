@@ -1,6 +1,8 @@
 import { k8sWs, type WatchEvent } from '@/lib/ws';
 
-// Mock WebSocket
+// Track all created MockWebSocket instances
+let wsInstances: MockWebSocket[] = [];
+
 class MockWebSocket {
   static CONNECTING = 0;
   static OPEN = 1;
@@ -21,15 +23,23 @@ class MockWebSocket {
 
   constructor(url: string) {
     this.url = url;
-    // Simulate connection opening in next tick
+    wsInstances.push(this);
     setTimeout(() => {
       this.readyState = MockWebSocket.OPEN;
       this.onopen?.();
     }, 0);
   }
+
+  simulateMessage(data: WatchEvent) {
+    this.onmessage?.({ data: JSON.stringify(data) });
+  }
+
+  simulateOpen() {
+    this.readyState = MockWebSocket.OPEN;
+    this.onopen?.();
+  }
 }
 
-// Store original and set mock
 const OriginalWebSocket = global.WebSocket;
 
 beforeAll(() => {
@@ -40,10 +50,14 @@ afterAll(() => {
   (global as unknown as Record<string, unknown>).WebSocket = OriginalWebSocket;
 });
 
+function getLatestWs(): MockWebSocket {
+  return wsInstances[wsInstances.length - 1];
+}
+
 describe('K8sWebSocket', () => {
   beforeEach(() => {
     jest.useFakeTimers();
-    // Reset the singleton state by disconnecting
+    wsInstances = [];
     k8sWs.disconnect();
   });
 
@@ -52,23 +66,61 @@ describe('K8sWebSocket', () => {
     jest.useRealTimers();
   });
 
-  it('connects with the provided token', () => {
+  it('connects with the provided token in URL', () => {
     k8sWs.connect('test-token');
-
-    // The WebSocket should be created with the token in the URL
-    // We can check indirectly by ensuring it does not throw
-    expect(() => k8sWs.connect('test-token')).not.toThrow();
+    const ws = getLatestWs();
+    expect(ws.url).toContain('token=test-token');
   });
 
-  it('subscribes to a resource', () => {
+  it('sends subscribe message when connection is open', () => {
     k8sWs.connect('test-token');
-    jest.runAllTimers(); // trigger onopen
+    jest.runAllTimers();
 
+    const ws = getLatestWs();
     k8sWs.subscribe('prod', 'pods', 'default');
 
-    // After subscribing, the internal set should contain the subscription
-    // Unsubscribe should work without error
-    expect(() => k8sWs.unsubscribe('prod', 'pods', 'default')).not.toThrow();
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        action: 'subscribe',
+        cluster: 'prod',
+        resource: 'pods',
+        namespace: 'default',
+      })
+    );
+  });
+
+  it('sends subscribe without namespace when omitted', () => {
+    k8sWs.connect('test-token');
+    jest.runAllTimers();
+
+    const ws = getLatestWs();
+    k8sWs.subscribe('prod', 'pods');
+
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        action: 'subscribe',
+        cluster: 'prod',
+        resource: 'pods',
+      })
+    );
+  });
+
+  it('sends unsubscribe message', () => {
+    k8sWs.connect('test-token');
+    jest.runAllTimers();
+
+    const ws = getLatestWs();
+    k8sWs.subscribe('prod', 'pods', 'default');
+    k8sWs.unsubscribe('prod', 'pods', 'default');
+
+    expect(ws.send).toHaveBeenLastCalledWith(
+      JSON.stringify({
+        action: 'unsubscribe',
+        cluster: 'prod',
+        resource: 'pods',
+        namespace: 'default',
+      })
+    );
   });
 
   it('notifies listeners on incoming messages', () => {
@@ -80,7 +132,6 @@ describe('K8sWebSocket', () => {
     k8sWs.on('prod/pods/default', callback);
     k8sWs.subscribe('prod', 'pods', 'default');
 
-    // Simulate incoming message
     const event: WatchEvent = {
       cluster: 'prod',
       resource: 'pods',
@@ -89,75 +140,154 @@ describe('K8sWebSocket', () => {
       object: { metadata: { name: 'test-pod' } },
     };
 
-    // Get the internal WebSocket and trigger onmessage
-    // We need to access it via the mock
-    const instances = MockWebSocket.prototype;
-    // Since we used global mock, we trigger it via the connect
-    // Access by re-connecting to get a reference
-    k8sWs.disconnect();
-    k8sWs.on('prod/pods/default', callback);
+    const ws = getLatestWs();
+    ws.simulateMessage(event);
+
+    expect(callback).toHaveBeenCalledWith(event);
+  });
+
+  it('notifies wildcard listeners for any message', () => {
+    const callback = jest.fn();
 
     k8sWs.connect('test-token');
     jest.runAllTimers();
 
-    // Get the last created MockWebSocket instance
-    // We'll simulate the message directly
+    k8sWs.on('*', callback);
+
+    const event: WatchEvent = {
+      cluster: 'staging',
+      resource: 'deployments',
+      namespace: 'kube-system',
+      type: 'MODIFIED',
+      object: { metadata: { name: 'coredns' } },
+    };
+
+    const ws = getLatestWs();
+    ws.simulateMessage(event);
+
+    expect(callback).toHaveBeenCalledWith(event);
+  });
+
+  it('does not notify unrelated listeners', () => {
+    const podsCallback = jest.fn();
+    const deploymentsCallback = jest.fn();
+
+    k8sWs.connect('test-token');
+    jest.runAllTimers();
+
+    k8sWs.on('prod/pods/default', podsCallback);
+    k8sWs.on('prod/deployments/default', deploymentsCallback);
+
+    const event: WatchEvent = {
+      cluster: 'prod',
+      resource: 'pods',
+      namespace: 'default',
+      type: 'ADDED',
+      object: {},
+    };
+
+    getLatestWs().simulateMessage(event);
+
+    expect(podsCallback).toHaveBeenCalledTimes(1);
+    expect(deploymentsCallback).not.toHaveBeenCalled();
   });
 
   it('removes listener on unsubscribe callback', () => {
     const callback = jest.fn();
-    const unsubscribe = k8sWs.on('prod/pods/default', callback);
 
-    // Unsubscribe
+    k8sWs.connect('test-token');
+    jest.runAllTimers();
+
+    const unsubscribe = k8sWs.on('prod/pods/default', callback);
     unsubscribe();
 
-    // Verify callback is no longer registered (no direct way, but no error)
+    const event: WatchEvent = {
+      cluster: 'prod',
+      resource: 'pods',
+      namespace: 'default',
+      type: 'ADDED',
+      object: {},
+    };
+
+    getLatestWs().simulateMessage(event);
+
     expect(callback).not.toHaveBeenCalled();
   });
 
-  it('disconnects cleanly', () => {
+  it('disconnects cleanly and stops reconnecting', () => {
     k8sWs.connect('test-token');
     jest.runAllTimers();
 
     k8sWs.disconnect();
 
-    // Should not throw when subscribing after disconnect
-    k8sWs.subscribe('prod', 'pods');
-    // No error = success
-  });
-
-  it('queues subscriptions before connection is open', () => {
-    // Subscribe before connect
-    k8sWs.subscribe('prod', 'pods', 'default');
-    k8sWs.connect('test-token');
-
-    // Before timers run, the connection is not yet open
-    // Subscriptions should be queued
-    jest.runAllTimers();
-
-    // After connection opens, subscriptions should be sent
-    // No error = success
+    const ws = getLatestWs();
+    expect(ws.close).toHaveBeenCalled();
   });
 
   it('re-subscribes after reconnection', () => {
     k8sWs.connect('test-token');
     jest.runAllTimers();
 
-    k8sWs.subscribe('prod', 'pods');
+    k8sWs.subscribe('prod', 'pods', 'default');
 
-    // Simulate disconnection which triggers reconnect
+    // Simulate disconnect and reconnect
     k8sWs.disconnect();
     k8sWs.connect('test-token');
     jest.runAllTimers();
 
-    // If we get here without error, reconnect worked
+    const ws = getLatestWs();
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        action: 'subscribe',
+        cluster: 'prod',
+        resource: 'pods',
+        namespace: 'default',
+      })
+    );
   });
 
-  it('notifies wildcard listeners', () => {
-    const callback = jest.fn();
-    k8sWs.on('*', callback);
+  it('queues subscriptions before connection opens', () => {
+    k8sWs.subscribe('prod', 'pods', 'default');
+    k8sWs.connect('test-token');
 
-    // Wildcard listener should be registered without error
-    expect(callback).not.toHaveBeenCalled();
+    // Before open, send should not be called for the subscribe
+    const ws = getLatestWs();
+    expect(ws.send).not.toHaveBeenCalled();
+
+    // After open, queued subscriptions should be sent
+    jest.runAllTimers();
+    expect(ws.send).toHaveBeenCalledWith(
+      JSON.stringify({
+        action: 'subscribe',
+        cluster: 'prod',
+        resource: 'pods',
+        namespace: 'default',
+      })
+    );
+  });
+
+  it('ignores malformed messages without throwing', () => {
+    k8sWs.connect('test-token');
+    jest.runAllTimers();
+
+    const ws = getLatestWs();
+
+    expect(() => {
+      ws.onmessage?.({ data: 'not valid json' });
+    }).not.toThrow();
+  });
+
+  it('replaces connection when connect is called again', () => {
+    k8sWs.connect('token-1');
+    jest.advanceTimersByTime(10);
+
+    const ws1 = getLatestWs();
+
+    k8sWs.connect('token-2');
+    jest.advanceTimersByTime(10);
+
+    expect(ws1.close).toHaveBeenCalled();
+    const ws2 = getLatestWs();
+    expect(ws2.url).toContain('token=token-2');
   });
 });
