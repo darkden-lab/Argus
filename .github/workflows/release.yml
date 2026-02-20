@@ -1,0 +1,66 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      BACKEND_IMAGE: ghcr.io/${{ github.repository }}/backend
+      FRONTEND_IMAGE: ghcr.io/${{ github.repository }}/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          file: deploy/docker/Dockerfile.backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:${{ steps.version.outputs.VERSION }}
+            ${{ env.BACKEND_IMAGE }}:latest
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: deploy/docker/Dockerfile.frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.version.outputs.VERSION }}
+            ${{ env.FRONTEND_IMAGE }}:latest
+
+      - name: Package Helm chart
+        env:
+          CHART_VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          helm package deploy/helm/k8s-dashboard \
+            --version "$CHART_VERSION" \
+            --app-version "$CHART_VERSION"
+
+      - name: Upload Helm chart artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: helm-chart
+          path: "*.tgz"
