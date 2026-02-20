@@ -1,0 +1,12 @@
+node_modules/
+.next/
+.env*.local
+.env
+*.exe
+bin/
+tmp/
+vendor/
+dist/
+coverage/
+.DS_Store
+*.log
