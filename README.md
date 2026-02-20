@@ -1,6 +1,10 @@
 # Argus
 
+![CI](https://github.com/darkden-lab/argus/actions/workflows/ci.yml/badge.svg)
+
 **The all-seeing Kubernetes dashboard.** Multi-cluster management with a plugin-based architecture, AI assistant, web terminal, and async notifications.
+
+> **Project Status**: Active development. The core platform (multi-cluster management, plugin system, AI assistant, web terminal, notifications) is feature-complete. See [Releases](https://github.com/darkden-lab/argus/releases) for the latest version.
 
 ---
 
@@ -59,12 +63,18 @@
 ### Docker Compose (development)
 
 ```bash
+# Clone the repository
 git clone https://github.com/darkden-lab/argus.git
 cd argus
+
+# Copy environment file
+cp .env.example .env
+
+# Start with Docker Compose
 make dev
 ```
 
-This starts PostgreSQL, backend (:8080), and frontend (:3000).
+Open http://localhost:3000 to access the dashboard. This starts PostgreSQL, backend (:8080), and frontend (:3000).
 
 ### Helm (production)
 
@@ -124,8 +134,18 @@ Plugins are auto-detected and can be enabled/disabled per cluster.
 
 ## Development
 
+### Prerequisites
+
+- **Go** 1.25+
+- **Node.js** 20+
+- **Docker** and Docker Compose
+- **Make** (optional, for convenience targets)
+
+### Running Locally
+
 ```bash
 # Backend
+cd backend && go build ./cmd/server/
 cd backend && go test ./...        # Run tests
 cd backend && go vet ./...         # Lint
 
@@ -140,6 +160,20 @@ cd frontend && npm run lint        # ESLint
 make proto                         # Regenerate gRPC code
 ```
 
+### Make Targets
+
+| Target | Description |
+|--------|-------------|
+| `make dev` | Start full stack with Docker Compose |
+| `make build` | Build all Docker images |
+| `make test` | Run all backend and frontend tests |
+| `make lint` | Run linters (go vet + ESLint) |
+| `make coverage` | Generate test coverage reports |
+| `make e2e-smoke` | Run E2E smoke tests |
+| `make proto` | Regenerate gRPC code from proto files |
+| `make helm-lint` | Lint Helm charts |
+| `make clean` | Remove build artifacts and caches |
+
 ## Configuration
 
 All backend configuration via environment variables. See [`backend/internal/config/config.go`](backend/internal/config/config.go) for defaults.
@@ -153,6 +187,10 @@ All backend configuration via environment variables. See [`backend/internal/conf
 | `GRPC_PORT` | `9090` | gRPC agent server port |
 | `OIDC_ISSUER` | - | OIDC provider URL (optional) |
 | `KAFKA_BROKERS` | - | Kafka brokers (optional, uses in-memory if empty) |
+
+## Security
+
+See [SECURITY.md](SECURITY.md) for the security policy, vulnerability reporting process, and detailed documentation of Argus security architecture (authentication, RBAC, encryption, API security, WebSocket security, terminal sandboxing, and deployment best practices).
 
 ## License
 

@@ -434,3 +434,223 @@ func TestRBACConcurrentAccess(t *testing.T) {
 		<-done
 	}
 }
+
+// TestNewEngine verifies the NewEngine constructor.
+func TestNewEngine(t *testing.T) {
+	e := NewEngine(nil)
+	if e == nil {
+		t.Fatal("expected non-nil Engine")
+	}
+	if e.cache == nil {
+		t.Fatal("expected non-nil cache map")
+	}
+	if e.ttl != 5*time.Minute {
+		t.Errorf("expected TTL of 5 minutes, got %v", e.ttl)
+	}
+}
+
+// TestMatchPermissionExactResource tests exact resource matching (no wildcard).
+func TestMatchPermissionExactResource(t *testing.T) {
+	e := newTestEngine()
+
+	perm := Permission{Resource: "pods", Action: "read", ScopeType: "global"}
+
+	// Exact match
+	if !e.matchPermission(perm, Request{Action: "read", Resource: "pods"}) {
+		t.Fatal("expected exact resource match to succeed")
+	}
+
+	// Different resource
+	if e.matchPermission(perm, Request{Action: "read", Resource: "deployments"}) {
+		t.Fatal("expected different resource to fail")
+	}
+}
+
+// TestMatchPermissionExactAction tests exact action matching (no wildcard).
+func TestMatchPermissionExactAction(t *testing.T) {
+	e := newTestEngine()
+
+	perm := Permission{Resource: "pods", Action: "read", ScopeType: "global"}
+
+	// Exact match
+	if !e.matchPermission(perm, Request{Action: "read", Resource: "pods"}) {
+		t.Fatal("expected exact action match to succeed")
+	}
+
+	// Different action
+	if e.matchPermission(perm, Request{Action: "write", Resource: "pods"}) {
+		t.Fatal("expected different action to fail")
+	}
+}
+
+// TestMatchPermissionClusterScopeEmptyClusterID tests cluster scope
+// when request has no ClusterID (should match).
+func TestMatchPermissionClusterScopeEmptyClusterID(t *testing.T) {
+	e := newTestEngine()
+
+	perm := Permission{Resource: "pods", Action: "read", ScopeType: "cluster", ScopeID: "cluster-1"}
+
+	// No ClusterID in request means "any cluster" for cluster-scoped perms
+	req := Request{Action: "read", Resource: "pods", ClusterID: ""}
+	if !e.matchPermission(perm, req) {
+		t.Fatal("expected cluster-scoped perm to match when request has no cluster ID")
+	}
+}
+
+// TestMatchPermissionNamespaceScopeOnlyNamespace tests namespace scope
+// when request has namespace but no cluster ID.
+func TestMatchPermissionNamespaceScopeOnlyNamespace(t *testing.T) {
+	e := newTestEngine()
+
+	perm := Permission{Resource: "pods", Action: "read", ScopeType: "namespace", ScopeID: "dev"}
+
+	// Only namespace, no cluster
+	req := Request{Action: "read", Resource: "pods", Namespace: "dev"}
+	if !e.matchPermission(perm, req) {
+		t.Fatal("expected namespace-only match to succeed")
+	}
+
+	// Wrong namespace
+	req = Request{Action: "read", Resource: "pods", Namespace: "prod"}
+	if e.matchPermission(perm, req) {
+		t.Fatal("expected wrong namespace to fail")
+	}
+}
+
+// TestMatchPermissionNamespaceScopeEmptyRequest tests namespace scope
+// when request has neither cluster nor namespace.
+func TestMatchPermissionNamespaceScopeEmptyRequest(t *testing.T) {
+	e := newTestEngine()
+
+	perm := Permission{Resource: "pods", Action: "read", ScopeType: "namespace", ScopeID: "cluster-1/dev"}
+
+	// No cluster or namespace in request
+	req := Request{Action: "read", Resource: "pods"}
+	if e.matchPermission(perm, req) {
+		t.Fatal("expected namespace perm to fail when request has no namespace")
+	}
+}
+
+// TestEvaluateMultiplePermissions tests evaluation with multiple permissions
+// where the second one matches.
+func TestEvaluateMultiplePermissions(t *testing.T) {
+	e := newTestEngine()
+	seedCache(e, "multi-perm-user", []Permission{
+		{Resource: "pods", Action: "read", ScopeType: "global"},
+		{Resource: "deployments", Action: "write", ScopeType: "global"},
+		{Resource: "services", Action: "*", ScopeType: "cluster", ScopeID: "cluster-1"},
+	})
+
+	// First perm matches
+	allowed, _ := e.Evaluate(nil, Request{
+		UserID: "multi-perm-user", Action: "read", Resource: "pods",
+	})
+	if !allowed {
+		t.Fatal("expected first permission to match")
+	}
+
+	// Second perm matches
+	allowed, _ = e.Evaluate(nil, Request{
+		UserID: "multi-perm-user", Action: "write", Resource: "deployments",
+	})
+	if !allowed {
+		t.Fatal("expected second permission to match")
+	}
+
+	// Third perm matches (wildcard action)
+	allowed, _ = e.Evaluate(nil, Request{
+		UserID: "multi-perm-user", Action: "delete", Resource: "services", ClusterID: "cluster-1",
+	})
+	if !allowed {
+		t.Fatal("expected third permission to match")
+	}
+
+	// None match
+	allowed, _ = e.Evaluate(nil, Request{
+		UserID: "multi-perm-user", Action: "delete", Resource: "pods",
+	})
+	if allowed {
+		t.Fatal("expected no permission to match delete on pods")
+	}
+}
+
+// TestGetPermissionsCacheMiss tests that getPermissions attempts DB load
+// when cache misses (nil pool causes panic/error).
+func TestGetPermissionsCacheMiss(t *testing.T) {
+	e := newTestEngine()
+
+	// No cached permissions, no pool - should fail
+	func() {
+		defer func() { recover() }()
+		_, err := e.getPermissions(nil, "unknown-user")
+		if err == nil {
+			t.Fatal("expected error when loading permissions with nil pool")
+		}
+	}()
+}
+
+// TestGetPermissionsFromCache tests that getPermissions returns cached data.
+func TestGetPermissionsFromCache(t *testing.T) {
+	e := newTestEngine()
+	expectedPerms := []Permission{
+		{Resource: "pods", Action: "read", ScopeType: "global"},
+	}
+	seedCache(e, "cached-user", expectedPerms)
+
+	perms, err := e.getPermissions(nil, "cached-user")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(perms) != 1 {
+		t.Fatalf("expected 1 permission, got %d", len(perms))
+	}
+	if perms[0].Resource != "pods" {
+		t.Errorf("expected resource 'pods', got '%s'", perms[0].Resource)
+	}
+}
+
+// TestInvalidateCacheNonExistentUser tests that invalidating a non-existent
+// user does not panic.
+func TestInvalidateCacheNonExistentUser(t *testing.T) {
+	e := newTestEngine()
+
+	// Should not panic
+	e.InvalidateCache("nonexistent-user")
+}
+
+// TestMatchPermissionNamespaceScopeWithClusterOnly tests namespace scope
+// when request has cluster but no namespace.
+func TestMatchPermissionNamespaceScopeWithClusterOnly(t *testing.T) {
+	e := newTestEngine()
+
+	perm := Permission{Resource: "pods", Action: "read", ScopeType: "namespace", ScopeID: "cluster-1/dev"}
+
+	// Cluster but no namespace
+	req := Request{Action: "read", Resource: "pods", ClusterID: "cluster-1"}
+	if e.matchPermission(perm, req) {
+		t.Fatal("expected namespace perm to fail when request has cluster but no namespace")
+	}
+}
+
+// TestEvaluateUserNotInCache tests that Evaluate returns error when user
+// is not cached and DB pool is nil.
+func TestEvaluateUserNotInCache(t *testing.T) {
+	e := newTestEngine()
+
+	panicked := false
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+			}
+		}()
+		_, err := e.Evaluate(nil, Request{
+			UserID:   "no-cache-user",
+			Action:   "read",
+			Resource: "pods",
+		})
+		if err == nil && !panicked {
+			t.Fatal("expected error or panic when user not in cache and no DB")
+		}
+	}()
+}
