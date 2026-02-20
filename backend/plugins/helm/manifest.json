@@ -1,0 +1,32 @@
+{
+  "id": "helm",
+  "name": "Helm Releases",
+  "version": "1.0.0",
+  "description": "View and manage Helm chart releases: list, inspect, upgrade, rollback, uninstall",
+  "permissions": ["read:helm", "write:helm"],
+  "backend": {
+    "routes": [
+      {"method": "GET", "path": "/api/plugins/helm/{cluster}/releases", "handler": "ListReleases"},
+      {"method": "GET", "path": "/api/plugins/helm/{cluster}/releases/{name}", "handler": "GetRelease"},
+      {"method": "POST", "path": "/api/plugins/helm/{cluster}/releases", "handler": "InstallRelease"},
+      {"method": "PUT", "path": "/api/plugins/helm/{cluster}/releases/{name}", "handler": "UpgradeRelease"},
+      {"method": "POST", "path": "/api/plugins/helm/{cluster}/releases/{name}/rollback", "handler": "RollbackRelease"},
+      {"method": "DELETE", "path": "/api/plugins/helm/{cluster}/releases/{name}", "handler": "UninstallRelease"},
+      {"method": "GET", "path": "/api/plugins/helm/{cluster}/releases/{name}/history", "handler": "GetReleaseHistory"},
+      {"method": "GET", "path": "/api/plugins/helm/{cluster}/releases/{name}/values", "handler": "GetReleaseValues"}
+    ],
+    "watchers": []
+  },
+  "frontend": {
+    "navigation": [
+      {"label": "Helm", "icon": "package", "path": "/plugins/helm"}
+    ],
+    "routes": [
+      {"path": "/plugins/helm", "component": "HelmOverview"},
+      {"path": "/plugins/helm/releases/:name", "component": "HelmReleaseDetail"}
+    ],
+    "widgets": [
+      {"id": "helm-releases-count", "type": "dashboard", "component": "HelmReleasesCountWidget"}
+    ]
+  }
+}
