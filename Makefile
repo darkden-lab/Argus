@@ -1,7 +1,7 @@
 .PHONY: dev build test test-backend test-frontend lint lint-backend lint-frontend \
        coverage coverage-backend coverage-frontend clean \
        docker-up docker-down proto \
-       migrate-up migrate-down helm-lint
+       migrate-up migrate-down helm-lint e2e-smoke
 
 # ---------------------------------------------------------------------------
 # Docker Compose
@@ -77,6 +77,12 @@ migrate-down:
 helm-lint:
 	helm lint deploy/helm/argus
 	helm lint deploy/helm/argus-agent
+
+# ---------------------------------------------------------------------------
+# E2E Smoke Test
+# ---------------------------------------------------------------------------
+e2e-smoke:
+	bash scripts/e2e-smoke.sh
 
 # ---------------------------------------------------------------------------
 # Protobuf

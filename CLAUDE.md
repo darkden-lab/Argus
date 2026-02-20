@@ -30,6 +30,29 @@ cd frontend && npm run lint            # ESLint
 
 # Protobuf generation
 make proto                  # generates Go code from proto/agent/v1/agent.proto
+
+# Linting
+make lint                   # backend go vet + frontend eslint
+make lint-backend           # go vet
+make lint-frontend          # eslint
+
+# Coverage
+make coverage               # backend + frontend coverage reports
+make coverage-backend       # go test with coverage
+make coverage-frontend      # jest with coverage
+
+# Database migrations
+make migrate-up             # run all pending migrations
+make migrate-down           # rollback last migration
+
+# Helm
+make helm-lint              # lint all Helm charts
+
+# Cleanup
+make clean                  # remove build artifacts and caches
+
+# E2E smoke test
+make e2e-smoke              # full Docker Compose stack test
 ```
 
 ## Architecture
@@ -118,12 +141,24 @@ Key variables (see `internal/config/config.go` for all):
 - `OIDC_ISSUER`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL`
 - `KAFKA_BROKERS`, `SMTP_HOST/PORT/USER/PASS/FROM`
 - `GRPC_PORT` (9090), `GRPC_TLS_CERT`, `GRPC_TLS_KEY`
+- `APP_ENV` (development) — set to "production" to enforce secret validation
+
+See `.env.example` for a complete list with descriptions.
+
+## Security
+
+- **Production mode**: Set `APP_ENV=production` to block startup with default dev secrets
+- **Secret validation**: `config.Validate()` checks JWT_SECRET, ENCRYPTION_KEY, DATABASE_URL
+- **See `SECURITY.md`** for vulnerability reporting and security features
 
 ## Testing
 
 - **Backend tests**: `*_test.go` files alongside source. Run with `go test ./...`
 - **Frontend unit tests**: `src/__tests__/**/*.test.{ts,tsx}`, setup in `src/__tests__/setup.ts`
 - **Frontend e2e**: `e2e/` directory, Playwright config targets `http://localhost:3000`
+- **Frontend scope**: 19 test suites, 223+ tests
+- **Coverage reporters**: text, json-summary, lcov
+- **E2E smoke test**: `scripts/e2e-smoke.sh` (Docker Compose integration test)
 
 ## Conventions
 
@@ -135,3 +170,5 @@ Key variables (see `internal/config/config.go` for all):
 - Plugins registered in `main.go` `registerPlugins()` — use `registerPluginWithError` generic helper for constructors that return errors
 - All encrypted secrets use AES-256-GCM via `internal/crypto`
 - Frontend env: `NEXT_PUBLIC_API_URL` for API base URL
+- Plugins use `//go:embed` for manifest.json loading (not runtime.Caller)
+- Dependabot configured for Go, npm, GitHub Actions, Docker (`.github/dependabot.yml`)
