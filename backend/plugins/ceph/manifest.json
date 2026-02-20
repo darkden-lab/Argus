@@ -1,0 +1,53 @@
+{
+  "id": "ceph",
+  "name": "Rook Ceph Storage",
+  "version": "1.0.0",
+  "description": "Manage Rook Ceph storage: clusters, block pools, filesystems, object stores, and object store users",
+  "permissions": ["ceph:*"],
+  "backend": {
+    "routes": [
+      {"method": "GET",    "path": "/api/plugins/ceph/clusters",                "handler": "ListCephClusters"},
+      {"method": "GET",    "path": "/api/plugins/ceph/clusters/{name}",         "handler": "GetCephCluster"},
+      {"method": "POST",   "path": "/api/plugins/ceph/clusters",                "handler": "CreateCephCluster"},
+      {"method": "PUT",    "path": "/api/plugins/ceph/clusters/{name}",         "handler": "UpdateCephCluster"},
+      {"method": "DELETE", "path": "/api/plugins/ceph/clusters/{name}",         "handler": "DeleteCephCluster"},
+      {"method": "GET",    "path": "/api/plugins/ceph/blockpools",              "handler": "ListCephBlockPools"},
+      {"method": "GET",    "path": "/api/plugins/ceph/blockpools/{name}",       "handler": "GetCephBlockPool"},
+      {"method": "POST",   "path": "/api/plugins/ceph/blockpools",              "handler": "CreateCephBlockPool"},
+      {"method": "PUT",    "path": "/api/plugins/ceph/blockpools/{name}",       "handler": "UpdateCephBlockPool"},
+      {"method": "DELETE", "path": "/api/plugins/ceph/blockpools/{name}",       "handler": "DeleteCephBlockPool"},
+      {"method": "GET",    "path": "/api/plugins/ceph/filesystems",             "handler": "ListCephFilesystems"},
+      {"method": "GET",    "path": "/api/plugins/ceph/filesystems/{name}",      "handler": "GetCephFilesystem"},
+      {"method": "POST",   "path": "/api/plugins/ceph/filesystems",             "handler": "CreateCephFilesystem"},
+      {"method": "PUT",    "path": "/api/plugins/ceph/filesystems/{name}",      "handler": "UpdateCephFilesystem"},
+      {"method": "DELETE", "path": "/api/plugins/ceph/filesystems/{name}",      "handler": "DeleteCephFilesystem"},
+      {"method": "GET",    "path": "/api/plugins/ceph/objectstores",            "handler": "ListCephObjectStores"},
+      {"method": "GET",    "path": "/api/plugins/ceph/objectstores/{name}",     "handler": "GetCephObjectStore"},
+      {"method": "POST",   "path": "/api/plugins/ceph/objectstores",            "handler": "CreateCephObjectStore"},
+      {"method": "PUT",    "path": "/api/plugins/ceph/objectstores/{name}",     "handler": "UpdateCephObjectStore"},
+      {"method": "DELETE", "path": "/api/plugins/ceph/objectstores/{name}",     "handler": "DeleteCephObjectStore"},
+      {"method": "GET",    "path": "/api/plugins/ceph/objectstoreusers",        "handler": "ListCephObjectStoreUsers"},
+      {"method": "POST",   "path": "/api/plugins/ceph/objectstoreusers",        "handler": "CreateCephObjectStoreUser"},
+      {"method": "DELETE", "path": "/api/plugins/ceph/objectstoreusers/{name}", "handler": "DeleteCephObjectStoreUser"}
+    ],
+    "watchers": [
+      {"group": "ceph.rook.io", "version": "v1", "resource": "cephclusters"},
+      {"group": "ceph.rook.io", "version": "v1", "resource": "cephblockpools"},
+      {"group": "ceph.rook.io", "version": "v1", "resource": "cephfilesystems"},
+      {"group": "ceph.rook.io", "version": "v1", "resource": "cephobjectstores"},
+      {"group": "ceph.rook.io", "version": "v1", "resource": "cephobjectstoreusers"}
+    ]
+  },
+  "frontend": {
+    "navigation": [{"label": "Ceph Storage", "icon": "hard-drive", "path": "/plugins/ceph"}],
+    "routes": [
+      {"path": "/plugins/ceph",              "component": "CephOverview"},
+      {"path": "/plugins/ceph/clusters",      "component": "CephClusterList"},
+      {"path": "/plugins/ceph/blockpools",    "component": "CephBlockPoolList"},
+      {"path": "/plugins/ceph/filesystems",   "component": "CephFilesystemList"},
+      {"path": "/plugins/ceph/objectstores",  "component": "CephObjectStoreList"},
+      {"path": "/plugins/ceph/users",         "component": "CephObjectStoreUserList"}
+    ],
+    "widgets": [{"id": "ceph-storage-status", "type": "dashboard-card", "component": "CephStorageStatus"}]
+  }
+}
