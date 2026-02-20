@@ -70,6 +70,7 @@ func main() {
 	// gRPC Agent Server
 	agentStore := cluster.NewStore(pool)
 	agentServer := cluster.NewAgentServer(pool, agentStore, cfg.JWTSecret)
+	clusterMgr.SetAgentServer(agentServer)
 	go startGRPCServer(cfg, agentServer)
 
 	// RBAC Engine

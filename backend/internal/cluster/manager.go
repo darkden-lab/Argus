@@ -26,6 +26,7 @@ type Manager struct {
 	clients       map[string]*ClusterClient
 	mu            sync.RWMutex
 	encryptionKey string
+	agentServer   *AgentServer
 }
 
 func NewManager(pool *pgxpool.Pool, encryptionKey string) *Manager {
@@ -35,6 +36,12 @@ func NewManager(pool *pgxpool.Pool, encryptionKey string) *Manager {
 		clients:       make(map[string]*ClusterClient),
 		encryptionKey: encryptionKey,
 	}
+}
+
+// SetAgentServer sets the gRPC agent server reference so the manager can
+// route K8s requests to agent-connected clusters.
+func (m *Manager) SetAgentServer(srv *AgentServer) {
+	m.agentServer = srv
 }
 
 func (m *Manager) AddCluster(ctx context.Context, name, apiServerURL string, kubeconfig []byte) (*Cluster, error) {
@@ -72,21 +79,50 @@ func (m *Manager) RemoveCluster(ctx context.Context, id string) error {
 	return nil
 }
 
+// GetClient returns the Kubernetes client for a cluster. For kubeconfig-based
+// clusters it returns the cached client. For agent-based clusters it returns
+// nil (use GetClusterConnectionType + AgentServer.SendK8sRequest instead).
 func (m *Manager) GetClient(clusterID string) (*ClusterClient, error) {
 	m.mu.RLock()
 	client, ok := m.clients[clusterID]
 	m.mu.RUnlock()
 
-	if !ok {
-		return nil, fmt.Errorf("no client found for cluster %s", clusterID)
+	if ok {
+		return client, nil
 	}
-	return client, nil
+
+	// Check if this is an agent cluster.
+	if m.agentServer != nil && m.agentServer.IsAgentConnected(clusterID) {
+		return nil, fmt.Errorf("cluster %s is agent-connected; use agent proxy", clusterID)
+	}
+
+	return nil, fmt.Errorf("no client found for cluster %s", clusterID)
+}
+
+// GetClusterConnectionType returns the connection type for a cluster.
+func (m *Manager) GetClusterConnectionType(ctx context.Context, clusterID string) (string, error) {
+	c, err := m.store.GetCluster(ctx, clusterID)
+	if err != nil {
+		return "", err
+	}
+	return c.ConnectionType, nil
+}
+
+// IsAgentCluster checks whether a cluster uses agent-based connection.
+func (m *Manager) IsAgentCluster(ctx context.Context, clusterID string) bool {
+	ct, err := m.GetClusterConnectionType(ctx, clusterID)
+	if err != nil {
+		return false
+	}
+	return ct == "agent"
 }
 
 func (m *Manager) ListClusters(ctx context.Context) ([]*Cluster, error) {
 	return m.store.ListClusters(ctx)
 }
 
+// HealthCheck runs health checks on kubeconfig-based clusters only.
+// Agent clusters are health-checked via gRPC heartbeat (Ping/Pong).
 func (m *Manager) HealthCheck(ctx context.Context) {
 	m.mu.RLock()
 	ids := make([]string, 0, len(m.clients))
@@ -116,9 +152,11 @@ func (m *Manager) HealthCheck(ctx context.Context) {
 	}
 }
 
+// LoadExisting loads kubeconfig-based clusters from the database on startup.
+// Agent clusters are not loaded here as they connect via gRPC.
 func (m *Manager) LoadExisting(ctx context.Context) error {
 	rows, err := m.pool.Query(ctx,
-		`SELECT id, kubeconfig_enc FROM clusters`,
+		`SELECT id, kubeconfig_enc FROM clusters WHERE connection_type = 'kubeconfig' AND kubeconfig_enc IS NOT NULL`,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to load clusters: %w", err)

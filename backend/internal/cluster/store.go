@@ -18,11 +18,11 @@ func NewStore(pool *pgxpool.Pool) *Store {
 func (s *Store) CreateCluster(ctx context.Context, name, apiServerURL string, kubeconfigEnc []byte) (*Cluster, error) {
 	var c Cluster
 	err := s.pool.QueryRow(ctx,
-		`INSERT INTO clusters (name, api_server_url, kubeconfig_enc, status)
-		 VALUES ($1, $2, $3, 'disconnected')
-		 RETURNING id, name, api_server_url, status, created_at`,
+		`INSERT INTO clusters (name, api_server_url, kubeconfig_enc, status, connection_type)
+		 VALUES ($1, $2, $3, 'disconnected', 'kubeconfig')
+		 RETURNING id, name, api_server_url, status, connection_type, agent_id, created_at`,
 		name, apiServerURL, kubeconfigEnc,
-	).Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.CreatedAt)
+	).Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.ConnectionType, &c.AgentID, &c.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create cluster: %w", err)
 	}
@@ -32,10 +32,10 @@ func (s *Store) CreateCluster(ctx context.Context, name, apiServerURL string, ku
 func (s *Store) GetCluster(ctx context.Context, id string) (*Cluster, error) {
 	var c Cluster
 	err := s.pool.QueryRow(ctx,
-		`SELECT id, name, api_server_url, status, created_at, last_health
+		`SELECT id, name, api_server_url, status, connection_type, agent_id, created_at, last_health
 		 FROM clusters WHERE id = $1`,
 		id,
-	).Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.CreatedAt, &c.LastHealth)
+	).Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.ConnectionType, &c.AgentID, &c.CreatedAt, &c.LastHealth)
 	if err != nil {
 		return nil, fmt.Errorf("cluster not found: %w", err)
 	}
@@ -44,7 +44,7 @@ func (s *Store) GetCluster(ctx context.Context, id string) (*Cluster, error) {
 
 func (s *Store) ListClusters(ctx context.Context) ([]*Cluster, error) {
 	rows, err := s.pool.Query(ctx,
-		`SELECT id, name, api_server_url, status, created_at, last_health
+		`SELECT id, name, api_server_url, status, connection_type, agent_id, created_at, last_health
 		 FROM clusters ORDER BY created_at DESC`,
 	)
 	if err != nil {
@@ -55,7 +55,7 @@ func (s *Store) ListClusters(ctx context.Context) ([]*Cluster, error) {
 	var clusters []*Cluster
 	for rows.Next() {
 		var c Cluster
-		if err := rows.Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.CreatedAt, &c.LastHealth); err != nil {
+		if err := rows.Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.ConnectionType, &c.AgentID, &c.CreatedAt, &c.LastHealth); err != nil {
 			return nil, fmt.Errorf("failed to scan cluster: %w", err)
 		}
 		clusters = append(clusters, &c)
@@ -68,9 +68,9 @@ func (s *Store) UpdateCluster(ctx context.Context, id, name, apiServerURL string
 	err := s.pool.QueryRow(ctx,
 		`UPDATE clusters SET name = $2, api_server_url = $3
 		 WHERE id = $1
-		 RETURNING id, name, api_server_url, status, created_at, last_health`,
+		 RETURNING id, name, api_server_url, status, connection_type, agent_id, created_at, last_health`,
 		id, name, apiServerURL,
-	).Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.CreatedAt, &c.LastHealth)
+	).Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.ConnectionType, &c.AgentID, &c.CreatedAt, &c.LastHealth)
 	if err != nil {
 		return nil, fmt.Errorf("failed to update cluster: %w", err)
 	}
