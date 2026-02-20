@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Shield, Puzzle, KeyRound } from "lucide-react";
+import { Users, Shield, Puzzle, KeyRound, ScrollText } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const settingsNav = [
@@ -10,6 +10,7 @@ const settingsNav = [
   { label: "Roles", href: "/settings/roles", icon: Shield },
   { label: "Plugins", href: "/settings/plugins", icon: Puzzle },
   { label: "OIDC", href: "/settings/oidc", icon: KeyRound },
+  { label: "Audit Log", href: "/settings/audit", icon: ScrollText },
 ];
 
 export default function SettingsLayout({
