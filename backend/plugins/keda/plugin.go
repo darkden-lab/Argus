@@ -21,19 +21,16 @@ import (
 
 // KEDA CRD GVRs (keda.sh/v1alpha1)
 var (
-	gvrScaledObjects               = schema.GroupVersionResource{Group: "keda.sh", Version: "v1alpha1", Resource: "scaledobjects"}
-	gvrScaledJobs                  = schema.GroupVersionResource{Group: "keda.sh", Version: "v1alpha1", Resource: "scaledjobs"}
-	gvrTriggerAuthentications      = schema.GroupVersionResource{Group: "keda.sh", Version: "v1alpha1", Resource: "triggerauthentications"}
-	gvrClusterTriggerAuthentications = schema.GroupVersionResource{Group: "keda.sh", Version: "v1alpha1", Resource: "clustertriggerauthentications"}
+	gvrScaledObjects          = schema.GroupVersionResource{Group: "keda.sh", Version: "v1alpha1", Resource: "scaledobjects"}
+	gvrScaledJobs             = schema.GroupVersionResource{Group: "keda.sh", Version: "v1alpha1", Resource: "scaledjobs"}
+	gvrTriggerAuthentications = schema.GroupVersionResource{Group: "keda.sh", Version: "v1alpha1", Resource: "triggerauthentications"}
+	gvrClusterTriggerAuths    = schema.GroupVersionResource{Group: "keda.sh", Version: "v1alpha1", Resource: "clustertriggerauthentications"}
 
-	// namespacedGVRs are watched per-namespace; clusterGVRs are cluster-scoped.
-	namespacedGVRs = []schema.GroupVersionResource{
+	allWatchedGVRs = []schema.GroupVersionResource{
 		gvrScaledObjects,
 		gvrScaledJobs,
 		gvrTriggerAuthentications,
-	}
-	clusterGVRs = []schema.GroupVersionResource{
-		gvrClusterTriggerAuthentications,
+		gvrClusterTriggerAuths,
 	}
 )
 
@@ -42,7 +39,8 @@ type KedaPlugin struct {
 	manifest plugin.Manifest
 }
 
-// New creates a KedaPlugin by loading manifest.json from the plugin directory.
+// New creates a KedaPlugin by loading the manifest.json embedded next to
+// this source file.
 func New() (*KedaPlugin, error) {
 	m, err := loadManifest()
 	if err != nil {
@@ -51,14 +49,16 @@ func New() (*KedaPlugin, error) {
 	return &KedaPlugin{manifest: m}, nil
 }
 
-func (p *KedaPlugin) ID() string                { return "keda" }
+// ID satisfies plugin.Plugin.
+func (p *KedaPlugin) ID() string { return "keda" }
+
+// Manifest satisfies plugin.Plugin.
 func (p *KedaPlugin) Manifest() plugin.Manifest { return p.manifest }
 
-// RegisterRoutes wires all KEDA CRUD endpoints.
+// RegisterRoutes wires all KEDA CRUD endpoints onto the provided router.
 func (p *KedaPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 	h := newHandlers(cm)
 
-	// ScaledObjects
 	so := r.PathPrefix("/api/plugins/keda/scaledobjects").Subrouter()
 	so.HandleFunc("", h.ListScaledObjects).Methods("GET")
 	so.HandleFunc("", h.CreateScaledObject).Methods("POST")
@@ -66,7 +66,6 @@ func (p *KedaPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 	so.HandleFunc("/{name}", h.UpdateScaledObject).Methods("PUT")
 	so.HandleFunc("/{name}", h.DeleteScaledObject).Methods("DELETE")
 
-	// ScaledJobs
 	sj := r.PathPrefix("/api/plugins/keda/scaledjobs").Subrouter()
 	sj.HandleFunc("", h.ListScaledJobs).Methods("GET")
 	sj.HandleFunc("", h.CreateScaledJob).Methods("POST")
@@ -74,22 +73,19 @@ func (p *KedaPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 	sj.HandleFunc("/{name}", h.UpdateScaledJob).Methods("PUT")
 	sj.HandleFunc("/{name}", h.DeleteScaledJob).Methods("DELETE")
 
-	// TriggerAuthentications (namespaced)
 	ta := r.PathPrefix("/api/plugins/keda/triggerauthentications").Subrouter()
 	ta.HandleFunc("", h.ListTriggerAuthentications).Methods("GET")
 	ta.HandleFunc("", h.CreateTriggerAuthentication).Methods("POST")
-	ta.HandleFunc("/{name}", h.GetTriggerAuthentication).Methods("GET")
 	ta.HandleFunc("/{name}", h.DeleteTriggerAuthentication).Methods("DELETE")
 
-	// ClusterTriggerAuthentications (cluster-scoped)
 	cta := r.PathPrefix("/api/plugins/keda/clustertriggerauthentications").Subrouter()
 	cta.HandleFunc("", h.ListClusterTriggerAuthentications).Methods("GET")
-	cta.HandleFunc("/{name}", h.GetClusterTriggerAuthentication).Methods("GET")
+	cta.HandleFunc("", h.CreateClusterTriggerAuthentication).Methods("POST")
 	cta.HandleFunc("/{name}", h.DeleteClusterTriggerAuthentication).Methods("DELETE")
 }
 
-// RegisterWatchers starts background watch goroutines for all KEDA CRDs on
-// every known cluster and broadcasts events to the WebSocket hub.
+// RegisterWatchers starts a background watch goroutine for each KEDA CRD on
+// every cluster currently known to the ClusterManager.
 func (p *KedaPlugin) RegisterWatchers(hub *ws.Hub, cm *cluster.Manager) {
 	clusters, err := cm.ListClusters(context.Background())
 	if err != nil {
@@ -98,24 +94,20 @@ func (p *KedaPlugin) RegisterWatchers(hub *ws.Hub, cm *cluster.Manager) {
 	}
 
 	for _, c := range clusters {
-		for _, gvr := range namespacedGVRs {
-			go p.watchGVR(hub, cm, c.ID, gvr, "")
-		}
-		for _, gvr := range clusterGVRs {
-			// Cluster-scoped resources: watch with empty namespace (all namespaces)
-			go p.watchGVR(hub, cm, c.ID, gvr, "")
+		for _, gvr := range allWatchedGVRs {
+			go p.watchGVR(hub, cm, c.ID, gvr)
 		}
 	}
 }
 
-func (p *KedaPlugin) watchGVR(hub *ws.Hub, cm *cluster.Manager, clusterID string, gvr schema.GroupVersionResource, namespace string) {
+func (p *KedaPlugin) watchGVR(hub *ws.Hub, cm *cluster.Manager, clusterID string, gvr schema.GroupVersionResource) {
 	client, err := cm.GetClient(clusterID)
 	if err != nil {
 		log.Printf("keda watcher: cluster %s not available: %v", clusterID, err)
 		return
 	}
 
-	watcher, err := client.DynClient.Resource(gvr).Namespace(namespace).Watch(context.Background(), metav1.ListOptions{})
+	watcher, err := client.DynClient.Resource(gvr).Namespace("").Watch(context.Background(), metav1.ListOptions{})
 	if err != nil {
 		log.Printf("keda watcher: failed to start watch for %s on cluster %s: %v", gvr.Resource, clusterID, err)
 		return
@@ -140,18 +132,20 @@ func (p *KedaPlugin) watchGVR(hub *ws.Hub, cm *cluster.Manager, clusterID string
 		hub.BroadcastToSubscribers(subKey, ws.WatchEvent{
 			Cluster:   clusterID,
 			Resource:  gvr.Resource,
-			Namespace: namespace,
+			Namespace: "",
 			Type:      eventType,
 			Object:    json.RawMessage(objBytes),
 		})
 	}
 }
 
+// OnEnable is called when the plugin is activated.
 func (p *KedaPlugin) OnEnable(_ context.Context, _ *pgxpool.Pool) error {
 	log.Printf("keda plugin enabled")
 	return nil
 }
 
+// OnDisable is called when the plugin is deactivated.
 func (p *KedaPlugin) OnDisable(_ context.Context, _ *pgxpool.Pool) error {
 	log.Printf("keda plugin disabled")
 	return nil

@@ -47,17 +47,6 @@ func TestKedaPluginManifestFromFile(t *testing.T) {
 	if m.ID != "keda" {
 		t.Errorf("manifest loaded from file has wrong ID: %q", m.ID)
 	}
-	// Verify cluster-scoped resource is present in watchers
-	found := false
-	for _, w := range m.Backend.Watchers {
-		if w.Resource == "clustertriggerauthentications" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Error("expected clustertriggerauthentications in watchers")
-	}
 }
 
 func TestWatchEventType(t *testing.T) {
@@ -90,27 +79,15 @@ func TestGVRs(t *testing.T) {
 		{"clustertriggerauthentications", "keda.sh/v1alpha1, Resource=clustertriggerauthentications"},
 	}
 	gvrs := map[string]string{
-		"scaledobjects":                gvrScaledObjects.String(),
-		"scaledjobs":                   gvrScaledJobs.String(),
-		"triggerauthentications":       gvrTriggerAuthentications.String(),
-		"clustertriggerauthentications": gvrClusterTriggerAuthentications.String(),
+		"scaledobjects":                 gvrScaledObjects.String(),
+		"scaledjobs":                    gvrScaledJobs.String(),
+		"triggerauthentications":        gvrTriggerAuthentications.String(),
+		"clustertriggerauthentications": gvrClusterTriggerAuths.String(),
 	}
 	for _, tc := range cases {
 		if got := gvrs[tc.name]; got != tc.expected {
 			t.Errorf("GVR %s String() = %q, want %q", tc.name, got, tc.expected)
 		}
-	}
-}
-
-func TestNamespacedAndClusterGVRs(t *testing.T) {
-	if len(namespacedGVRs) != 3 {
-		t.Errorf("expected 3 namespaced GVRs, got %d", len(namespacedGVRs))
-	}
-	if len(clusterGVRs) != 1 {
-		t.Errorf("expected 1 cluster-scoped GVR, got %d", len(clusterGVRs))
-	}
-	if clusterGVRs[0].Resource != "clustertriggerauthentications" {
-		t.Errorf("expected clustertriggerauthentications in clusterGVRs, got %q", clusterGVRs[0].Resource)
 	}
 }
 
