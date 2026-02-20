@@ -1,0 +1,8 @@
+DROP TABLE IF EXISTS audit_log;
+DROP TABLE IF EXISTS plugin_state;
+DROP TABLE IF EXISTS plugins;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS clusters;
+DROP TABLE IF EXISTS role_permissions;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS users;
