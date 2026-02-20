@@ -6,6 +6,8 @@ import { Header } from "@/components/layout/header";
 import { MainContent } from "@/components/layout/main-content";
 import { usePermissionsStore } from "@/stores/permissions";
 import { k8sWs } from "@/lib/ws";
+import { ErrorBoundary } from "@/components/error-boundary";
+import { ToastContainer } from "@/components/ui/toast";
 
 export default function DashboardLayout({
   children,
@@ -36,8 +38,11 @@ export default function DashboardLayout({
       <Sidebar />
       <div className="flex flex-1 flex-col overflow-hidden">
         <Header />
-        <MainContent>{children}</MainContent>
+        <MainContent>
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </MainContent>
       </div>
+      <ToastContainer />
     </div>
   );
 }

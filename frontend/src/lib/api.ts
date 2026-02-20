@@ -1,4 +1,18 @@
+import { toast } from '@/stores/toast';
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const MAX_RETRIES = 2;
+const RETRY_DELAY_MS = 1000;
+
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+  ) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
 
 async function tryRefreshToken(): Promise<boolean> {
   const refreshToken = typeof window !== 'undefined' ? localStorage.getItem('refresh_token') : null;
@@ -21,7 +35,15 @@ async function tryRefreshToken(): Promise<boolean> {
   }
 }
 
-async function fetchWithAuth<T>(path: string, method: string, body?: unknown): Promise<T> {
+function isRetryable(status: number): boolean {
+  return status === 408 || status === 429 || status >= 500;
+}
+
+async function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function fetchWithAuth<T>(path: string, method: string, body?: unknown, retries = 0): Promise<T> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
 
   const res = await fetch(`${API_URL}${path}`, {
@@ -39,14 +61,29 @@ async function fetchWithAuth<T>(path: string, method: string, body?: unknown): P
       if (typeof window !== 'undefined') {
         window.location.href = '/login';
       }
-      throw new Error('Unauthorized');
+      throw new ApiError('Unauthorized', 401);
     }
-    return fetchWithAuth<T>(path, method, body);
+    return fetchWithAuth<T>(path, method, body, 0);
+  }
+
+  if (res.status === 403) {
+    const err = new ApiError('Forbidden: You do not have permission to perform this action.', 403);
+    toast('Access Denied', { description: err.message, variant: 'error' });
+    throw err;
   }
 
   if (!res.ok) {
     const data = await res.json().catch(() => ({}));
-    throw new Error(data?.error ?? `HTTP ${res.status}`);
+    const message = data?.error ?? `HTTP ${res.status}`;
+
+    if (isRetryable(res.status) && retries < MAX_RETRIES) {
+      await delay(RETRY_DELAY_MS * (retries + 1));
+      return fetchWithAuth<T>(path, method, body, retries + 1);
+    }
+
+    const err = new ApiError(message, res.status);
+    toast('Request failed', { description: message, variant: 'error' });
+    throw err;
   }
 
   return res.json() as Promise<T>;
