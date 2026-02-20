@@ -117,8 +117,9 @@ func main() {
 	docs.RegisterRoutes(r)
 
 	// Agent install script (no auth - must be curl-able)
-	agentHandlers := cluster.NewAgentHandlers(clusterMgr)
-	agentHandlers.RegisterRoutes(r)
+	agentRegistry := cluster.NewAgentRegistry(pool)
+	agentHandlers := cluster.NewAgentHandlers(clusterMgr, agentRegistry)
+	agentHandlers.RegisterPublicRoutes(r)
 
 	// Auth routes (no auth middleware)
 	authHandlers.RegisterRoutes(r)
@@ -137,6 +138,9 @@ func main() {
 	// Cluster routes
 	clusterHandlers := cluster.NewHandlers(clusterMgr)
 	clusterHandlers.RegisterRoutes(protected)
+
+	// Agent token management routes (protected)
+	agentHandlers.RegisterRoutes(protected)
 
 	// Core resource routes
 	resourceHandler := core.NewResourceHandler(clusterMgr)
