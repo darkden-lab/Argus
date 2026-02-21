@@ -54,7 +54,57 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 	return &user, nil
 }
 
-// TODO: Implement refresh token revocation table. Currently refresh tokens remain valid after logout.
+// RevokeRefreshToken validates a refresh token and records its JTI in the
+// revoked_tokens table so it can no longer be used for token refresh.
+func (s *AuthService) RevokeRefreshToken(ctx context.Context, tokenString string) error {
+	claims, err := s.jwt.ValidateRefreshToken(tokenString)
+	if err != nil {
+		return fmt.Errorf("invalid refresh token: %w", err)
+	}
+
+	jti := claims.RegisteredClaims.ID
+	if jti == "" {
+		// Legacy tokens without JTI cannot be individually revoked.
+		return fmt.Errorf("refresh token has no JTI")
+	}
+
+	_, err = s.db.Pool.Exec(ctx,
+		`INSERT INTO revoked_tokens (token_jti, user_id, expires_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT DO NOTHING`,
+		jti, claims.UserID, claims.ExpiresAt.Time,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to revoke token: %w", err)
+	}
+
+	return nil
+}
+
+// IsTokenRevoked checks whether the given JTI has been revoked.
+func (s *AuthService) IsTokenRevoked(ctx context.Context, jti string) (bool, error) {
+	var exists bool
+	err := s.db.Pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM revoked_tokens WHERE token_jti = $1)`,
+		jti,
+	).Scan(&exists)
+	if err != nil {
+		return false, fmt.Errorf("failed to check token revocation: %w", err)
+	}
+	return exists, nil
+}
+
+// CleanupExpiredTokens removes revoked token entries that have passed their
+// expiration time. This should be called periodically to keep the table small.
+func (s *AuthService) CleanupExpiredTokens(ctx context.Context) (int64, error) {
+	result, err := s.db.Pool.Exec(ctx,
+		`DELETE FROM revoked_tokens WHERE expires_at < NOW()`,
+	)
+	if err != nil {
+		return 0, fmt.Errorf("failed to cleanup expired tokens: %w", err)
+	}
+	return result.RowsAffected(), nil
+}
 
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
 	var id, storedHash string
@@ -92,6 +142,17 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (st
 	claims, err := s.jwt.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		return "", fmt.Errorf("invalid refresh token: %w", err)
+	}
+
+	// Check if this refresh token has been revoked (e.g. via logout).
+	if jti := claims.RegisteredClaims.ID; jti != "" {
+		revoked, err := s.IsTokenRevoked(ctx, jti)
+		if err != nil {
+			return "", fmt.Errorf("failed to check token revocation: %w", err)
+		}
+		if revoked {
+			return "", fmt.Errorf("refresh token has been revoked")
+		}
 	}
 
 	var email string

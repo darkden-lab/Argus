@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 )
 
 // TokenType constants distinguish access tokens from refresh tokens.
@@ -41,6 +42,7 @@ func (j *JWTService) GenerateToken(userID, email string) (string, error) {
 		Email:     email,
 		TokenType: TokenTypeAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(j.accessDuration)),
@@ -99,6 +101,7 @@ func (j *JWTService) GenerateRefreshToken(userID string) (string, error) {
 		UserID:    userID,
 		TokenType: TokenTypeRefresh,
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.NewString(),
 			Subject:   userID,
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(j.refreshDuration)),

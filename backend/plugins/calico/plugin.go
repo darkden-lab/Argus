@@ -79,7 +79,10 @@ func (p *CalicoPlugin) RegisterRoutes(router *mux.Router, cm *cluster.Manager) {
 }
 
 func (p *CalicoPlugin) RegisterWatchers(hub *ws.Hub, cm *cluster.Manager) {
-	log.Printf("calico: watcher registration (stub)")
+	for _, w := range manifest.Backend.Watchers {
+		cm.RegisterCRDWatcher(hub, w.Group, w.Version, w.Resource, manifest.ID)
+	}
+	log.Printf("calico: registered %d CRD watchers", len(manifest.Backend.Watchers))
 }
 
 func (p *CalicoPlugin) OnEnable(ctx context.Context, pool *pgxpool.Pool) error {

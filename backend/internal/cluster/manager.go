@@ -2,12 +2,16 @@ package cluster
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
 	"sync"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/darkden-lab/argus/backend/internal/crypto"
+	"github.com/darkden-lab/argus/backend/internal/ws"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -189,6 +193,65 @@ func (m *Manager) LoadExisting(ctx context.Context) error {
 	}
 
 	return rows.Err()
+}
+
+// RegisterCRDWatcher starts a goroutine per connected kubeconfig-based cluster
+// that watches the specified CRD (identified by group/version/resource) and
+// broadcasts events through the WebSocket Hub. The pluginID is used to namespace
+// the subscription key so clients can subscribe to plugin-specific events.
+func (m *Manager) RegisterCRDWatcher(hub *ws.Hub, group, version, resource, pluginID string) {
+	m.mu.RLock()
+	ids := make([]string, 0, len(m.clients))
+	clients := make(map[string]*ClusterClient, len(m.clients))
+	for id, c := range m.clients {
+		ids = append(ids, id)
+		clients[id] = c
+	}
+	m.mu.RUnlock()
+
+	gvr := schema.GroupVersionResource{
+		Group:    group,
+		Version:  version,
+		Resource: resource,
+	}
+
+	for _, clusterID := range ids {
+		client := clients[clusterID]
+		go m.watchCRD(hub, client.DynClient, clusterID, gvr, pluginID)
+	}
+
+	log.Printf("cluster: registered CRD watcher for %s/%s/%s (plugin=%s) on %d cluster(s)",
+		group, version, resource, pluginID, len(ids))
+}
+
+// watchCRD watches a single CRD on a single cluster and broadcasts events
+// through the WebSocket Hub. It runs until the watch channel closes, then
+// logs and exits (the watch can be re-established on reconnect).
+func (m *Manager) watchCRD(hub *ws.Hub, dynClient dynamic.Interface, clusterID string, gvr schema.GroupVersionResource, pluginID string) {
+	watcher, err := dynClient.Resource(gvr).Namespace("").Watch(context.Background(), metav1.ListOptions{})
+	if err != nil {
+		log.Printf("cluster: failed to watch %s on cluster %s (plugin=%s): %v",
+			gvr.Resource, clusterID, pluginID, err)
+		return
+	}
+	defer watcher.Stop()
+
+	subKey := clusterID + "/" + pluginID + "." + gvr.Resource + "/"
+
+	for event := range watcher.ResultChan() {
+		objBytes, err := json.Marshal(event.Object)
+		if err != nil {
+			log.Printf("cluster: failed to marshal watch event: %v", err)
+			continue
+		}
+
+		hub.BroadcastToSubscribers(subKey, ws.WatchEvent{
+			Cluster:  clusterID,
+			Resource: pluginID + "." + gvr.Resource,
+			Type:     string(event.Type),
+			Object:   json.RawMessage(objBytes),
+		})
+	}
 }
 
 func (m *Manager) buildClient(kubeconfig []byte) (*ClusterClient, error) {

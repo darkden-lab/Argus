@@ -19,7 +19,8 @@ spec:
     spec:
       securityContext:
         runAsNonRoot: true
-        fsGroup: 1000
+        runAsUser: 1001
+        fsGroup: 1001
       containers:
         - name: frontend
           image: "{{ .Values.frontend.image.repository }}:{{ .Values.frontend.image.tag }}"
@@ -29,6 +30,7 @@ spec:
             capabilities:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
+            runAsUser: 1001
           ports:
             - name: http
               containerPort: 3000
@@ -43,13 +45,13 @@ spec:
             {{- toYaml .Values.frontend.resources | nindent 12 }}
           livenessProbe:
             httpGet:
-              path: /
+              path: /login
               port: http
-            initialDelaySeconds: 10
+            initialDelaySeconds: 15
             periodSeconds: 15
           readinessProbe:
             httpGet:
-              path: /
+              path: /login
               port: http
-            initialDelaySeconds: 5
+            initialDelaySeconds: 10
             periodSeconds: 10

@@ -85,7 +85,10 @@ func (p *PrometheusPlugin) RegisterRoutes(router *mux.Router, cm *cluster.Manage
 }
 
 func (p *PrometheusPlugin) RegisterWatchers(hub *ws.Hub, cm *cluster.Manager) {
-	log.Printf("prometheus: watcher registration (stub)")
+	for _, w := range manifest.Backend.Watchers {
+		cm.RegisterCRDWatcher(hub, w.Group, w.Version, w.Resource, manifest.ID)
+	}
+	log.Printf("prometheus: registered %d CRD watchers", len(manifest.Backend.Watchers))
 }
 
 func (p *PrometheusPlugin) OnEnable(ctx context.Context, pool *pgxpool.Pool) error {
