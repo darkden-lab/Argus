@@ -59,12 +59,7 @@ func (h *Handlers) handleGetPermissions(w http.ResponseWriter, r *http.Request) 
 		Permissions: make([]permissionResponse, len(perms)),
 	}
 	for i, p := range perms {
-		resp.Permissions[i] = permissionResponse{
-			Resource:  p.Resource,
-			Action:    p.Action,
-			ScopeType: p.ScopeType,
-			ScopeID:   p.ScopeID,
-		}
+		resp.Permissions[i] = permissionResponse(p)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
