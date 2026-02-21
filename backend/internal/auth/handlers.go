@@ -15,12 +15,17 @@ func NewHandlers(service *AuthService) *Handlers {
 	return &Handlers{service: service}
 }
 
+// RegisterRoutes registers public auth routes (no auth middleware required).
 func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	api := r.PathPrefix("/api/auth").Subrouter()
 	api.HandleFunc("/register", h.handleRegister).Methods("POST")
 	api.HandleFunc("/login", h.handleLogin).Methods("POST")
 	api.HandleFunc("/refresh", h.handleRefresh).Methods("POST")
-	api.HandleFunc("/me", h.handleMe).Methods("GET")
+}
+
+// RegisterProtectedRoutes registers auth routes that require authentication.
+func (h *Handlers) RegisterProtectedRoutes(r *mux.Router) {
+	r.HandleFunc("/api/auth/me", h.handleMe).Methods("GET")
 }
 
 type registerRequest struct {

@@ -3,6 +3,20 @@ import { api } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
+/** Sync token to both localStorage (for API calls) and cookie (for Next.js middleware). */
+function setToken(key: string, value: string) {
+  localStorage.setItem(key, value);
+  if (key === 'access_token') {
+    document.cookie = `access_token=${value}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+  }
+}
+
+function removeTokens() {
+  localStorage.removeItem('access_token');
+  localStorage.removeItem('refresh_token');
+  document.cookie = 'access_token=; path=/; max-age=0';
+}
+
 interface User {
   id: string;
   email: string;
@@ -46,9 +60,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       const data: AuthResponse = await res.json();
-      localStorage.setItem('access_token', data.access_token);
+      setToken('access_token', data.access_token);
       if (data.refresh_token) {
-        localStorage.setItem('refresh_token', data.refresh_token);
+        setToken('refresh_token', data.refresh_token);
       }
 
       const user = await api.get<User>('/api/auth/me');
@@ -74,9 +88,9 @@ export const useAuthStore = create<AuthState>((set) => ({
       }
 
       const data: AuthResponse = await res.json();
-      localStorage.setItem('access_token', data.access_token);
+      setToken('access_token', data.access_token);
       if (data.refresh_token) {
-        localStorage.setItem('refresh_token', data.refresh_token);
+        setToken('refresh_token', data.refresh_token);
       }
 
       set({ user: data.user ?? null, isAuthenticated: true, isLoading: false });
@@ -87,8 +101,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('refresh_token');
+    removeTokens();
     set({ user: null, isAuthenticated: false });
     window.location.href = '/login';
   },

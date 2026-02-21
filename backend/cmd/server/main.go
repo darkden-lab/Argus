@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -141,9 +142,6 @@ func main() {
 	// Router
 	r := mux.NewRouter()
 
-	// CORS middleware
-	r.Use(corsMiddleware)
-
 	// Rate limiting: 100 req/s per IP with burst of 200
 	r.Use(mw.RateLimitMiddleware(100, 200))
 
@@ -171,6 +169,9 @@ func main() {
 	if pool != nil {
 		protected.Use(audit.Middleware(auditStore))
 	}
+
+	// Auth protected routes (/api/auth/me)
+	authHandlers.RegisterProtectedRoutes(protected)
 
 	// Cluster routes
 	clusterHandlers := cluster.NewHandlers(clusterMgr)
@@ -223,10 +224,11 @@ func main() {
 		}
 	}()
 
-	// HTTP Server
+	// HTTP Server — CORS wraps the entire router so OPTIONS preflight
+	// requests are handled before mux routing (which would 404 on OPTIONS).
 	srv := &http.Server{
 		Addr:           ":" + cfg.Port,
-		Handler:        r,
+		Handler:        corsMiddleware(r),
 		ReadTimeout:    15 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		IdleTimeout:    60 * time.Second,
@@ -325,11 +327,30 @@ func startGRPCServer(cfg *config.Config, agentSrv *cluster.AgentServer) {
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
+	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
+	if allowedOrigins == "" {
+		allowedOrigins = "http://localhost:3000"
+	}
+
+	origins := make(map[string]bool)
+	for _, o := range strings.Split(allowedOrigins, ",") {
+		origins[strings.TrimSpace(o)] = true
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		origin := r.Header.Get("Origin")
+		if origins[origin] {
+			w.Header().Set("Access-Control-Allow-Origin", origin)
+		} else if len(origins) == 1 {
+			// Single origin mode: always set it (for dev convenience)
+			for o := range origins {
+				w.Header().Set("Access-Control-Allow-Origin", o)
+			}
+		}
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
+		w.Header().Set("Access-Control-Max-Age", "86400")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)

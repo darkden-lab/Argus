@@ -381,7 +381,7 @@ func TestWriteJSONContentType(t *testing.T) {
 }
 
 
-// TestRegisterRoutes verifies that RegisterRoutes registers the expected routes.
+// TestRegisterRoutes verifies that RegisterRoutes registers the expected public routes.
 func TestRegisterRoutes(t *testing.T) {
 	svc := NewJWTService("test-secret")
 	authSvc := &AuthService{jwt: svc}
@@ -390,7 +390,6 @@ func TestRegisterRoutes(t *testing.T) {
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 
-	// Verify each route exists by walking the router
 	routes := []struct {
 		path   string
 		method string
@@ -398,7 +397,6 @@ func TestRegisterRoutes(t *testing.T) {
 		{"/api/auth/register", "POST"},
 		{"/api/auth/login", "POST"},
 		{"/api/auth/refresh", "POST"},
-		{"/api/auth/me", "GET"},
 	}
 
 	for _, rt := range routes {
@@ -407,6 +405,22 @@ func TestRegisterRoutes(t *testing.T) {
 		if !r.Match(req, match) {
 			t.Errorf("expected route %s %s to be registered", rt.method, rt.path)
 		}
+	}
+}
+
+// TestRegisterProtectedRoutes verifies that /api/auth/me is registered as a protected route.
+func TestRegisterProtectedRoutes(t *testing.T) {
+	svc := NewJWTService("test-secret")
+	authSvc := &AuthService{jwt: svc}
+	h := NewHandlers(authSvc)
+
+	r := mux.NewRouter()
+	h.RegisterProtectedRoutes(r)
+
+	req := httptest.NewRequest("GET", "/api/auth/me", nil)
+	match := &mux.RouteMatch{}
+	if !r.Match(req, match) {
+		t.Error("expected route GET /api/auth/me to be registered")
 	}
 }
 
