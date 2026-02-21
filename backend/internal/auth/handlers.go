@@ -25,6 +25,7 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 // RegisterProtectedRoutes registers auth routes that require authentication.
 func (h *Handlers) RegisterProtectedRoutes(r *mux.Router) {
 	r.HandleFunc("/api/auth/me", h.handleMe).Methods("GET")
+	r.HandleFunc("/api/auth/logout", h.handleLogout).Methods("POST")
 }
 
 type registerRequest struct {
@@ -39,6 +40,10 @@ type loginRequest struct {
 }
 
 type refreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+type logoutRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
@@ -150,6 +155,26 @@ func (h *Handlers) handleMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, user)
+}
+
+func (h *Handlers) handleLogout(w http.ResponseWriter, r *http.Request) {
+	var req logoutRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid request body"})
+		return
+	}
+
+	if req.RefreshToken == "" {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "refresh_token is required"})
+		return
+	}
+
+	if err := h.service.RevokeRefreshToken(r.Context(), req.RefreshToken); err != nil {
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "failed to revoke token"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"message": "logged out successfully"})
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {

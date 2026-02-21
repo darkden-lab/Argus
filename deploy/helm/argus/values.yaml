@@ -15,6 +15,13 @@ backend:
     databaseURL: ""
     jwtSecret: ""
     encryptionKey: ""
+  # Horizontal Pod Autoscaler configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 10
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
 
 frontend:
   image:
@@ -31,6 +38,13 @@ frontend:
       memory: 256Mi
   env:
     apiUrl: http://argus-backend:8080
+  # Horizontal Pod Autoscaler configuration
+  autoscaling:
+    enabled: false
+    minReplicas: 2
+    maxReplicas: 5
+    targetCPUUtilization: 70
+    targetMemoryUtilization: 80
 
 postgresql:
   enabled: true
@@ -41,6 +55,13 @@ postgresql:
   persistence:
     size: 10Gi
     storageClass: ""
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 1Gi
   env:
     database: argus
     username: dashboard

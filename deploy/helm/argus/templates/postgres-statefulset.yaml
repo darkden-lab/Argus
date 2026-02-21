@@ -37,6 +37,8 @@ spec:
                 secretKeyRef:
                   name: {{ include "argus.fullname" . }}-secret
                   key: dbPassword
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
