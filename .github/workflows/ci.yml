@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  packages: write
+
 jobs:
   lint-and-test-backend:
     runs-on: ubuntu-latest
@@ -108,17 +112,51 @@ jobs:
             " >> $GITHUB_STEP_SUMMARY
           fi
 
-  docker-build:
+  docker-build-push:
     runs-on: ubuntu-latest
     needs: [lint-and-test-backend, lint-and-test-frontend, lint-and-test-agent]
+    strategy:
+      matrix:
+        include:
+          - image: argus-backend
+            context: ./backend
+            file: deploy/docker/Dockerfile.backend
+          - image: argus-frontend
+            context: ./frontend
+            file: deploy/docker/Dockerfile.frontend
+          - image: argus-agent
+            context: .
+            file: deploy/docker/Dockerfile.agent
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build backend image
-        run: docker build -f deploy/docker/Dockerfile.backend -t argus-backend:ci ./backend
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Build frontend image
-        run: docker build -f deploy/docker/Dockerfile.frontend -t argus-frontend:ci ./frontend
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'push'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build agent image
-        run: docker build -f deploy/docker/Dockerfile.agent -t argus-agent:ci .
+      - name: Docker meta
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ matrix.image }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
