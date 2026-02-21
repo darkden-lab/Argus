@@ -272,7 +272,7 @@ func TestListAll(t *testing.T) {
 func TestListAll_Empty(t *testing.T) {
 	e := NewEngine(nil)
 	all := e.ListAll()
-	if all != nil && len(all) != 0 {
+	if len(all) != 0 {
 		t.Errorf("expected empty list, got %d", len(all))
 	}
 }

@@ -380,12 +380,6 @@ func TestWriteJSONContentType(t *testing.T) {
 	}
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
-}
 
 // TestRegisterRoutes verifies that RegisterRoutes registers the expected routes.
 func TestRegisterRoutes(t *testing.T) {

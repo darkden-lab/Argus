@@ -200,7 +200,7 @@ func (c *Claude) buildRequest(req ai.ChatRequest) (*claudeRequest, error) {
 			}
 			for _, tc := range msg.ToolCalls {
 				var input any
-				json.Unmarshal([]byte(tc.Arguments), &input)
+				_ = json.Unmarshal([]byte(tc.Arguments), &input)
 				blocks = append(blocks, claudeContentBlock{
 					Type:  "tool_use",
 					ID:    tc.ID,

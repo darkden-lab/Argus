@@ -113,7 +113,7 @@ func main() {
 	}
 	var notifHandlers *notifications.Handlers
 	if broker != nil {
-		defer broker.Close()
+		defer broker.Close() //nolint:errcheck // best-effort cleanup on shutdown
 
 		notifStore := notifications.NewNotificationStore(pool)
 		prefStore := notifications.NewPreferencesStore(pool)

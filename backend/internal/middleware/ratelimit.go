@@ -79,10 +79,6 @@ func (s *rateLimiterStore) cleanup() {
 	}
 }
 
-// stop terminates the cleanup goroutine.
-func (s *rateLimiterStore) stop() {
-	close(s.stopCh)
-}
 
 // clientIP extracts the client IP address from the request, checking
 // X-Forwarded-For first, then falling back to RemoteAddr.

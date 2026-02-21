@@ -62,7 +62,7 @@ func (s *Store) InsertBatch(ctx context.Context, embeddings []Embedding) error {
 	if err != nil {
 		return fmt.Errorf("rag store: begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer tx.Rollback(ctx) //nolint:errcheck // rollback after commit is a no-op
 
 	for _, e := range embeddings {
 		_, err := tx.Exec(ctx,

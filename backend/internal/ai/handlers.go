@@ -141,9 +141,9 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 		case "confirm_action":
 			mgr := h.service.GetConfirmationManager()
 			if wsMsg.Approved {
-				mgr.Approve(wsMsg.ConfirmationID)
+				_ = mgr.Approve(wsMsg.ConfirmationID)
 			} else {
-				mgr.Reject(wsMsg.ConfirmationID)
+				_ = mgr.Reject(wsMsg.ConfirmationID)
 			}
 
 		case "context_update":

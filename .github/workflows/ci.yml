@@ -18,8 +18,12 @@ jobs:
           go-version: "1.25"
           cache-dependency-path: backend/go.sum
 
-      - name: Vet
-        run: cd backend && go vet ./...
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: backend
+          args: --timeout=5m
 
       - name: Test
         run: cd backend && go test ./... -v -coverprofile=coverage.out
@@ -47,8 +51,12 @@ jobs:
           go-version: "1.25"
           cache-dependency-path: agent/go.sum
 
-      - name: Vet
-        run: cd agent && go vet ./...
+      - name: Lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          version: latest
+          working-directory: agent
+          args: --timeout=5m
 
       - name: Test
         run: cd agent && go test ./... -v -coverprofile=coverage.out

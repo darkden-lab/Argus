@@ -1,0 +1,54 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - gocritic
+    - misspell
+
+  exclusions:
+    rules:
+      - path: "_test\\.go"
+        linters:
+          - errcheck
+          - gocritic
+    paths:
+      - pkg/agentpb
+
+  settings:
+    errcheck:
+      exclude-functions:
+        - encoding/json.Marshal
+        - (*encoding/json.Encoder).Encode
+        - (net/http.ResponseWriter).Write
+        - (*github.com/gorilla/websocket.Conn).WriteMessage
+        - (*github.com/gorilla/websocket.Conn).Close
+        - (*github.com/gorilla/websocket.Conn).SetReadDeadline
+        - (*github.com/gorilla/websocket.Conn).SetWriteDeadline
+        - (io.Closer).Close
+    gocritic:
+      enabled-tags:
+        - diagnostic
+      disabled-checks:
+        - commentFormatting
+        - ifElseChain
+        - exitAfterDefer
+        - builtinShadowDecl
+        - sprintfQuotedString
+    staticcheck:
+      checks:
+        - "all"
+        - "-SA1012"
+        - "-SA1029"
+        - "-SA4023"
+        - "-SA9003"
+        - "-ST1000"
+        - "-ST1021"
+        - "-QF*"

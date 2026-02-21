@@ -38,7 +38,7 @@ func (c *Connector) Run(ctx context.Context) error {
 	if err := c.dial(ctx); err != nil {
 		return fmt.Errorf("initial connection failed: %w", err)
 	}
-	defer c.conn.Close()
+	defer c.conn.Close() //nolint:errcheck // best-effort cleanup
 
 	// Register if not already registered.
 	if !c.config.IsRegistered() {
@@ -73,7 +73,7 @@ func (c *Connector) Run(ctx context.Context) error {
 
 		// Re-establish the gRPC connection.
 		if c.conn != nil {
-			c.conn.Close()
+			_ = c.conn.Close()
 		}
 		if err := c.dial(ctx); err != nil {
 			log.Printf("Reconnect dial failed: %v", err)
