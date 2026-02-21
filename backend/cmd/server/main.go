@@ -28,6 +28,7 @@ import (
 	"github.com/darkden-lab/argus/backend/internal/plugin"
 	"github.com/darkden-lab/argus/backend/internal/proxy"
 	"github.com/darkden-lab/argus/backend/internal/rbac"
+	"github.com/darkden-lab/argus/backend/internal/settings"
 	"github.com/darkden-lab/argus/backend/internal/terminal"
 	"github.com/darkden-lab/argus/backend/internal/ws"
 	"google.golang.org/grpc"
@@ -175,6 +176,14 @@ func main() {
 	authHandlers.RegisterProtectedRoutes(protected)
 	rbacHandlers.RegisterRoutes(protected)
 
+	// Role management routes
+	roleHandlers := rbac.NewRoleHandlers(pool, rbacEngine)
+	roleHandlers.RegisterRoutes(protected)
+
+	// User management routes
+	userMgmtHandlers := auth.NewUserManagementHandlers(authService)
+	userMgmtHandlers.RegisterRoutes(protected)
+
 	// Cluster routes
 	clusterHandlers := cluster.NewHandlers(clusterMgr)
 	clusterHandlers.RegisterRoutes(protected)
@@ -192,6 +201,10 @@ func main() {
 
 	// Audit log routes
 	auditHandlers.RegisterRoutes(protected)
+
+	// Settings routes
+	settingsHandlers := settings.NewHandlers(pool, cfg)
+	settingsHandlers.RegisterRoutes(protected)
 
 	// Notification routes
 	if notifHandlers != nil {

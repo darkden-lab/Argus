@@ -14,7 +14,7 @@ test.describe('Dashboard (Integration)', () => {
     // Main cards should be visible
     await expect(page.getByText('Cluster Health')).toBeVisible();
     await expect(page.getByText('Resource Summary')).toBeVisible();
-    await expect(page.getByText('Recent Events')).toBeVisible();
+    await expect(page.getByText('Recent Events', { exact: true })).toBeVisible();
     await expect(page.getByText('Active Plugins')).toBeVisible();
   });
 

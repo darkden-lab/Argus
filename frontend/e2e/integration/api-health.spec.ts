@@ -81,6 +81,51 @@ test.describe('API Health (Integration)', () => {
     expect(res.ok()).toBe(true);
   });
 
+  test('GET /api/settings/oidc returns OIDC config', async ({ request }) => {
+    const res = await request.get(`${API_BASE}/api/settings/oidc`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(res.ok()).toBe(true);
+    const data = await res.json();
+    expect(data).toHaveProperty('enabled');
+    expect(data).toHaveProperty('issuer_url');
+    expect(data).toHaveProperty('client_id');
+    expect(data).toHaveProperty('redirect_url');
+  });
+
+  test('GET /api/users returns user list', async ({ request }) => {
+    const res = await request.get(`${API_BASE}/api/users`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(res.ok()).toBe(true);
+    const data = await res.json();
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBeGreaterThan(0);
+    expect(data[0]).toHaveProperty('email');
+    expect(data[0]).toHaveProperty('display_name');
+  });
+
+  test('GET /api/roles returns role list', async ({ request }) => {
+    const res = await request.get(`${API_BASE}/api/roles`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(res.ok()).toBe(true);
+    const data = await res.json();
+    expect(Array.isArray(data)).toBe(true);
+    expect(data.length).toBeGreaterThan(0);
+    expect(data[0]).toHaveProperty('name');
+    expect(data[0]).toHaveProperty('permissions');
+  });
+
+  test('GET /api/roles/assignments returns assignments', async ({ request }) => {
+    const res = await request.get(`${API_BASE}/api/roles/assignments`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    expect(res.ok()).toBe(true);
+    const data = await res.json();
+    expect(Array.isArray(data)).toBe(true);
+  });
+
   test('protected endpoints reject unauthenticated requests', async ({ request }) => {
     const endpoints = [
       '/api/auth/me',
@@ -88,6 +133,10 @@ test.describe('API Health (Integration)', () => {
       '/api/clusters',
       '/api/notifications?limit=10&offset=0',
       '/api/notifications/unread-count',
+      '/api/settings/oidc',
+      '/api/users',
+      '/api/roles',
+      '/api/roles/assignments',
     ];
 
     for (const endpoint of endpoints) {

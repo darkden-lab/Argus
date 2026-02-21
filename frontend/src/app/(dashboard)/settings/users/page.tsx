@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -22,33 +23,78 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Plus } from "lucide-react";
+import { Plus, Trash2, Loader2 } from "lucide-react";
 
 interface User {
   id: string;
   email: string;
-  displayName: string;
-  authProvider: string;
-  lastLogin: string;
+  display_name: string;
+  auth_provider: string;
+  created_at: string;
+  last_login: string | null;
 }
 
-const placeholderUsers: User[] = [
-  { id: "1", email: "admin@k8s.local", displayName: "Admin", authProvider: "local", lastLogin: "2 hours ago" },
-  { id: "2", email: "operator@k8s.local", displayName: "Operator", authProvider: "local", lastLogin: "1 day ago" },
-  { id: "3", email: "dev@k8s.local", displayName: "Developer", authProvider: "oidc", lastLogin: "3 days ago" },
-  { id: "4", email: "viewer@k8s.local", displayName: "Viewer", authProvider: "oidc", lastLogin: "1 week ago" },
-];
-
 export default function UsersPage() {
-  const [users] = useState<User[]>(placeholderUsers);
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", displayName: "" });
 
-  function handleSubmit(e: React.FormEvent) {
+  const fetchUsers = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await api.get<User[]>("/api/users");
+      setUsers(data ?? []);
+    } catch {
+      setUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    // TODO: call api.post('/api/users', form)
-    setOpen(false);
-    setForm({ email: "", password: "", displayName: "" });
+    setSubmitting(true);
+    try {
+      await api.post("/api/users", {
+        email: form.email,
+        password: form.password,
+        display_name: form.displayName,
+      });
+      setOpen(false);
+      setForm({ email: "", password: "", displayName: "" });
+      await fetchUsers();
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function handleDelete(id: string) {
+    setDeleting(id);
+    try {
+      await api.del(`/api/users/${id}`);
+      await fetchUsers();
+    } finally {
+      setDeleting(null);
+    }
+  }
+
+  function formatDate(dateStr: string | null): string {
+    if (!dateStr) return "Never";
+    const date = new Date(dateStr);
+    return date.toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   }
 
   return (
@@ -104,7 +150,10 @@ export default function UsersPage() {
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit">Create User</Button>
+                <Button type="submit" disabled={submitting}>
+                  {submitting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
+                  Create User
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
@@ -118,24 +167,61 @@ export default function UsersPage() {
               <TableHead>Email</TableHead>
               <TableHead>Display Name</TableHead>
               <TableHead>Provider</TableHead>
+              <TableHead>Created</TableHead>
               <TableHead>Last Login</TableHead>
+              <TableHead className="w-[60px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
-            {users.map((user) => (
-              <TableRow key={user.id}>
-                <TableCell className="font-mono text-sm">{user.email}</TableCell>
-                <TableCell>{user.displayName}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="text-[10px]">
-                    {user.authProvider}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-sm">
-                  {user.lastLogin}
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center">
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading users...
+                  </div>
                 </TableCell>
               </TableRow>
-            ))}
+            ) : users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  No users found.
+                </TableCell>
+              </TableRow>
+            ) : (
+              users.map((user) => (
+                <TableRow key={user.id}>
+                  <TableCell className="font-mono text-sm">{user.email}</TableCell>
+                  <TableCell>{user.display_name}</TableCell>
+                  <TableCell>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {user.auth_provider}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {formatDate(user.created_at)}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {formatDate(user.last_login)}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive"
+                      onClick={() => handleDelete(user.id)}
+                      disabled={deleting === user.id}
+                    >
+                      {deleting === user.id ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Trash2 className="h-4 w-4" />
+                      )}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>

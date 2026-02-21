@@ -102,6 +102,36 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (st
 	return accessToken, nil
 }
 
+func (s *AuthService) ListUsers(ctx context.Context) ([]User, error) {
+	rows, err := s.db.Pool.Query(ctx,
+		`SELECT id, email, display_name, auth_provider, created_at, last_login FROM users ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list users: %w", err)
+	}
+	defer rows.Close()
+
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.DisplayName, &u.AuthProvider, &u.CreatedAt, &u.LastLogin); err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, u)
+	}
+	return users, rows.Err()
+}
+
+func (s *AuthService) DeleteUser(ctx context.Context, id string) error {
+	result, err := s.db.Pool.Exec(ctx, `DELETE FROM users WHERE id = $1`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	if result.RowsAffected() == 0 {
+		return fmt.Errorf("user not found")
+	}
+	return nil
+}
+
 func (s *AuthService) GetUserByID(ctx context.Context, id string) (*User, error) {
 	var user User
 	err := s.db.Pool.QueryRow(ctx,
