@@ -22,14 +22,14 @@ export interface Notification {
 }
 
 interface NotificationsResponse {
-  notifications: Notification[];
+  notifications: Notification[] | null;
   total: number;
-  page: number;
-  per_page: number;
+  limit: number;
+  offset: number;
 }
 
 interface UnreadCountResponse {
-  count: number;
+  unread_count: number;
 }
 
 interface NotificationState {
@@ -59,13 +59,14 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
     set({ loading: true });
     try {
       const { perPage } = get();
+      const offset = (page - 1) * perPage;
       const data = await api.get<NotificationsResponse>(
-        `/api/notifications?page=${page}&per_page=${perPage}`
+        `/api/notifications?limit=${perPage}&offset=${offset}`
       );
       set({
-        notifications: data.notifications,
+        notifications: data.notifications ?? [],
         total: data.total,
-        page: data.page,
+        page,
         loading: false,
       });
     } catch {
@@ -76,7 +77,7 @@ export const useNotificationStore = create<NotificationState>((set, get) => ({
   fetchUnreadCount: async () => {
     try {
       const data = await api.get<UnreadCountResponse>('/api/notifications/unread-count');
-      set({ unreadCount: data.count });
+      set({ unreadCount: data.unread_count });
     } catch {
       // Silently fail - badge just won't update
     }

@@ -58,8 +58,8 @@ describe('useNotificationStore', () => {
       (api.get as jest.Mock).mockResolvedValueOnce({
         notifications: [mockNotification],
         total: 1,
-        page: 1,
-        per_page: 20,
+        limit: 20,
+        offset: 0,
       });
 
       await useNotificationStore.getState().fetchNotifications();
@@ -75,13 +75,13 @@ describe('useNotificationStore', () => {
       (api.get as jest.Mock).mockResolvedValueOnce({
         notifications: [],
         total: 0,
-        page: 2,
-        per_page: 20,
+        limit: 20,
+        offset: 20,
       });
 
       await useNotificationStore.getState().fetchNotifications(2);
 
-      expect(api.get).toHaveBeenCalledWith('/api/notifications?page=2&per_page=20');
+      expect(api.get).toHaveBeenCalledWith('/api/notifications?limit=20&offset=20');
     });
 
     it('resets loading on error', async () => {
@@ -95,7 +95,7 @@ describe('useNotificationStore', () => {
 
   describe('fetchUnreadCount', () => {
     it('updates unreadCount on success', async () => {
-      (api.get as jest.Mock).mockResolvedValueOnce({ count: 5 });
+      (api.get as jest.Mock).mockResolvedValueOnce({ unread_count: 5 });
 
       await useNotificationStore.getState().fetchUnreadCount();
 

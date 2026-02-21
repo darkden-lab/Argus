@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/darkden-lab/argus/backend/internal/auth"
 	"github.com/darkden-lab/argus/backend/internal/notifications/channels"
 )
 
@@ -42,12 +43,13 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/notifications/channels/{id}/test", h.TestChannel).Methods("POST")
 }
 
-// getUserID extracts the user ID from the request context (set by auth middleware).
+// getUserID extracts the user ID from the JWT claims in the request context.
 func getUserID(r *http.Request) string {
-	if uid, ok := r.Context().Value("user_id").(string); ok {
-		return uid
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		return ""
 	}
-	return ""
+	return claims.UserID
 }
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
