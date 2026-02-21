@@ -41,15 +41,17 @@ const mockSendModeChange = jest.fn();
 const mockSendContextChange = jest.fn();
 const mockConnect = jest.fn();
 
+const mockUseTerminal = jest.fn(() => ({
+  isConnected: false,
+  sendInput: mockSendInput,
+  sendResize: mockSendResize,
+  sendModeChange: mockSendModeChange,
+  sendContextChange: mockSendContextChange,
+  connect: mockConnect,
+}));
+
 jest.mock('@/hooks/use-terminal', () => ({
-  useTerminal: () => ({
-    isConnected: false,
-    sendInput: mockSendInput,
-    sendResize: mockSendResize,
-    sendModeChange: mockSendModeChange,
-    sendContextChange: mockSendContextChange,
-    connect: mockConnect,
-  }),
+  useTerminal: (...args: unknown[]) => mockUseTerminal(...args),
 }));
 
 // Mock the api module
@@ -106,8 +108,8 @@ describe('WebTerminal', () => {
   });
 
   it('fetches clusters on mount', async () => {
-    const { api } = require('@/lib/api');
-    api.get.mockResolvedValueOnce([
+    const apiModule = jest.requireMock<{ api: { get: jest.Mock } }>('@/lib/api');
+    apiModule.api.get.mockResolvedValueOnce([
       { id: 'c1', name: 'production' },
       { id: 'c2', name: 'staging' },
     ]);
@@ -115,7 +117,7 @@ describe('WebTerminal', () => {
     render(<WebTerminal />);
 
     await waitFor(() => {
-      expect(api.get).toHaveBeenCalledWith('/api/clusters');
+      expect(apiModule.api.get).toHaveBeenCalledWith('/api/clusters');
     });
   });
 });
@@ -125,7 +127,7 @@ describe('WebTerminal - connected state', () => {
     jest.clearAllMocks();
 
     // Override the hook mock to return connected state
-    jest.spyOn(require('@/hooks/use-terminal'), 'useTerminal').mockReturnValue({
+    mockUseTerminal.mockReturnValue({
       isConnected: true,
       sendInput: mockSendInput,
       sendResize: mockSendResize,

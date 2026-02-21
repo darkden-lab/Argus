@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor, act } from '../test-utils';
+import { render, screen } from '../test-utils';
 import { ChatPanel, ChatToggleButton } from '@/components/ai/chat-panel';
 import { ChatMessage } from '@/components/ai/chat-message';
 import { ChatCodeBlock } from '@/components/ai/chat-code-block';
@@ -336,7 +336,6 @@ describe('ChatCodeBlock', () => {
     await user.click(copyButton);
 
     // After click, the clipboard should contain the code
-    const clipboardText = await user.copy();
     // Verify the button was clickable (no error thrown)
     expect(copyButton).toBeInTheDocument();
   });
