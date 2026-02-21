@@ -6,25 +6,30 @@ import (
 	"strconv"
 
 	"github.com/gorilla/mux"
+
 	"github.com/darkden-lab/argus/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/crypto"
+	"github.com/darkden-lab/argus/backend/internal/httputil"
 	"github.com/darkden-lab/argus/backend/internal/notifications/channels"
 )
 
 // Handlers provides HTTP handlers for the notifications API.
 type Handlers struct {
-	notifStore *NotificationStore
-	prefStore  *PreferencesStore
-	chanStore  *ChannelStore
-	router     *Router
+	notifStore    *NotificationStore
+	prefStore     *PreferencesStore
+	chanStore     *ChannelStore
+	router        *Router
+	encryptionKey string
 }
 
 // NewHandlers creates a new Handlers.
-func NewHandlers(notifStore *NotificationStore, prefStore *PreferencesStore, chanStore *ChannelStore, router *Router) *Handlers {
+func NewHandlers(notifStore *NotificationStore, prefStore *PreferencesStore, chanStore *ChannelStore, router *Router, encryptionKey string) *Handlers {
 	return &Handlers{
-		notifStore: notifStore,
-		prefStore:  prefStore,
-		chanStore:  chanStore,
-		router:     router,
+		notifStore:    notifStore,
+		prefStore:     prefStore,
+		chanStore:     chanStore,
+		router:        router,
+		encryptionKey: encryptionKey,
 	}
 }
 
@@ -52,21 +57,11 @@ func getUserID(r *http.Request) string {
 	return claims.UserID
 }
 
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-func writeError(w http.ResponseWriter, status int, msg string) {
-	writeJSON(w, status, map[string]string{"error": msg})
-}
-
 // ListNotifications handles GET /api/notifications
 func (h *Handlers) ListNotifications(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -90,11 +85,11 @@ func (h *Handlers) ListNotifications(w http.ResponseWriter, r *http.Request) {
 
 	notifications, total, err := h.notifStore.List(r.Context(), params)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"notifications": notifications,
 		"total":         total,
 		"limit":         params.Limit,
@@ -106,17 +101,17 @@ func (h *Handlers) ListNotifications(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) UnreadCount(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	count, err := h.notifStore.GetUnreadCount(r.Context(), userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"unread_count": count,
 	})
 }
@@ -125,50 +120,50 @@ func (h *Handlers) UnreadCount(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) MarkRead(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	id := mux.Vars(r)["id"]
 	if err := h.notifStore.MarkRead(r.Context(), userID, id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // MarkAllRead handles PUT /api/notifications/read-all
 func (h *Handlers) MarkAllRead(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	if err := h.notifStore.MarkAllRead(r.Context(), userID); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // GetPreferences handles GET /api/notifications/preferences
 func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
 	prefs, err := h.prefStore.GetByUser(r.Context(), userID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"preferences": prefs,
 	})
 }
@@ -177,7 +172,7 @@ func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	userID := getUserID(r)
 	if userID == "" {
-		writeError(w, http.StatusUnauthorized, "unauthorized")
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 
@@ -191,7 +186,7 @@ func (h *Handlers) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
@@ -204,23 +199,23 @@ func (h *Handlers) UpdatePreferences(w http.ResponseWriter, r *http.Request) {
 			Enabled:   p.Enabled,
 		}
 		if err := h.prefStore.Set(r.Context(), pref); err != nil {
-			writeError(w, http.StatusInternalServerError, err.Error())
+			httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // ListChannels handles GET /api/notifications/channels
 func (h *Handlers) ListChannels(w http.ResponseWriter, r *http.Request) {
 	chs, err := h.chanStore.List(r.Context())
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"channels": chs,
 	})
 }
@@ -235,28 +230,34 @@ func (h *Handlers) CreateChannel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Type == "" || req.Name == "" {
-		writeError(w, http.StatusBadRequest, "type and name are required")
+		httputil.WriteError(w, http.StatusBadRequest, "type and name are required")
+		return
+	}
+
+	encrypted, err := crypto.Encrypt(req.Config, h.encryptionKey)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to encrypt channel config")
 		return
 	}
 
 	ch := &ChannelConfig{
 		Type:      req.Type,
 		Name:      req.Name,
-		ConfigEnc: req.Config, // In production this would be encrypted with AES-256
+		ConfigEnc: encrypted,
 		Enabled:   req.Enabled,
 	}
 
 	if err := h.chanStore.Create(r.Context(), ch); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, ch)
+	httputil.WriteJSON(w, http.StatusCreated, ch)
 }
 
 // UpdateChannel handles PUT /api/notifications/channels/:id
@@ -271,7 +272,13 @@ func (h *Handlers) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid request body")
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	encrypted, err := crypto.Encrypt(req.Config, h.encryptionKey)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to encrypt channel config")
 		return
 	}
 
@@ -279,16 +286,16 @@ func (h *Handlers) UpdateChannel(w http.ResponseWriter, r *http.Request) {
 		ID:        id,
 		Type:      req.Type,
 		Name:      req.Name,
-		ConfigEnc: req.Config,
+		ConfigEnc: encrypted,
 		Enabled:   req.Enabled,
 	}
 
 	if err := h.chanStore.Update(r.Context(), ch); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // DeleteChannel handles DELETE /api/notifications/channels/:id
@@ -296,11 +303,11 @@ func (h *Handlers) DeleteChannel(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
 	if err := h.chanStore.Delete(r.Context(), id); err != nil {
-		writeError(w, http.StatusInternalServerError, err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // TestChannel handles POST /api/notifications/channels/:id/test
@@ -309,7 +316,7 @@ func (h *Handlers) TestChannel(w http.ResponseWriter, r *http.Request) {
 
 	chConfig, err := h.chanStore.GetByID(r.Context(), id)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "channel not found")
+		httputil.WriteError(w, http.StatusNotFound, "channel not found")
 		return
 	}
 
@@ -324,14 +331,14 @@ func (h *Handlers) TestChannel(w http.ResponseWriter, r *http.Request) {
 
 	ch, ok := h.router.channels[id]
 	if !ok {
-		writeError(w, http.StatusBadRequest, "channel type '"+chConfig.Type+"' is not loaded")
+		httputil.WriteError(w, http.StatusBadRequest, "channel type '"+chConfig.Type+"' is not loaded")
 		return
 	}
 
 	if err := ch.Send(testMsg, nil); err != nil {
-		writeError(w, http.StatusInternalServerError, "test send failed: "+err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, "test send failed: "+err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }

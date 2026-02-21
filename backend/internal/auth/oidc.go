@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -23,6 +22,7 @@ type OIDCConfig struct {
 	ClientID     string
 	ClientSecret string
 	RedirectURL  string
+	FrontendURL  string
 }
 
 // OIDCService handles OIDC authentication flows.
@@ -32,8 +32,7 @@ type OIDCService struct {
 	verifier     *oidc.IDTokenVerifier
 	db           *db.DB
 	jwt          *JWTService
-	states       map[string]time.Time
-	mu           sync.Mutex
+	frontendURL  string
 }
 
 // NewOIDCService creates a new OIDCService. Returns nil, nil if OIDC is not configured.
@@ -59,13 +58,18 @@ func NewOIDCService(ctx context.Context, cfg OIDCConfig, database *db.DB, jwtSer
 		ClientID: cfg.ClientID,
 	})
 
+	frontendURL := cfg.FrontendURL
+	if frontendURL == "" {
+		frontendURL = "http://localhost:3000"
+	}
+
 	return &OIDCService{
 		provider:     provider,
 		oauth2Config: oauth2Cfg,
 		verifier:     verifier,
 		db:           database,
 		jwt:          jwtService,
-		states:       make(map[string]time.Time),
+		frontendURL:  frontendURL,
 	}, nil
 }
 
@@ -169,10 +173,10 @@ func (s *OIDCService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Redirect to frontend with tokens as query params
-	frontendURL := fmt.Sprintf("http://localhost:3000/auth/callback?access_token=%s&refresh_token=%s",
-		accessToken, refreshToken)
-	http.Redirect(w, r, frontendURL, http.StatusFound)
+	// Redirect to frontend with tokens in URL fragment (not sent to server in Referer)
+	redirectURL := fmt.Sprintf("%s/auth/oidc/callback#access_token=%s&refresh_token=%s",
+		s.frontendURL, accessToken, refreshToken)
+	http.Redirect(w, r, redirectURL, http.StatusFound)
 }
 
 // HandleProviderInfo returns OIDC provider configuration for the frontend.
@@ -188,7 +192,7 @@ func (s *OIDCService) HandleProviderInfo(w http.ResponseWriter, r *http.Request)
 	json.NewEncoder(w).Encode(info)
 }
 
-// generateState creates a cryptographically random state parameter.
+// generateState creates a cryptographically random state parameter and stores it in the database.
 func (s *OIDCService) generateState() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -196,28 +200,63 @@ func (s *OIDCService) generateState() (string, error) {
 	}
 	state := base64.URLEncoding.EncodeToString(b)
 
-	s.mu.Lock()
-	s.states[state] = time.Now().Add(10 * time.Minute)
-	for k, v := range s.states {
-		if time.Now().After(v) {
-			delete(s.states, k)
-		}
+	if err := s.storeState(state, time.Now().Add(10*time.Minute)); err != nil {
+		return "", fmt.Errorf("failed to store OIDC state: %w", err)
 	}
-	s.mu.Unlock()
 
 	return state, nil
 }
 
-// validateState checks if a state parameter is valid and removes it.
-func (s *OIDCService) validateState(state string) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
+// storeState persists an OIDC state parameter in the database with an expiry time.
+func (s *OIDCService) storeState(state string, expiry time.Time) error {
+	if s.db == nil || s.db.Pool == nil {
+		return fmt.Errorf("database not available")
+	}
 
-	expiry, ok := s.states[state]
-	if !ok {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	expiryJSON, err := json.Marshal(expiry.Format(time.RFC3339))
+	if err != nil {
+		return fmt.Errorf("failed to marshal expiry: %w", err)
+	}
+
+	_, err = s.db.Pool.Exec(ctx,
+		`INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
+		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
+		"oidc_state_"+state, expiryJSON,
+	)
+	return err
+}
+
+// validateState checks if a state parameter is valid in the database and removes it.
+func (s *OIDCService) validateState(state string) bool {
+	if s.db == nil || s.db.Pool == nil {
 		return false
 	}
-	delete(s.states, state)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var expiryJSON []byte
+	err := s.db.Pool.QueryRow(ctx,
+		`DELETE FROM settings WHERE key = $1 RETURNING value`,
+		"oidc_state_"+state,
+	).Scan(&expiryJSON)
+	if err != nil {
+		return false
+	}
+
+	var expiryStr string
+	if err := json.Unmarshal(expiryJSON, &expiryStr); err != nil {
+		return false
+	}
+
+	expiry, err := time.Parse(time.RFC3339, expiryStr)
+	if err != nil {
+		return false
+	}
+
 	return time.Now().Before(expiry)
 }
 

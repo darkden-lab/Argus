@@ -19,7 +19,7 @@ type WatchEvent struct {
 // subscriptionKey builds a canonical key for a (cluster, resource, namespace)
 // tuple that is used to fan-out events to interested clients.
 func subscriptionKey(clusterID, resource, namespace string) string {
-	return clusterID + "/" + namespace + "/" + resource
+	return clusterID + "/" + resource + "/" + namespace
 }
 
 // EventHook is a callback invoked whenever a WatchEvent is broadcast through

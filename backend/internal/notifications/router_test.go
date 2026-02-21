@@ -97,6 +97,7 @@ func TestNewHandlers_Notifications(t *testing.T) {
 		NewPreferencesStore(nil),
 		NewChannelStore(nil),
 		NewRouter(nil, nil, nil),
+		"test-encryption-key",
 	)
 	if h == nil {
 		t.Fatal("expected non-nil handlers")

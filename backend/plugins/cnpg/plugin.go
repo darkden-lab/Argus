@@ -130,7 +130,7 @@ func (p *CnpgPlugin) watchGVR(hub *ws.Hub, cm *cluster.Manager, clusterID string
 			continue
 		}
 
-		subKey := fmt.Sprintf("%s//%s", clusterID, gvr.Resource)
+		subKey := fmt.Sprintf("%s/%s/", clusterID, gvr.Resource)
 		hub.BroadcastToSubscribers(subKey, ws.WatchEvent{
 			Cluster:   clusterID,
 			Resource:  gvr.Resource,

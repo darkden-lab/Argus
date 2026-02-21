@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
 import { RBACGate } from "@/components/auth/rbac-gate";
 
 interface OidcConfig {
@@ -36,24 +36,28 @@ export default function OidcSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     api
       .get<OidcConfig>("/api/settings/oidc")
       .then(setConfig)
-      .catch(() => {})
+      .catch(() => {
+        setError("Failed to load OIDC configuration");
+      })
       .finally(() => setLoading(false));
   }, []);
 
   async function handleSave() {
     setSaving(true);
     setSaved(false);
+    setError(null);
     try {
       await api.put("/api/settings/oidc", config);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch {
-      // Error handling can be extended later
+      setError("Failed to save configuration");
     } finally {
       setSaving(false);
     }
@@ -78,12 +82,26 @@ export default function OidcSettingsPage() {
                 Configure OpenID Connect for single sign-on authentication.
               </CardDescription>
             </div>
-            <Badge variant={config.enabled ? "default" : "secondary"}>
-              {config.enabled ? "Enabled" : "Disabled"}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <label htmlFor="oidc-enabled" className="text-sm text-muted-foreground">
+                {config.enabled ? "Enabled" : "Disabled"}
+              </label>
+              <Switch
+                id="oidc-enabled"
+                checked={config.enabled}
+                onCheckedChange={(checked) =>
+                  setConfig((c) => ({ ...c, enabled: checked }))
+                }
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
+          {error && (
+            <div className="rounded-md border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+              {error}
+            </div>
+          )}
           <div className="space-y-2">
             <Label htmlFor="provider-name">Provider Name</Label>
             <Input

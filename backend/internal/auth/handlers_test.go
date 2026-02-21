@@ -381,7 +381,9 @@ func TestWriteJSONContentType(t *testing.T) {
 }
 
 
-// TestRegisterRoutes verifies that RegisterRoutes registers the expected public routes.
+// TestRegisterRoutes verifies that RegisterRoutes registers only the expected public routes.
+// /api/auth/register is intentionally NOT public — user creation requires authentication
+// and goes through POST /api/users (protected route).
 func TestRegisterRoutes(t *testing.T) {
 	svc := NewJWTService("test-secret")
 	authSvc := &AuthService{jwt: svc}
@@ -390,21 +392,27 @@ func TestRegisterRoutes(t *testing.T) {
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 
-	routes := []struct {
+	publicRoutes := []struct {
 		path   string
 		method string
 	}{
-		{"/api/auth/register", "POST"},
 		{"/api/auth/login", "POST"},
 		{"/api/auth/refresh", "POST"},
 	}
 
-	for _, rt := range routes {
+	for _, rt := range publicRoutes {
 		req := httptest.NewRequest(rt.method, rt.path, nil)
 		match := &mux.RouteMatch{}
 		if !r.Match(req, match) {
 			t.Errorf("expected route %s %s to be registered", rt.method, rt.path)
 		}
+	}
+
+	// /api/auth/register must NOT be accessible as a public route.
+	req := httptest.NewRequest("POST", "/api/auth/register", nil)
+	match := &mux.RouteMatch{}
+	if r.Match(req, match) {
+		t.Error("SECURITY: /api/auth/register must not be a public route")
 	}
 }
 

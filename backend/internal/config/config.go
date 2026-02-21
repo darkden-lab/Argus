@@ -35,6 +35,9 @@ type Config struct {
 	SMTPFrom           string
 	NotificationFrom   string
 
+	// Frontend
+	FrontendURL string
+
 	// Security
 	AllowedOrigins string
 
@@ -92,6 +95,7 @@ func Load() *Config {
 		SMTPFrom:           getEnv("SMTP_FROM", ""),
 		NotificationFrom:   getEnv("NOTIFICATION_FROM_NAME", "K8s Dashboard"),
 
+		FrontendURL:    getEnv("FRONTEND_URL", "http://localhost:3000"),
 		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 
 		GRPCPort:    getEnv("GRPC_PORT", "9090"),

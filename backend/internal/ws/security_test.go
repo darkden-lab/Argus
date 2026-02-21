@@ -235,7 +235,7 @@ func TestEventHookExecution(t *testing.T) {
 		Object:    json.RawMessage(`{}`),
 	}
 
-	h.BroadcastToSubscribers("test-cluster/default/pods", event)
+	h.BroadcastToSubscribers("test-cluster/pods/default", event)
 	time.Sleep(50 * time.Millisecond)
 
 	if !hookCalled {

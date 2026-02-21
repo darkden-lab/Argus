@@ -8,6 +8,7 @@ import { PluginStatusCard, type PluginInfo } from "@/components/dashboard/plugin
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useK8sWildcard } from "@/hooks/use-k8s-websocket";
 import { api } from "@/lib/api";
+import { Loader2 } from "lucide-react";
 import type { WatchEvent } from "@/lib/ws";
 
 export default function DashboardPage() {
@@ -74,12 +75,21 @@ export default function DashboardPage() {
         <LiveIndicator isConnected={isConnected} lastUpdated={lastUpdated} />
       </div>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <ClusterHealthCard clusters={clusters} />
-        <ResourceSummary resources={resources} />
-        <RecentEvents events={events} />
-        <PluginStatusCard plugins={plugins} />
-      </div>
+      {loading ? (
+        <div className="flex items-center justify-center py-20">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <span>Loading dashboard...</span>
+          </div>
+        </div>
+      ) : (
+        <div className="grid gap-6 md:grid-cols-2">
+          <ClusterHealthCard clusters={clusters} />
+          <ResourceSummary resources={resources} />
+          <RecentEvents events={events} />
+          <PluginStatusCard plugins={plugins} />
+        </div>
+      )}
     </div>
   );
 }

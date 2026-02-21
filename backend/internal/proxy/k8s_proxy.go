@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/darkden-lab/argus/backend/internal/auth"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/rbac"
 	"k8s.io/client-go/transport"
 )
 
@@ -17,11 +18,12 @@ import (
 // the cluster's rest.Config, and proxies the request through.
 type K8sProxy struct {
 	clusterMgr *cluster.Manager
+	rbacEngine *rbac.Engine
 }
 
 // NewK8sProxy creates a new Kubernetes API proxy.
-func NewK8sProxy(clusterMgr *cluster.Manager) *K8sProxy {
-	return &K8sProxy{clusterMgr: clusterMgr}
+func NewK8sProxy(clusterMgr *cluster.Manager, rbacEngine *rbac.Engine) *K8sProxy {
+	return &K8sProxy{clusterMgr: clusterMgr, rbacEngine: rbacEngine}
 }
 
 // RegisterRoutes wires the proxy endpoints onto the given router.
@@ -37,6 +39,25 @@ func (p *K8sProxy) handleProxy(w http.ResponseWriter, r *http.Request) {
 	claims, ok := auth.ClaimsFromContext(r.Context())
 	if !ok {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return
+	}
+
+	// Check that the user has permission to access this cluster via the proxy.
+	allowed, err := p.rbacEngine.Evaluate(r.Context(), rbac.Request{
+		UserID:    claims.UserID,
+		Resource:  "clusters",
+		Action:    "read",
+		ClusterID: clusterID,
+	})
+	if err != nil {
+		log.Printf("proxy: RBAC evaluation failed for user %s cluster %s: %v", claims.UserID, clusterID, err)
+		http.Error(w, `{"error":"permission check failed"}`, http.StatusInternalServerError)
+		return
+	}
+	if !allowed {
+		log.Printf("proxy: forbidden access attempt by user %s to cluster %s %s %s",
+			claims.UserID, clusterID, r.Method, r.URL.Path)
+		http.Error(w, `{"error":"insufficient permissions"}`, http.StatusForbidden)
 		return
 	}
 

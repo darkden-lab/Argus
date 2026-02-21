@@ -138,7 +138,7 @@ func TestHub_BroadcastNotSentToNonSubscribers(t *testing.T) {
 
 func TestSubscriptionKey(t *testing.T) {
 	key := subscriptionKey("cluster-abc", "deployments", "production")
-	expected := "cluster-abc/production/deployments"
+	expected := "cluster-abc/deployments/production"
 	if key != expected {
 		t.Errorf("expected %q, got %q", expected, key)
 	}

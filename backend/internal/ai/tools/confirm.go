@@ -103,13 +103,14 @@ func (m *ConfirmationManager) Reject(requestID string) error {
 func (m *ConfirmationManager) resolve(requestID string, status ConfirmationStatus) error {
 	m.mu.Lock()
 	pc, ok := m.pending[requestID]
-	m.mu.Unlock()
-
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("confirmation %s not found or already resolved", requestID)
 	}
-
+	delete(m.pending, requestID)
 	pc.request.Status = status
+	m.mu.Unlock()
+
 	pc.resultCh <- status
 	log.Printf("ai: confirmation %s resolved as %s", requestID, status)
 	return nil

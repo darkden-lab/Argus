@@ -12,15 +12,27 @@ interface User {
   auth_provider: string;
 }
 
+function parseFragment(hash: string): URLSearchParams {
+  return new URLSearchParams(hash.replace(/^#/, ""));
+}
+
 function OidcCallbackContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const accessToken = searchParams.get("access_token");
-    const refreshToken = searchParams.get("refresh_token");
+    // Tokens are passed in the URL fragment (#) to avoid exposure in Referer
+    // headers and server logs. Fall back to query params for compatibility.
+    const fragment = parseFragment(window.location.hash);
+    const accessToken = fragment.get("access_token") || searchParams.get("access_token");
+    const refreshToken = fragment.get("refresh_token") || searchParams.get("refresh_token");
     const errorParam = searchParams.get("error");
+
+    // Clear fragment from URL to remove tokens from browser history
+    if (window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname);
+    }
 
     if (errorParam) {
       setError(errorParam);
@@ -33,6 +45,7 @@ function OidcCallbackContent() {
     }
 
     localStorage.setItem("access_token", accessToken);
+    document.cookie = `access_token=${accessToken}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
     if (refreshToken) {
       localStorage.setItem("refresh_token", refreshToken);
     }

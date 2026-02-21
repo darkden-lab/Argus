@@ -1,11 +1,11 @@
 package core
 
 import (
-	"encoding/json"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/httputil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -38,11 +38,11 @@ func (h *ConvenienceHandlers) ListNamespaces(w http.ResponseWriter, r *http.Requ
 
 	nsList, err := client.Clientset.CoreV1().Namespaces().List(r.Context(), metav1.ListOptions{})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errMsg(err.Error()))
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, nsList)
+	httputil.WriteJSON(w, http.StatusOK, nsList)
 }
 
 // ListNodes returns all nodes in the cluster.
@@ -54,11 +54,11 @@ func (h *ConvenienceHandlers) ListNodes(w http.ResponseWriter, r *http.Request) 
 
 	nodeList, err := client.Clientset.CoreV1().Nodes().List(r.Context(), metav1.ListOptions{})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errMsg(err.Error()))
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, nodeList)
+	httputil.WriteJSON(w, http.StatusOK, nodeList)
 }
 
 // ListEvents returns events in a given namespace (all namespaces if ?namespace is empty).
@@ -75,11 +75,11 @@ func (h *ConvenienceHandlers) ListEvents(w http.ResponseWriter, r *http.Request)
 	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "events"}
 	eventList, err := client.DynClient.Resource(gvr).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errMsg(err.Error()))
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, eventList)
+	httputil.WriteJSON(w, http.StatusOK, eventList)
 }
 
 // getClient is a helper that extracts the clusterID from the URL and returns
@@ -88,19 +88,9 @@ func (h *ConvenienceHandlers) getClient(w http.ResponseWriter, r *http.Request) 
 	clusterID := mux.Vars(r)["clusterID"]
 	client, err := h.clusterMgr.GetClient(clusterID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return nil, err
 	}
 	return client, nil
 }
 
-// writeJSON is a shared JSON response helper used across the core package.
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
-}
-
-func errMsg(msg string) map[string]string {
-	return map[string]string{"error": msg}
-}

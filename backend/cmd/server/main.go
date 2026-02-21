@@ -45,6 +45,9 @@ import (
 
 func main() {
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("Config validation failed: %v", err)
+	}
 
 	// Database
 	ctx := context.Background()
@@ -91,6 +94,7 @@ func main() {
 		ClientID:     cfg.OIDCClientID,
 		ClientSecret: cfg.OIDCClientSecret,
 		RedirectURL:  cfg.OIDCRedirectURL,
+		FrontendURL:  cfg.FrontendURL,
 	}, database, jwtService)
 	if err != nil {
 		log.Printf("WARNING: OIDC setup failed: %v (OIDC disabled)", err)
@@ -137,7 +141,7 @@ func main() {
 		digest := notifications.NewDigestAggregator(prefStore, chanStore, notifStore, notifRouter.GetChannels())
 		digest.Start()
 
-		notifHandlers = notifications.NewHandlers(notifStore, prefStore, chanStore, notifRouter)
+		notifHandlers = notifications.NewHandlers(notifStore, prefStore, chanStore, notifRouter, cfg.EncryptionKey)
 		log.Println("Notifications system initialized")
 	}
 
@@ -158,10 +162,12 @@ func main() {
 	agentHandlers := cluster.NewAgentHandlers(clusterMgr, agentRegistry)
 	agentHandlers.RegisterPublicRoutes(r)
 
-	// Auth routes (no auth middleware, global rate limit applies)
-	authHandlers.RegisterRoutes(r)
+	// Auth routes with strict rate limiting (10 req/s, burst 20 per IP)
+	authSubrouter := r.PathPrefix("").Subrouter()
+	authSubrouter.Use(mw.StrictRateLimitMiddleware(10, 20))
+	authHandlers.RegisterRoutes(authSubrouter)
 	if oidcService != nil && oidcService.Enabled() {
-		oidcService.RegisterRoutes(r)
+		oidcService.RegisterRoutes(authSubrouter)
 		log.Println("OIDC authentication enabled")
 	}
 
@@ -181,7 +187,7 @@ func main() {
 	roleHandlers.RegisterRoutes(protected)
 
 	// User management routes
-	userMgmtHandlers := auth.NewUserManagementHandlers(authService)
+	userMgmtHandlers := auth.NewUserManagementHandlers(authService, pool)
 	userMgmtHandlers.RegisterRoutes(protected)
 
 	// Cluster routes
@@ -220,7 +226,7 @@ func main() {
 	pluginEngine.RegisterAllWatchers(hub, clusterMgr)
 
 	// K8s Reverse Proxy (protected)
-	k8sProxy := proxy.NewK8sProxy(clusterMgr)
+	k8sProxy := proxy.NewK8sProxy(clusterMgr, rbacEngine)
 	k8sProxy.RegisterRoutes(protected)
 
 	// WebSocket
@@ -239,11 +245,12 @@ func main() {
 		}
 	}()
 
-	// HTTP Server — CORS wraps the entire router so OPTIONS preflight
+	// HTTP Server — security headers wrap CORS which wraps the router,
+	// so all responses include security headers and OPTIONS preflight
 	// requests are handled before mux routing (which would 404 on OPTIONS).
 	srv := &http.Server{
 		Addr:           ":" + cfg.Port,
-		Handler:        corsMiddleware(r),
+		Handler:        securityHeadersMiddleware(corsMiddleware(r)),
 		ReadTimeout:    15 * time.Second,
 		WriteTimeout:   15 * time.Second,
 		IdleTimeout:    60 * time.Second,
@@ -340,6 +347,18 @@ func startGRPCServer(cfg *config.Config, agentSrv *cluster.AgentServer) {
 	}
 }
 
+func securityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Referrer-Policy", "no-referrer")
+		w.Header().Set("Strict-Transport-Security", "max-age=63072000; includeSubDomains")
+		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:; object-src 'none'; frame-ancestors 'none'")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		next.ServeHTTP(w, r)
+	})
+}
+
 func corsMiddleware(next http.Handler) http.Handler {
 	allowedOrigins := os.Getenv("ALLOWED_ORIGINS")
 	if allowedOrigins == "" {
@@ -353,6 +372,11 @@ func corsMiddleware(next http.Handler) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
+		if origin == "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+
 		if origins[origin] {
 			w.Header().Set("Access-Control-Allow-Origin", origin)
 		} else if len(origins) == 1 {

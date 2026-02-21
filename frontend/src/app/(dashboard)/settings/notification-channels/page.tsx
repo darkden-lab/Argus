@@ -41,6 +41,7 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { toast } from "@/stores/toast";
 import { RBACGate } from "@/components/auth/rbac-gate";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import type { ChannelType } from "@/components/notifications/preferences-matrix";
 
 interface NotificationChannel {
@@ -109,6 +110,8 @@ export default function NotificationChannelsPage() {
   const [formType, setFormType] = useState<Exclude<ChannelType, "in_app">>("email");
   const [formName, setFormName] = useState("");
   const [formConfig, setFormConfig] = useState<Record<string, string>>({});
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     api
@@ -150,12 +153,15 @@ export default function NotificationChannelsPage() {
   }
 
   async function handleDelete(id: string) {
+    setDeletingId(id);
     try {
       await api.del(`/api/notifications/channels/${id}`);
       setChannels((prev) => prev.filter((c) => c.id !== id));
       toast("Channel removed", { variant: "success" });
     } catch {
       // handled by api
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -364,7 +370,7 @@ export default function NotificationChannelsPage() {
                           variant="ghost"
                           size="sm"
                           className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                          onClick={() => handleDelete(channel.id)}
+                          onClick={() => setConfirmDeleteId(channel.id)}
                         >
                           <Trash2 className="h-3 w-3" />
                         </Button>
@@ -377,6 +383,22 @@ export default function NotificationChannelsPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={confirmDeleteId !== null}
+        onOpenChange={(open) => { if (!open) setConfirmDeleteId(null); }}
+        title="Delete Channel"
+        description="Are you sure you want to delete this notification channel? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={deletingId !== null}
+        onConfirm={() => {
+          if (confirmDeleteId) {
+            handleDelete(confirmDeleteId);
+            setConfirmDeleteId(null);
+          }
+        }}
+      />
     </RBACGate>
   );
 }

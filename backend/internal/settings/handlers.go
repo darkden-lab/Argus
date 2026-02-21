@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/darkden-lab/argus/backend/internal/config"
+	"github.com/darkden-lab/argus/backend/internal/httputil"
 )
 
 // OidcConfig represents the OIDC configuration returned to and received from
@@ -52,7 +53,7 @@ func (h *Handlers) GetOIDC(w http.ResponseWriter, r *http.Request) {
 		if err == nil {
 			var oc OidcConfig
 			if jsonErr := json.Unmarshal(raw, &oc); jsonErr == nil {
-				writeJSON(w, http.StatusOK, oc)
+				httputil.WriteJSON(w, http.StatusOK, oc)
 				return
 			}
 		}
@@ -69,7 +70,7 @@ func (h *Handlers) GetOIDC(w http.ResponseWriter, r *http.Request) {
 		ProviderName: "",
 		RedirectURL:  h.cfg.OIDCRedirectURL,
 	}
-	writeJSON(w, http.StatusOK, oc)
+	httputil.WriteJSON(w, http.StatusOK, oc)
 }
 
 // UpdateOIDC handles PUT /api/settings/oidc.
@@ -77,36 +78,28 @@ func (h *Handlers) GetOIDC(w http.ResponseWriter, r *http.Request) {
 // returns the saved value.
 func (h *Handlers) UpdateOIDC(w http.ResponseWriter, r *http.Request) {
 	if h.pool == nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{
-			"error": "database not available",
-		})
+		httputil.WriteError(w, http.StatusServiceUnavailable, "database not available")
 		return
 	}
 
 	var oc OidcConfig
 	if err := json.NewDecoder(r.Body).Decode(&oc); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{
-			"error": "invalid request body",
-		})
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	raw, err := json.Marshal(oc)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to marshal config",
-		})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to marshal config")
 		return
 	}
 
 	if err := upsertSetting(r.Context(), h.pool, "oidc", raw); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{
-			"error": "failed to save settings",
-		})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to save settings")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, oc)
+	httputil.WriteJSON(w, http.StatusOK, oc)
 }
 
 // upsertSetting performs an INSERT ... ON CONFLICT UPDATE into the settings
@@ -121,11 +114,4 @@ func upsertSetting(ctx context.Context, pool *pgxpool.Pool, key string, value []
 		key, value,
 	)
 	return err
-}
-
-// writeJSON is a small helper that writes a JSON response.
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data) //nolint:errcheck
 }

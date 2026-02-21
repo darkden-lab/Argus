@@ -40,7 +40,7 @@ func Middleware(store *Store) mux.MiddlewareFunc {
 			// Extract cluster ID from path if present
 			var clusterID *string
 			vars := mux.Vars(r)
-			if cid, ok := vars["cluster"]; ok && cid != "" {
+			if cid, ok := vars["clusterID"]; ok && cid != "" {
 				clusterID = &cid
 			} else if cid, ok := vars["id"]; ok && cid != "" {
 				// cluster handlers use {id}

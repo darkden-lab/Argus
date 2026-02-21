@@ -4,6 +4,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1000;
 
+let isRedirecting = false;
+
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -59,7 +61,8 @@ async function fetchWithAuth<T>(path: string, method: string, body?: unknown, re
   if (res.status === 401) {
     const refreshed = await tryRefreshToken();
     if (!refreshed) {
-      if (typeof window !== 'undefined') {
+      if (typeof window !== 'undefined' && !isRedirecting) {
+        isRedirecting = true;
         window.location.href = '/login';
       }
       throw new ApiError('Unauthorized', 401);

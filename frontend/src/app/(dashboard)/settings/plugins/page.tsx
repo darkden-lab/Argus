@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Loader2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -21,20 +22,17 @@ interface Plugin {
   enabled: boolean;
 }
 
-const placeholderPlugins: Plugin[] = [
-  { id: "prometheus", name: "Prometheus Operator", version: "0.72.0", description: "Monitoring and alerting with Prometheus", enabled: true },
-  { id: "istio", name: "Istio Service Mesh", version: "1.21.0", description: "Service mesh for traffic management and security", enabled: true },
-  { id: "calico", name: "Calico CNI", version: "3.27.0", description: "Network policy engine for Kubernetes", enabled: true },
-  { id: "argocd", name: "Argo CD", version: "2.10.0", description: "Declarative GitOps continuous delivery", enabled: false },
-  { id: "certmanager", name: "cert-manager", version: "1.14.0", description: "Automated TLS certificate management", enabled: false },
-];
-
 export default function PluginsPage() {
-  const [plugins, setPlugins] = useState<Plugin[]>(placeholderPlugins);
+  const [plugins, setPlugins] = useState<Plugin[]>([]);
+  const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState<string | null>(null);
 
   useEffect(() => {
-    api.get<Plugin[]>("/api/plugins").then(setPlugins).catch(() => {});
+    api
+      .get<Plugin[]>("/api/plugins")
+      .then(setPlugins)
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, []);
 
   async function handleToggle(plugin: Plugin) {
@@ -69,7 +67,23 @@ export default function PluginsPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {plugins.map((plugin) => (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center">
+                  <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading plugins...
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : plugins.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                  No plugins available.
+                </TableCell>
+              </TableRow>
+            ) : (
+            plugins.map((plugin) => (
               <TableRow key={plugin.id}>
                 <TableCell className="font-medium">{plugin.name}</TableCell>
                 <TableCell>
@@ -88,7 +102,8 @@ export default function PluginsPage() {
                   />
                 </TableCell>
               </TableRow>
-            ))}
+            ))
+            )}
           </TableBody>
         </Table>
       </div>

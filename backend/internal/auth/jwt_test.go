@@ -81,19 +81,30 @@ func TestGenerateRefreshToken(t *testing.T) {
 		t.Fatalf("GenerateRefreshToken failed: %v", err)
 	}
 
-	claims, err := svc.ValidateToken(token)
+	// Refresh tokens must be validated with ValidateRefreshToken, not ValidateToken
+	claims, err := svc.ValidateRefreshToken(token)
 	if err != nil {
-		t.Fatalf("ValidateToken failed: %v", err)
+		t.Fatalf("ValidateRefreshToken failed: %v", err)
 	}
 
 	if claims.UserID != "user-456" {
 		t.Errorf("expected UserID 'user-456', got '%s'", claims.UserID)
 	}
 
+	if claims.TokenType != TokenTypeRefresh {
+		t.Errorf("expected TokenType %q, got %q", TokenTypeRefresh, claims.TokenType)
+	}
+
 	// Refresh token should have longer expiry
 	expiry := claims.ExpiresAt.Time
 	if time.Until(expiry) < 24*time.Hour {
 		t.Error("refresh token expiry should be more than 24 hours")
+	}
+
+	// ValidateToken must reject refresh tokens
+	_, err = svc.ValidateToken(token)
+	if err == nil {
+		t.Fatal("expected ValidateToken to reject refresh token")
 	}
 
 	_ = jwt.SigningMethodHS256 // ensure jwt import is used

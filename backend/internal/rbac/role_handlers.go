@@ -6,7 +6,11 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/darkden-lab/argus/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/httputil"
 )
 
 // RoleHandlers provides HTTP handlers for role management (CRUD + assignments).
@@ -26,12 +30,6 @@ func (h *RoleHandlers) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/roles/assignments", h.handleListAssignments).Methods("GET")
 	r.HandleFunc("/api/roles/assign", h.handleAssignRole).Methods("POST")
 	r.HandleFunc("/api/roles/revoke/{id}", h.handleRevokeRole).Methods("DELETE")
-}
-
-func writeRoleJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data) //nolint:errcheck
 }
 
 // --- Response types ---
@@ -59,10 +57,42 @@ type assignmentResponse struct {
 	Namespace   string `json:"namespace"`
 }
 
+// --- Helpers ---
+
+// requirePermission checks whether the caller has the given resource/action permission.
+// Returns false and writes the appropriate error response if not allowed.
+func (h *RoleHandlers) requirePermission(w http.ResponseWriter, r *http.Request, resource, action string) bool {
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		httputil.WriteError(w, http.StatusUnauthorized, "unauthorized")
+		return false
+	}
+
+	allowed, err := h.engine.Evaluate(r.Context(), Request{
+		UserID:   claims.UserID,
+		Resource: resource,
+		Action:   action,
+	})
+	if err != nil {
+		log.Printf("ERROR: RBAC evaluation failed for user %s: %v", claims.UserID, err)
+		httputil.WriteError(w, http.StatusInternalServerError, "permission check failed")
+		return false
+	}
+	if !allowed {
+		httputil.WriteError(w, http.StatusForbidden, "insufficient permissions")
+		return false
+	}
+	return true
+}
+
 // --- Handlers ---
 
 // handleListRoles returns all roles with their associated permissions.
 func (h *RoleHandlers) handleListRoles(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "read") {
+		return
+	}
+
 	query := `
 		SELECT r.id, r.name, COALESCE(r.description, ''),
 		       COALESCE(json_agg(json_build_object(
@@ -80,7 +110,7 @@ func (h *RoleHandlers) handleListRoles(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.pool.Query(r.Context(), query)
 	if err != nil {
 		log.Printf("ERROR: failed to list roles: %v", err)
-		writeRoleJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list roles"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to list roles")
 		return
 	}
 	defer rows.Close()
@@ -92,7 +122,7 @@ func (h *RoleHandlers) handleListRoles(w http.ResponseWriter, r *http.Request) {
 
 		if err := rows.Scan(&role.ID, &role.Name, &role.Description, &permsJSON); err != nil {
 			log.Printf("ERROR: failed to scan role: %v", err)
-			writeRoleJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to scan role"})
+			httputil.WriteError(w, http.StatusInternalServerError, "failed to scan role")
 			return
 		}
 
@@ -106,15 +136,18 @@ func (h *RoleHandlers) handleListRoles(w http.ResponseWriter, r *http.Request) {
 
 	if err := rows.Err(); err != nil {
 		log.Printf("ERROR: failed to iterate roles: %v", err)
-		writeRoleJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list roles"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to list roles")
 		return
 	}
 
-	writeRoleJSON(w, http.StatusOK, roles)
+	httputil.WriteJSON(w, http.StatusOK, roles)
 }
 
 // handleListAssignments returns all user-role assignments.
 func (h *RoleHandlers) handleListAssignments(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "read") {
+		return
+	}
 	query := `
 		SELECT ur.id, u.email, COALESCE(u.display_name, ''), r.name,
 		       COALESCE(ur.cluster_id::text, ''), COALESCE(ur.namespace, '')
@@ -127,7 +160,7 @@ func (h *RoleHandlers) handleListAssignments(w http.ResponseWriter, r *http.Requ
 	rows, err := h.pool.Query(r.Context(), query)
 	if err != nil {
 		log.Printf("ERROR: failed to list assignments: %v", err)
-		writeRoleJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list assignments"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to list assignments")
 		return
 	}
 	defer rows.Close()
@@ -137,7 +170,7 @@ func (h *RoleHandlers) handleListAssignments(w http.ResponseWriter, r *http.Requ
 		var a assignmentResponse
 		if err := rows.Scan(&a.ID, &a.Email, &a.DisplayName, &a.RoleName, &a.ClusterID, &a.Namespace); err != nil {
 			log.Printf("ERROR: failed to scan assignment: %v", err)
-			writeRoleJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to scan assignment"})
+			httputil.WriteError(w, http.StatusInternalServerError, "failed to scan assignment")
 			return
 		}
 		assignments = append(assignments, a)
@@ -145,15 +178,19 @@ func (h *RoleHandlers) handleListAssignments(w http.ResponseWriter, r *http.Requ
 
 	if err := rows.Err(); err != nil {
 		log.Printf("ERROR: failed to iterate assignments: %v", err)
-		writeRoleJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list assignments"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to list assignments")
 		return
 	}
 
-	writeRoleJSON(w, http.StatusOK, assignments)
+	httputil.WriteJSON(w, http.StatusOK, assignments)
 }
 
 // handleAssignRole assigns a role to a user, optionally scoped to a cluster/namespace.
 func (h *RoleHandlers) handleAssignRole(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "write") {
+		return
+	}
+
 	var req struct {
 		UserEmail string `json:"user_email"`
 		RoleName  string `json:"role_name"`
@@ -162,12 +199,12 @@ func (h *RoleHandlers) handleAssignRole(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeRoleJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.UserEmail == "" || req.RoleName == "" {
-		writeRoleJSON(w, http.StatusBadRequest, map[string]string{"error": "user_email and role_name are required"})
+		httputil.WriteError(w, http.StatusBadRequest, "user_email and role_name are required")
 		return
 	}
 
@@ -178,7 +215,7 @@ func (h *RoleHandlers) handleAssignRole(w http.ResponseWriter, r *http.Request) 
 	err := h.pool.QueryRow(ctx, "SELECT id FROM users WHERE email = $1", req.UserEmail).Scan(&userID)
 	if err != nil {
 		log.Printf("WARNING: user not found for email %s: %v", req.UserEmail, err)
-		writeRoleJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+		httputil.WriteError(w, http.StatusNotFound, "user not found")
 		return
 	}
 
@@ -187,8 +224,23 @@ func (h *RoleHandlers) handleAssignRole(w http.ResponseWriter, r *http.Request) 
 	err = h.pool.QueryRow(ctx, "SELECT id FROM roles WHERE name = $1", req.RoleName).Scan(&roleID)
 	if err != nil {
 		log.Printf("WARNING: role not found for name %s: %v", req.RoleName, err)
-		writeRoleJSON(w, http.StatusNotFound, map[string]string{"error": "role not found"})
+		httputil.WriteError(w, http.StatusNotFound, "role not found")
 		return
+	}
+
+	// Validate cluster_id if provided
+	if req.ClusterID != "" {
+		var exists string
+		err = h.pool.QueryRow(ctx, "SELECT id FROM clusters WHERE id = $1", req.ClusterID).Scan(&exists)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				httputil.WriteError(w, http.StatusBadRequest, "cluster_id does not exist")
+			} else {
+				log.Printf("ERROR: failed to validate cluster_id %s: %v", req.ClusterID, err)
+				httputil.WriteError(w, http.StatusInternalServerError, "failed to validate cluster")
+			}
+			return
+		}
 	}
 
 	// Insert into user_roles
@@ -211,14 +263,14 @@ func (h *RoleHandlers) handleAssignRole(w http.ResponseWriter, r *http.Request) 
 	).Scan(&assignmentID)
 	if err != nil {
 		log.Printf("ERROR: failed to assign role: %v", err)
-		writeRoleJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to assign role"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to assign role")
 		return
 	}
 
 	// Invalidate RBAC cache for the user
 	h.engine.InvalidateCache(userID)
 
-	writeRoleJSON(w, http.StatusCreated, map[string]string{
+	httputil.WriteJSON(w, http.StatusCreated, map[string]string{
 		"id":      assignmentID,
 		"message": "role assigned successfully",
 	})
@@ -226,10 +278,14 @@ func (h *RoleHandlers) handleAssignRole(w http.ResponseWriter, r *http.Request) 
 
 // handleRevokeRole removes a user-role assignment by its ID.
 func (h *RoleHandlers) handleRevokeRole(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "write") {
+		return
+	}
+
 	vars := mux.Vars(r)
 	id := vars["id"]
 	if id == "" {
-		writeRoleJSON(w, http.StatusBadRequest, map[string]string{"error": "assignment id is required"})
+		httputil.WriteError(w, http.StatusBadRequest, "assignment id is required")
 		return
 	}
 
@@ -240,7 +296,7 @@ func (h *RoleHandlers) handleRevokeRole(w http.ResponseWriter, r *http.Request) 
 	err := h.pool.QueryRow(ctx, "SELECT user_id FROM user_roles WHERE id = $1", id).Scan(&userID)
 	if err != nil {
 		log.Printf("WARNING: assignment not found for id %s: %v", id, err)
-		writeRoleJSON(w, http.StatusNotFound, map[string]string{"error": "assignment not found"})
+		httputil.WriteError(w, http.StatusNotFound, "assignment not found")
 		return
 	}
 
@@ -248,12 +304,12 @@ func (h *RoleHandlers) handleRevokeRole(w http.ResponseWriter, r *http.Request) 
 	_, err = h.pool.Exec(ctx, "DELETE FROM user_roles WHERE id = $1", id)
 	if err != nil {
 		log.Printf("ERROR: failed to revoke role: %v", err)
-		writeRoleJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to revoke role"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to revoke role")
 		return
 	}
 
 	// Invalidate RBAC cache for the user
 	h.engine.InvalidateCache(userID)
 
-	writeRoleJSON(w, http.StatusOK, map[string]string{"message": "role revoked successfully"})
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"message": "role revoked successfully"})
 }

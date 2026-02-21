@@ -118,10 +118,7 @@ export default function LoginPage() {
             )}
 
             <p className="text-center text-sm text-muted-foreground">
-              Don&apos;t have an account?{' '}
-              <a href="/register" className="text-primary underline">
-                Register
-              </a>
+              Contact your administrator for account creation.
             </p>
           </form>
         </CardContent>

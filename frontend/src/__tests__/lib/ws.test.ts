@@ -198,7 +198,7 @@ describe('K8sWebSocket', () => {
     k8sWs.connect('test-token');
     jest.runAllTimers();
 
-    const unsubscribe = k8sWs.on('prod/pods/default', callback);
+    const unsubscribe = k8sWs.on('prod/default/pods', callback);
     unsubscribe();
 
     const event: WatchEvent = {

@@ -2,12 +2,16 @@ package auth
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/darkden-lab/argus/backend/internal/db"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// ErrUserNotFound is returned when a user lookup or mutation targets a non-existent user.
+var ErrUserNotFound = errors.New("user not found")
 
 type User struct {
 	ID           string    `json:"id"`
@@ -50,6 +54,8 @@ func (s *AuthService) Register(ctx context.Context, email, password, displayName
 	return &user, nil
 }
 
+// TODO: Implement refresh token revocation table. Currently refresh tokens remain valid after logout.
+
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, string, error) {
 	var id, storedHash string
 	err := s.db.Pool.QueryRow(ctx,
@@ -83,7 +89,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 }
 
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (string, error) {
-	claims, err := s.jwt.ValidateToken(refreshToken)
+	claims, err := s.jwt.ValidateRefreshToken(refreshToken)
 	if err != nil {
 		return "", fmt.Errorf("invalid refresh token: %w", err)
 	}
@@ -127,7 +133,7 @@ func (s *AuthService) DeleteUser(ctx context.Context, id string) error {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
 	if result.RowsAffected() == 0 {
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
 	}
 	return nil
 }

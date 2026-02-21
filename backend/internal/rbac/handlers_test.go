@@ -30,14 +30,14 @@ func TestHandleGetPermissionsUnauthorized(t *testing.T) {
 	}
 }
 
-func TestHandleGetPermissionsDefaultAdmin(t *testing.T) {
+func TestHandleGetPermissionsNoRoles(t *testing.T) {
 	e := newTestEngine()
-	// Seed empty permissions so LoadPermissions returns empty (via cache)
+	// Seed empty permissions: user has no roles assigned.
 	seedCache(e, "user-1", []Permission{})
 
 	h := NewHandlers(e)
 
-	claims := &auth.Claims{UserID: "user-1", Email: "admin@test.com"}
+	claims := &auth.Claims{UserID: "user-1", Email: "newuser@test.com"}
 	ctx := auth.ContextWithClaims(context.Background(), claims)
 	req := httptest.NewRequest("GET", "/api/auth/permissions", nil).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -53,13 +53,11 @@ func TestHandleGetPermissionsDefaultAdmin(t *testing.T) {
 		t.Fatalf("failed to decode response: %v", err)
 	}
 
-	if len(resp.Permissions) != 1 {
-		t.Fatalf("expected 1 default permission, got %d", len(resp.Permissions))
-	}
-
-	p := resp.Permissions[0]
-	if p.Resource != "*" || p.Action != "*" || p.ScopeType != "global" || p.ScopeID != "*" {
-		t.Errorf("unexpected default permission: %+v", p)
+	// Deny-by-default: users with no roles must receive an empty permissions list,
+	// NOT a wildcard admin grant.
+	if len(resp.Permissions) != 0 {
+		t.Errorf("SECURITY: expected 0 permissions for user with no roles, got %d: %+v",
+			len(resp.Permissions), resp.Permissions)
 	}
 }
 

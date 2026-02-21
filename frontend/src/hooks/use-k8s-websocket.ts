@@ -23,14 +23,6 @@ export function useK8sWebSocket({
   callbackRef.current = onEvent;
 
   useEffect(() => {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("access_token")
-        : null;
-
-    if (!token) return;
-
-    k8sWs.connect(token);
     setIsConnected(true);
 
     k8sWs.subscribe(cluster, resource, namespace);
@@ -63,14 +55,6 @@ export function useK8sWildcard({ onEvent }: UseK8sWildcardOptions) {
   callbackRef.current = onEvent;
 
   useEffect(() => {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("access_token")
-        : null;
-
-    if (!token) return;
-
-    k8sWs.connect(token);
     setIsConnected(true);
 
     const unsubscribeListener = k8sWs.on("*", (event) => {

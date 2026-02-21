@@ -81,15 +81,35 @@ func TestRefreshTokenCannotBeUsedAsAccessToken(t *testing.T) {
 		t.Fatalf("GenerateRefreshToken failed: %v", err)
 	}
 
-	// Validate succeeds (it's a valid JWT), but it should not have an email claim
-	claims, err := svc.ValidateToken(refreshToken)
-	if err != nil {
-		t.Fatalf("ValidateToken failed for refresh token: %v", err)
+	// ValidateToken must reject refresh tokens
+	_, err = svc.ValidateToken(refreshToken)
+	if err == nil {
+		t.Fatal("SECURITY: refresh token accepted as access token - tokens are interchangeable")
 	}
 
-	// Refresh tokens have empty email - this distinguishes them from access tokens
-	if claims.Email != "" {
-		t.Error("SECURITY: refresh token should not have email claim set")
+	// ValidateRefreshToken must accept refresh tokens
+	claims, err := svc.ValidateRefreshToken(refreshToken)
+	if err != nil {
+		t.Fatalf("ValidateRefreshToken failed: %v", err)
+	}
+	if claims.TokenType != TokenTypeRefresh {
+		t.Errorf("expected TokenType %q, got %q", TokenTypeRefresh, claims.TokenType)
+	}
+}
+
+// TestAccessTokenCannotBeUsedAsRefreshToken ensures that an access token
+// is not accepted when a refresh token is expected.
+func TestAccessTokenCannotBeUsedAsRefreshToken(t *testing.T) {
+	svc := NewJWTService("test-secret")
+
+	accessToken, err := svc.GenerateToken("user-123", "test@test.com")
+	if err != nil {
+		t.Fatalf("GenerateToken failed: %v", err)
+	}
+
+	_, err = svc.ValidateRefreshToken(accessToken)
+	if err == nil {
+		t.Fatal("SECURITY: access token accepted as refresh token - tokens are interchangeable")
 	}
 }
 
@@ -118,7 +138,7 @@ func TestRefreshTokenExpiryLongerThanAccess(t *testing.T) {
 	refreshToken, _ := svc.GenerateRefreshToken("user-1")
 
 	accessClaims, _ := svc.ValidateToken(accessToken)
-	refreshClaims, _ := svc.ValidateToken(refreshToken)
+	refreshClaims, _ := svc.ValidateRefreshToken(refreshToken)
 
 	if !refreshClaims.ExpiresAt.After(accessClaims.ExpiresAt.Time) {
 		t.Fatal("SECURITY: refresh token does not expire after access token")

@@ -24,6 +24,8 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Plus, Trash2, Loader2 } from "lucide-react";
+import { RBACGate } from "@/components/auth/rbac-gate";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 interface User {
   id: string;
@@ -41,6 +43,7 @@ export default function UsersPage() {
   const [open, setOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [form, setForm] = useState({ email: "", password: "", displayName: "" });
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -205,19 +208,21 @@ export default function UsersPage() {
                     {formatDate(user.last_login)}
                   </TableCell>
                   <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-8 w-8 text-destructive hover:text-destructive"
-                      onClick={() => handleDelete(user.id)}
-                      disabled={deleting === user.id}
-                    >
-                      {deleting === user.id ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Trash2 className="h-4 w-4" />
-                      )}
-                    </Button>
+                    <RBACGate resource="users" action="delete">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => setConfirmDelete(user.id)}
+                        disabled={deleting === user.id}
+                      >
+                        {deleting === user.id ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4" />
+                        )}
+                      </Button>
+                    </RBACGate>
                   </TableCell>
                 </TableRow>
               ))
@@ -225,6 +230,22 @@ export default function UsersPage() {
           </TableBody>
         </Table>
       </div>
+
+      <ConfirmDialog
+        open={confirmDelete !== null}
+        onOpenChange={(open) => { if (!open) setConfirmDelete(null); }}
+        title="Delete User"
+        description="Are you sure you want to delete this user? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        loading={deleting !== null}
+        onConfirm={() => {
+          if (confirmDelete) {
+            handleDelete(confirmDelete);
+            setConfirmDelete(null);
+          }
+        }}
+      />
     </div>
   );
 }

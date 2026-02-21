@@ -3,7 +3,6 @@ package middleware
 import (
 	"net"
 	"net/http"
-	"strings"
 	"sync"
 	"time"
 
@@ -80,17 +79,11 @@ func (s *rateLimiterStore) cleanup() {
 }
 
 
-// clientIP extracts the client IP address from the request, checking
-// X-Forwarded-For first, then falling back to RemoteAddr.
+// clientIP extracts the client IP address from the request using RemoteAddr.
+// X-Forwarded-For is intentionally ignored to prevent IP spoofing that would
+// bypass rate limiting. If running behind a trusted reverse proxy, the proxy
+// should set RemoteAddr or a trusted header at the network level.
 func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		// X-Forwarded-For may contain a comma-separated list; take the first.
-		if idx := strings.IndexByte(xff, ','); idx != -1 {
-			return strings.TrimSpace(xff[:idx])
-		}
-		return strings.TrimSpace(xff)
-	}
-
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		// RemoteAddr might not have a port.

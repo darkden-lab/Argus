@@ -125,13 +125,13 @@ describe('LoginPage', () => {
     expect(screen.getByText('Signing in...')).toBeInTheDocument();
   });
 
-  it('has a register link', async () => {
+  it('shows admin contact message instead of register link', async () => {
     await act(async () => {
       renderLoginPage();
     });
 
-    const registerLink = screen.getByText('Register');
-    expect(registerLink).toHaveAttribute('href', '/register');
+    expect(screen.getByText('Contact your administrator for account creation.')).toBeInTheDocument();
+    expect(screen.queryByText('Register')).not.toBeInTheDocument();
   });
 
   it('shows OIDC button when OIDC is enabled', async () => {

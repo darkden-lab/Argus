@@ -47,14 +47,6 @@ func (h *Handlers) handleGetPermissions(w http.ResponseWriter, r *http.Request) 
 		perms = nil
 	}
 
-	// If no permissions found (no roles assigned yet), return default admin
-	// permissions as a temporary measure until role assignment UI is available.
-	if len(perms) == 0 {
-		perms = []Permission{
-			{Resource: "*", Action: "*", ScopeType: "global", ScopeID: "*"},
-		}
-	}
-
 	resp := permissionsEnvelope{
 		Permissions: make([]permissionResponse, len(perms)),
 	}

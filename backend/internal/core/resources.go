@@ -6,6 +6,7 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/httputil"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
@@ -55,17 +56,17 @@ func (h *ResourceHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.clusterMgr.GetClient(clusterID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return
 	}
 
 	list, err := client.DynClient.Resource(gvr).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errMsg(err.Error()))
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, list)
+	httputil.WriteJSON(w, http.StatusOK, list)
 }
 
 // Get returns a single named resource.
@@ -78,17 +79,17 @@ func (h *ResourceHandler) Get(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.clusterMgr.GetClient(clusterID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return
 	}
 
 	obj, err := client.DynClient.Resource(gvr).Namespace(namespace).Get(r.Context(), name, metav1.GetOptions{})
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, errMsg(err.Error()))
+		httputil.WriteError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, obj)
+	httputil.WriteJSON(w, http.StatusOK, obj)
 }
 
 // Create applies the resource from the request body.
@@ -100,23 +101,23 @@ func (h *ResourceHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.clusterMgr.GetClient(clusterID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return
 	}
 
 	var obj unstructured.Unstructured
 	if err := json.NewDecoder(r.Body).Decode(&obj.Object); err != nil {
-		writeJSON(w, http.StatusBadRequest, errMsg("invalid request body"))
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	created, err := client.DynClient.Resource(gvr).Namespace(namespace).Create(r.Context(), &obj, metav1.CreateOptions{})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errMsg(err.Error()))
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, created)
+	httputil.WriteJSON(w, http.StatusCreated, created)
 }
 
 // Update replaces an existing resource.
@@ -128,23 +129,23 @@ func (h *ResourceHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.clusterMgr.GetClient(clusterID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return
 	}
 
 	var obj unstructured.Unstructured
 	if err := json.NewDecoder(r.Body).Decode(&obj.Object); err != nil {
-		writeJSON(w, http.StatusBadRequest, errMsg("invalid request body"))
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	updated, err := client.DynClient.Resource(gvr).Namespace(namespace).Update(r.Context(), &obj, metav1.UpdateOptions{})
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, errMsg(err.Error()))
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, updated)
+	httputil.WriteJSON(w, http.StatusOK, updated)
 }
 
 // Delete removes a named resource.
@@ -157,12 +158,12 @@ func (h *ResourceHandler) Delete(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.clusterMgr.GetClient(clusterID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return
 	}
 
 	if err := client.DynClient.Resource(gvr).Namespace(namespace).Delete(r.Context(), name, metav1.DeleteOptions{}); err != nil {
-		writeJSON(w, http.StatusInternalServerError, errMsg(err.Error()))
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

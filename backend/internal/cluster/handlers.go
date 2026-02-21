@@ -5,6 +5,8 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+
+	"github.com/darkden-lab/argus/backend/internal/httputil"
 )
 
 type Handlers struct {
@@ -33,28 +35,28 @@ type createClusterRequest struct {
 func (h *Handlers) handleCreate(w http.ResponseWriter, r *http.Request) {
 	var req createClusterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Name == "" || req.APIServerURL == "" || req.Kubeconfig == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name, api_server_url, and kubeconfig are required"})
+		httputil.WriteError(w, http.StatusBadRequest, "name, api_server_url, and kubeconfig are required")
 		return
 	}
 
 	cluster, err := h.manager.AddCluster(r.Context(), req.Name, req.APIServerURL, []byte(req.Kubeconfig))
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to add cluster"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to add cluster")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, cluster)
+	httputil.WriteJSON(w, http.StatusCreated, cluster)
 }
 
 func (h *Handlers) handleList(w http.ResponseWriter, r *http.Request) {
 	clusters, err := h.manager.ListClusters(r.Context())
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list clusters"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to list clusters")
 		return
 	}
 
@@ -62,7 +64,7 @@ func (h *Handlers) handleList(w http.ResponseWriter, r *http.Request) {
 		clusters = []*Cluster{}
 	}
 
-	writeJSON(w, http.StatusOK, clusters)
+	httputil.WriteJSON(w, http.StatusOK, clusters)
 }
 
 func (h *Handlers) handleGet(w http.ResponseWriter, r *http.Request) {
@@ -70,18 +72,18 @@ func (h *Handlers) handleGet(w http.ResponseWriter, r *http.Request) {
 
 	cluster, err := h.manager.store.GetCluster(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "cluster not found"})
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, cluster)
+	httputil.WriteJSON(w, http.StatusOK, cluster)
 }
 
 func (h *Handlers) handleDelete(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
 	if err := h.manager.RemoveCluster(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to remove cluster"})
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to remove cluster")
 		return
 	}
 
@@ -93,7 +95,7 @@ func (h *Handlers) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 
 	client, err := h.manager.GetClient(id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "cluster not found"})
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return
 	}
 
@@ -105,11 +107,5 @@ func (h *Handlers) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 
 	_ = h.manager.store.UpdateClusterStatus(r.Context(), id, status)
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": status})
-}
-
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": status})
 }

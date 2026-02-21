@@ -9,12 +9,13 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gorilla/websocket"
 	"github.com/darkden-lab/argus/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/ws"
 )
 
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  4096,
 	WriteBufferSize: 4096,
-	CheckOrigin:     func(r *http.Request) bool { return true },
+	CheckOrigin:     ws.CheckOrigin,
 }
 
 // ChatHandler handles WebSocket connections for AI chat.

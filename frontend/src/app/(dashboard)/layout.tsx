@@ -5,6 +5,7 @@ import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { MainContent } from "@/components/layout/main-content";
 import { usePermissionsStore } from "@/stores/permissions";
+import { useAuthStore } from "@/stores/auth";
 import { k8sWs } from "@/lib/ws";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ToastContainer } from "@/components/ui/toast";
@@ -17,6 +18,7 @@ export default function DashboardLayout({
 }) {
   const fetchPermissions = usePermissionsStore((s) => s.fetchPermissions);
   const isLoaded = usePermissionsStore((s) => s.isLoaded);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
 
   useEffect(() => {
     if (!isLoaded) {
@@ -25,6 +27,7 @@ export default function DashboardLayout({
   }, [fetchPermissions, isLoaded]);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const token = localStorage.getItem("access_token");
     if (token) {
       k8sWs.connect(token);
@@ -32,7 +35,7 @@ export default function DashboardLayout({
     return () => {
       k8sWs.disconnect();
     };
-  }, []);
+  }, [isAuthenticated]);
 
   return (
     <div className="flex h-screen overflow-hidden">

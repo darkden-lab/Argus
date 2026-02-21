@@ -144,38 +144,39 @@ func TestStrictRateLimitMiddleware_StricterThanRegular(t *testing.T) {
 	}
 }
 
-func TestRateLimitMiddleware_XForwardedFor(t *testing.T) {
+func TestRateLimitMiddleware_XForwardedForIgnored(t *testing.T) {
 	middleware := RateLimitMiddleware(1, 1)
 	handler := middleware(okHandler)
 
-	// First request with X-Forwarded-For should use the forwarded IP.
+	// First request with X-Forwarded-For — should use RemoteAddr, not XFF.
 	req1 := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	req1.RemoteAddr = "10.0.0.1:12345"
-	req1.Header.Set("X-Forwarded-For", "203.0.113.50, 70.41.3.18")
+	req1.Header.Set("X-Forwarded-For", "203.0.113.50")
 	rr1 := httptest.NewRecorder()
 	handler.ServeHTTP(rr1, req1)
 	if rr1.Code != http.StatusOK {
-		t.Fatalf("XFF first request: expected 200, got %d", rr1.Code)
+		t.Fatalf("First request: expected 200, got %d", rr1.Code)
 	}
 
-	// Second request from same X-Forwarded-For should be limited.
+	// Second request with DIFFERENT XFF but same RemoteAddr — should be rate
+	// limited because XFF is intentionally ignored (prevents IP spoofing).
 	req2 := httptest.NewRequest(http.MethodGet, "/api/test", nil)
 	req2.RemoteAddr = "10.0.0.1:12345"
-	req2.Header.Set("X-Forwarded-For", "203.0.113.50")
+	req2.Header.Set("X-Forwarded-For", "198.51.100.99")
 	rr2 := httptest.NewRecorder()
 	handler.ServeHTTP(rr2, req2)
 	if rr2.Code != http.StatusTooManyRequests {
-		t.Errorf("XFF second request: expected 429, got %d", rr2.Code)
+		t.Errorf("Same RemoteAddr different XFF: expected 429, got %d (XFF must be ignored)", rr2.Code)
 	}
 
-	// Request from the same RemoteAddr but different/no XFF should NOT be limited
-	// (proves XFF takes priority).
+	// Request from a DIFFERENT RemoteAddr should NOT be limited.
 	req3 := httptest.NewRequest(http.MethodGet, "/api/test", nil)
-	req3.RemoteAddr = "10.0.0.1:12345"
+	req3.RemoteAddr = "10.0.0.2:12345"
+	req3.Header.Set("X-Forwarded-For", "203.0.113.50")
 	rr3 := httptest.NewRecorder()
 	handler.ServeHTTP(rr3, req3)
 	if rr3.Code != http.StatusOK {
-		t.Errorf("RemoteAddr-only request: expected 200, got %d (XFF and RemoteAddr should be separate)", rr3.Code)
+		t.Errorf("Different RemoteAddr: expected 200, got %d", rr3.Code)
 	}
 }
 
@@ -223,22 +224,22 @@ func TestClientIP(t *testing.T) {
 			want:       "192.168.1.1",
 		},
 		{
-			name:       "XFF single IP",
+			name:       "XFF ignored for security - uses RemoteAddr",
 			remoteAddr: "10.0.0.1:1234",
 			xff:        "203.0.113.50",
-			want:       "203.0.113.50",
+			want:       "10.0.0.1",
 		},
 		{
-			name:       "XFF multiple IPs takes first",
+			name:       "XFF multiple IPs still ignored",
 			remoteAddr: "10.0.0.1:1234",
 			xff:        "203.0.113.50, 70.41.3.18, 150.172.238.178",
-			want:       "203.0.113.50",
+			want:       "10.0.0.1",
 		},
 		{
-			name:       "XFF with whitespace",
+			name:       "XFF with whitespace still ignored",
 			remoteAddr: "10.0.0.1:1234",
 			xff:        "  203.0.113.50  ",
-			want:       "203.0.113.50",
+			want:       "10.0.0.1",
 		},
 	}
 

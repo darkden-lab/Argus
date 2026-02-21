@@ -62,9 +62,16 @@ interface Assignment {
   namespace: string;
 }
 
+interface User {
+  id: string;
+  email: string;
+  display_name: string;
+}
+
 export default function RolesPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [loadingRoles, setLoadingRoles] = useState(true);
   const [loadingAssignments, setLoadingAssignments] = useState(true);
   const [expandedRole, setExpandedRole] = useState<string | null>(null);
@@ -97,10 +104,20 @@ export default function RolesPage() {
     }
   }, []);
 
+  const fetchUsers = useCallback(async () => {
+    try {
+      const data = await api.get<User[]>("/api/users");
+      setUsers(data ?? []);
+    } catch {
+      setUsers([]);
+    }
+  }, []);
+
   useEffect(() => {
     fetchRoles();
     fetchAssignments();
-  }, [fetchRoles, fetchAssignments]);
+    fetchUsers();
+  }, [fetchRoles, fetchAssignments, fetchUsers]);
 
   async function handleAssign(e: React.FormEvent) {
     e.preventDefault();
@@ -160,15 +177,19 @@ export default function RolesPage() {
                 </DialogHeader>
                 <div className="grid gap-4 py-4">
                   <div className="grid gap-2">
-                    <Label htmlFor="user">User Email</Label>
-                    <Input
-                      id="user"
-                      type="email"
-                      placeholder="user@example.com"
-                      value={form.user}
-                      onChange={(e) => setForm({ ...form, user: e.target.value })}
-                      required
-                    />
+                    <Label>User</Label>
+                    <Select value={form.user} onValueChange={(v) => setForm({ ...form, user: v })}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select user" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {users.map((u) => (
+                          <SelectItem key={u.id} value={u.email}>
+                            {u.email}{u.display_name ? ` (${u.display_name})` : ""}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div className="grid gap-2">
                     <Label>Role</Label>
@@ -205,7 +226,7 @@ export default function RolesPage() {
                   </div>
                 </div>
                 <DialogFooter>
-                  <Button type="submit" disabled={submitting || !form.role}>
+                  <Button type="submit" disabled={submitting || !form.role || !form.user}>
                     {submitting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
                     Assign
                   </Button>

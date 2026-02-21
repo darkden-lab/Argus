@@ -7,7 +7,9 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+
 	"github.com/darkden-lab/argus/backend/internal/auth"
+	"github.com/darkden-lab/argus/backend/internal/httputil"
 )
 
 //go:embed install.sh
@@ -62,25 +64,25 @@ type generateTokenResponse struct {
 func (h *AgentHandlers) handleGenerateToken(w http.ResponseWriter, r *http.Request) {
 	var req generateTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	if req.ClusterName == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cluster_name is required"})
+		httputil.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "cluster_name is required"})
 		return
 	}
 
 	// Extract user ID from context (set by auth middleware).
 	userID := getUserIDFromContext(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	rawToken, tokenInfo, err := h.registry.GenerateToken(r.Context(), req.ClusterName, userID, req.Permissions)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
 		return
 	}
 
@@ -99,7 +101,7 @@ func (h *AgentHandlers) handleGenerateToken(w http.ResponseWriter, r *http.Reque
 		dashboardURL, dashboardURL, req.ClusterName, rawToken,
 	)
 
-	writeJSON(w, http.StatusCreated, generateTokenResponse{
+	httputil.WriteJSON(w, http.StatusCreated, generateTokenResponse{
 		TokenID:        tokenInfo.ID,
 		InstallCommand: installCmd,
 		Token:          rawToken,
@@ -110,13 +112,13 @@ func (h *AgentHandlers) handleGenerateToken(w http.ResponseWriter, r *http.Reque
 func (h *AgentHandlers) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	userID := getUserIDFromContext(r)
 	if userID == "" {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
 	tokens, err := h.registry.ListTokens(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list tokens"})
+		httputil.WriteJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list tokens"})
 		return
 	}
 
@@ -124,32 +126,54 @@ func (h *AgentHandlers) handleListTokens(w http.ResponseWriter, r *http.Request)
 		tokens = []*AgentToken{}
 	}
 
-	writeJSON(w, http.StatusOK, tokens)
+	httputil.WriteJSON(w, http.StatusOK, tokens)
 }
 
 func (h *AgentHandlers) handleGetToken(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
-	token, err := h.registry.GetToken(r.Context(), id)
-	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+	userID := getUserIDFromContext(r)
+	if userID == "" {
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
 
-	writeJSON(w, http.StatusOK, token)
+	token, err := h.registry.GetToken(r.Context(), id)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		return
+	}
+
+	if token.CreatedBy != userID {
+		httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, token)
 }
 
 func (h *AgentHandlers) handleInstallCommand(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
+	userID := getUserIDFromContext(r)
+	if userID == "" {
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
 	token, err := h.registry.GetToken(r.Context(), id)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		httputil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		return
+	}
+
+	if token.CreatedBy != userID {
+		httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
 		return
 	}
 
 	if token.Used {
-		writeJSON(w, http.StatusConflict, map[string]string{"error": "token already used"})
+		httputil.WriteJSON(w, http.StatusConflict, map[string]string{"error": "token already used"})
 		return
 	}
 
@@ -173,7 +197,7 @@ func (h *AgentHandlers) handleInstallCommand(w http.ResponseWriter, r *http.Requ
 		dashboardURL, dashboardURL, token.ClusterName,
 	)
 
-	writeJSON(w, http.StatusOK, map[string]string{
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{
 		"install_command": installCmd,
 		"cluster_name":   token.ClusterName,
 	})
@@ -182,8 +206,26 @@ func (h *AgentHandlers) handleInstallCommand(w http.ResponseWriter, r *http.Requ
 func (h *AgentHandlers) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
+	userID := getUserIDFromContext(r)
+	if userID == "" {
+		httputil.WriteJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	// Verify ownership before revoking.
+	token, err := h.registry.GetToken(r.Context(), id)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		return
+	}
+
+	if token.CreatedBy != userID {
+		httputil.WriteJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden"})
+		return
+	}
+
 	if err := h.registry.RevokeToken(r.Context(), id); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found or already used"})
+		httputil.WriteJSON(w, http.StatusConflict, map[string]string{"error": "token not found or already used"})
 		return
 	}
 
