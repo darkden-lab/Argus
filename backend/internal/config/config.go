@@ -35,6 +35,9 @@ type Config struct {
 	SMTPFrom           string
 	NotificationFrom   string
 
+	// Security
+	AllowedOrigins string
+
 	// gRPC (Cluster Agent)
 	GRPCPort    string
 	GRPCTLSCert string
@@ -88,6 +91,8 @@ func Load() *Config {
 		SMTPPass:           getEnv("SMTP_PASS", ""),
 		SMTPFrom:           getEnv("SMTP_FROM", ""),
 		NotificationFrom:   getEnv("NOTIFICATION_FROM_NAME", "K8s Dashboard"),
+
+		AllowedOrigins: getEnv("ALLOWED_ORIGINS", "http://localhost:3000"),
 
 		GRPCPort:    getEnv("GRPC_PORT", "9090"),
 		GRPCTLSCert: getEnv("GRPC_TLS_CERT", ""),

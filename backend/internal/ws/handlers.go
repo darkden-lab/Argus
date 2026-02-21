@@ -12,9 +12,7 @@ import (
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
-	// Allow all origins in development; restrict in production via environment
-	// configuration or a reverse proxy.
-	CheckOrigin: func(r *http.Request) bool { return true },
+	CheckOrigin:     CheckOrigin,
 }
 
 // WSHandler upgrades HTTP connections to WebSocket and spawns the read/write

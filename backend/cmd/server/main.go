@@ -144,6 +144,9 @@ func main() {
 	// CORS middleware
 	r.Use(corsMiddleware)
 
+	// Rate limiting: 100 req/s per IP with burst of 200
+	r.Use(mw.RateLimitMiddleware(100, 200))
+
 	// Health check (no auth)
 	r.HandleFunc("/healthz", healthzHandler).Methods("GET")
 
@@ -155,7 +158,7 @@ func main() {
 	agentHandlers := cluster.NewAgentHandlers(clusterMgr, agentRegistry)
 	agentHandlers.RegisterPublicRoutes(r)
 
-	// Auth routes (no auth middleware)
+	// Auth routes (no auth middleware, global rate limit applies)
 	authHandlers.RegisterRoutes(r)
 	if oidcService != nil && oidcService.Enabled() {
 		oidcService.RegisterRoutes(r)
@@ -222,11 +225,12 @@ func main() {
 
 	// HTTP Server
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      r,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		Addr:           ":" + cfg.Port,
+		Handler:        r,
+		ReadTimeout:    15 * time.Second,
+		WriteTimeout:   15 * time.Second,
+		IdleTimeout:    60 * time.Second,
+		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
 
 	// Graceful shutdown
