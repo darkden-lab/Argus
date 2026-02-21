@@ -55,7 +55,7 @@ test.describe('RBAC', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           permissions: [
-            { resource: '*', action: '*', scopeType: 'global', scopeId: '*' },
+            { resource: '*', action: '*', scope_type: 'global', scope_id: '*' },
           ],
         }),
       });
@@ -73,7 +73,7 @@ test.describe('RBAC', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           permissions: [
-            { resource: 'clusters', action: 'read', scopeType: 'global', scopeId: '*' },
+            { resource: 'clusters', action: 'read', scope_type: 'global', scope_id: '*' },
           ],
         }),
       });

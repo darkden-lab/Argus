@@ -28,10 +28,10 @@ import type {
 import { useNotificationStore } from "@/stores/notifications";
 
 interface NotificationsResponse {
-  notifications: Notification[];
+  notifications: Notification[] | null;
   total: number;
-  page: number;
-  per_page: number;
+  limit: number;
+  offset: number;
 }
 
 const severityConfig: Record<
@@ -93,12 +93,13 @@ export default function NotificationsPage() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      let url = `/api/notifications?page=${page}&per_page=${perPage}`;
+      const offset = (page - 1) * perPage;
+      let url = `/api/notifications?limit=${perPage}&offset=${offset}`;
       if (categoryFilter !== "all") url += `&category=${categoryFilter}`;
       if (severityFilter !== "all") url += `&severity=${severityFilter}`;
 
       const data = await api.get<NotificationsResponse>(url);
-      setNotifications(data.notifications);
+      setNotifications(data.notifications ?? []);
       setTotal(data.total);
     } catch {
       setNotifications([]);

@@ -30,7 +30,7 @@ test.describe('Navigation', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           permissions: [
-            { resource: '*', action: '*', scopeType: 'global', scopeId: '*' },
+            { resource: '*', action: '*', scope_type: 'global', scope_id: '*' },
           ],
         }),
       });
