@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import { LogOut, Settings, User } from "lucide-react";
 import { NotificationBell } from "@/components/notifications/notification-bell";
@@ -20,6 +21,24 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { useAuthStore } from "@/stores/auth";
+import { api } from "@/lib/api";
+
+interface Cluster {
+  id: string;
+  name: string;
+  api_server_url: string;
+  status: string;
+}
+
+function getInitials(displayName: string): string {
+  return displayName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((word) => word[0].toUpperCase())
+    .join("");
+}
 
 function Breadcrumbs() {
   const pathname = usePathname();
@@ -48,6 +67,39 @@ function Breadcrumbs() {
 }
 
 export function Header() {
+  const user = useAuthStore((s) => s.user);
+  const fetchUser = useAuthStore((s) => s.fetchUser);
+  const logout = useAuthStore((s) => s.logout);
+
+  const [clusters, setClusters] = useState<Cluster[]>([]);
+  const [selectedCluster, setSelectedCluster] = useState<string>("");
+
+  const loadClusters = useCallback(async () => {
+    try {
+      const data = await api.get<Cluster[]>("/api/clusters");
+      setClusters(data);
+      if (data.length > 0 && !selectedCluster) {
+        setSelectedCluster(data[0].id);
+      }
+    } catch {
+      // API error is handled by the api client (toast + redirect on 401)
+    }
+  }, [selectedCluster]);
+
+  useEffect(() => {
+    if (!user) {
+      fetchUser();
+    }
+  }, [user, fetchUser]);
+
+  useEffect(() => {
+    loadClusters();
+  }, [loadClusters]);
+
+  const initials = user?.display_name ? getInitials(user.display_name) : "?";
+  const displayName = user?.display_name || "User";
+  const email = user?.email || "";
+
   return (
     <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-background px-6">
       {/* Left: Breadcrumbs */}
@@ -61,14 +113,19 @@ export function Header() {
         <NotificationBell />
 
         {/* Cluster Selector */}
-        <Select defaultValue="default">
+        <Select
+          value={selectedCluster}
+          onValueChange={setSelectedCluster}
+        >
           <SelectTrigger className="h-8 w-[180px] text-xs">
-            <SelectValue placeholder="Select cluster" />
+            <SelectValue placeholder={clusters.length === 0 ? "No clusters" : "Select cluster"} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="default">default-cluster</SelectItem>
-            <SelectItem value="production">production</SelectItem>
-            <SelectItem value="staging">staging</SelectItem>
+            {clusters.map((cluster) => (
+              <SelectItem key={cluster.id} value={cluster.id}>
+                {cluster.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -83,7 +140,7 @@ export function Header() {
             >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  AD
+                  {initials}
                 </AvatarFallback>
               </Avatar>
             </Button>
@@ -92,13 +149,13 @@ export function Header() {
             <div className="flex items-center gap-2 px-2 py-1.5">
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  AD
+                  {initials}
                 </AvatarFallback>
               </Avatar>
               <div className="flex flex-col">
-                <span className="text-sm font-medium">Admin</span>
+                <span className="text-sm font-medium">{displayName}</span>
                 <span className="text-xs text-muted-foreground">
-                  admin@k8s.local
+                  {email}
                 </span>
               </div>
             </div>
@@ -112,7 +169,10 @@ export function Header() {
               Settings
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-destructive focus:text-destructive">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={logout}
+            >
               <LogOut className="mr-2 h-4 w-4" />
               Log out
             </DropdownMenuItem>

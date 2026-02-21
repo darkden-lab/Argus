@@ -53,8 +53,10 @@ type generateTokenRequest struct {
 }
 
 type generateTokenResponse struct {
-	Token      string      `json:"token"`
-	TokenInfo  *AgentToken `json:"token_info"`
+	TokenID        string      `json:"token_id"`
+	InstallCommand string      `json:"install_command"`
+	Token          string      `json:"token"`
+	TokenInfo      *AgentToken `json:"token_info"`
 }
 
 func (h *AgentHandlers) handleGenerateToken(w http.ResponseWriter, r *http.Request) {
@@ -82,9 +84,26 @@ func (h *AgentHandlers) handleGenerateToken(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	// Build the install command so the frontend gets it in a single request.
+	dashboardURL := r.Header.Get("X-Dashboard-URL")
+	if dashboardURL == "" {
+		scheme := "https"
+		if r.TLS == nil {
+			scheme = "http"
+		}
+		dashboardURL = fmt.Sprintf("%s://%s", scheme, r.Host)
+	}
+
+	installCmd := fmt.Sprintf(
+		"curl -sSL %s/api/agents/install.sh | bash -s -- \\\n  --dashboard-url %s \\\n  --cluster-name %q \\\n  --token %s",
+		dashboardURL, dashboardURL, req.ClusterName, rawToken,
+	)
+
 	writeJSON(w, http.StatusCreated, generateTokenResponse{
-		Token:     rawToken,
-		TokenInfo: tokenInfo,
+		TokenID:        tokenInfo.ID,
+		InstallCommand: installCmd,
+		Token:          rawToken,
+		TokenInfo:      tokenInfo,
 	})
 }
 

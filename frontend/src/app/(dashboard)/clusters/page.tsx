@@ -59,6 +59,18 @@ interface Cluster {
 interface AgentTokenResponse {
   token_id: string;
   install_command: string;
+  token: string;
+  token_info: {
+    id: string;
+    cluster_name: string;
+    created_by: string;
+    permissions: string;
+    used: boolean;
+    cluster_id?: string;
+    expires_at: string;
+    created_at: string;
+    used_at?: string;
+  };
 }
 
 function ConnectionTypeIcon({ type }: { type?: ConnectionType }) {
@@ -123,12 +135,6 @@ const columns: Column<Cluster>[] = [
   { key: "last_health", label: "Last Health Check" },
 ];
 
-const placeholderClusters: Cluster[] = [
-  { id: "1", name: "production", api_server_url: "https://k8s-prod:6443", status: "connected", connection_type: "kubeconfig", labels: {}, last_health: "10s ago" },
-  { id: "2", name: "staging", api_server_url: "https://k8s-staging:6443", status: "connected", connection_type: "agent", agent_status: "connected", labels: {}, last_health: "12s ago" },
-  { id: "3", name: "dev", api_server_url: "https://k8s-dev:6443", status: "disconnected", connection_type: "kubeconfig", labels: {}, last_health: "5m ago" },
-];
-
 const permissionsPresets = [
   { value: "read-only", label: "Read Only", description: "View resources across all namespaces" },
   { value: "operator", label: "Operator", description: "View, scale, restart workloads" },
@@ -138,7 +144,7 @@ const permissionsPresets = [
 
 export default function ClustersPage() {
   const router = useRouter();
-  const [clusters, setClusters] = useState<Cluster[]>(placeholderClusters);
+  const [clusters, setClusters] = useState<Cluster[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogTab, setDialogTab] = useState("kubeconfig");

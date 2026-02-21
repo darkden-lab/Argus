@@ -35,19 +35,19 @@ describe('DashboardPage', () => {
     });
   });
 
-  it('renders cluster health card with placeholder data', async () => {
+  it('renders cluster health card with empty state when API fails', async () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
       expect(screen.getByText('Cluster Health')).toBeInTheDocument();
     });
 
-    // Placeholder clusters
-    expect(screen.getByText('production')).toBeInTheDocument();
-    expect(screen.getByText('staging')).toBeInTheDocument();
+    // No placeholder clusters should be shown
+    expect(screen.queryByText('production')).not.toBeInTheDocument();
+    expect(screen.queryByText('staging')).not.toBeInTheDocument();
   });
 
-  it('renders resource summary with placeholder data', async () => {
+  it('renders resource summary with zero counts when API fails', async () => {
     render(<DashboardPage />);
 
     await waitFor(() => {

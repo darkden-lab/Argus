@@ -84,19 +84,19 @@ describe('ClustersPage', () => {
     expect(screen.getByText('https://k8s-prod:6443')).toBeInTheDocument();
   });
 
-  it('shows placeholder clusters when API fails', async () => {
+  it('shows empty state when API fails', async () => {
     api.get.mockRejectedValueOnce(new Error('Network error'));
     render(<ClustersPage />);
 
-    // Wait for loading to finish and placeholder data to show
+    // Wait for loading to finish
     await waitFor(() => {
       expect(screen.queryByText('Loading resources...')).not.toBeInTheDocument();
     });
 
-    // Placeholder data should remain visible
-    expect(screen.getByText('production')).toBeInTheDocument();
-    expect(screen.getByText('staging')).toBeInTheDocument();
-    expect(screen.getByText('dev')).toBeInTheDocument();
+    // No placeholder data should be shown
+    expect(screen.queryByText('production')).not.toBeInTheDocument();
+    expect(screen.queryByText('staging')).not.toBeInTheDocument();
+    expect(screen.queryByText('dev')).not.toBeInTheDocument();
   });
 
   it('shows Add Cluster button for users with write permission', async () => {

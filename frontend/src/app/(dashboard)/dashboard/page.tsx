@@ -10,38 +10,12 @@ import { useK8sWildcard } from "@/hooks/use-k8s-websocket";
 import { api } from "@/lib/api";
 import type { WatchEvent } from "@/lib/ws";
 
-// Placeholder data used when the API is unreachable
-const placeholderClusters: ClusterInfo[] = [
-  { id: "1", name: "production", status: "connected", apiServer: "https://k8s-prod.example.com:6443", lastCheck: "10s ago" },
-  { id: "2", name: "staging", status: "connected", apiServer: "https://k8s-staging.example.com:6443", lastCheck: "12s ago" },
-  { id: "3", name: "dev", status: "disconnected", apiServer: "https://k8s-dev.example.com:6443", lastCheck: "5m ago" },
-];
-
-const placeholderResources: ResourceCounts = {
-  pods: 124,
-  deployments: 38,
-  services: 52,
-  namespaces: 12,
-};
-
-const placeholderEvents: K8sEvent[] = [
-  { id: "1", type: "Normal", reason: "Scheduled", message: "Successfully assigned default/nginx-7d5b to node-1", object: "pod/nginx-7d5b", timestamp: "2m ago" },
-  { id: "2", type: "Warning", reason: "BackOff", message: "Back-off restarting failed container", object: "pod/api-server-c3f1", timestamp: "5m ago" },
-  { id: "3", type: "Normal", reason: "Pulled", message: "Container image \"nginx:1.25\" already present on machine", object: "pod/nginx-7d5b", timestamp: "2m ago" },
-  { id: "4", type: "Normal", reason: "ScalingReplicaSet", message: "Scaled up replica set web-app-6f8d to 3", object: "deployment/web-app", timestamp: "8m ago" },
-];
-
-const placeholderPlugins: PluginInfo[] = [
-  { id: "prometheus", name: "Prometheus Operator", version: "0.72.0", enabled: true },
-  { id: "istio", name: "Istio Service Mesh", version: "1.21.0", enabled: true },
-  { id: "calico", name: "Calico CNI", version: "3.27.0", enabled: true },
-];
-
 export default function DashboardPage() {
-  const [clusters, setClusters] = useState<ClusterInfo[]>(placeholderClusters);
-  const [resources, setResources] = useState<ResourceCounts>(placeholderResources);
-  const [events, setEvents] = useState<K8sEvent[]>(placeholderEvents);
-  const [plugins, setPlugins] = useState<PluginInfo[]>(placeholderPlugins);
+  const [clusters, setClusters] = useState<ClusterInfo[]>([]);
+  const [resources, setResources] = useState<ResourceCounts>({ pods: 0, deployments: 0, services: 0, namespaces: 0 });
+  const [events, setEvents] = useState<K8sEvent[]>([]);
+  const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const handleWsEvent = useCallback((event: WatchEvent) => {
     if (event.resource === "pods") {
@@ -82,8 +56,10 @@ export default function DashboardPage() {
   const { lastUpdated, isConnected } = useK8sWildcard({ onEvent: handleWsEvent });
 
   useEffect(() => {
-    api.get<ClusterInfo[]>("/api/clusters").then(setClusters).catch(() => {});
-    api.get<PluginInfo[]>("/api/plugins/enabled").then(setPlugins).catch(() => {});
+    Promise.allSettled([
+      api.get<ClusterInfo[]>("/api/clusters").then(setClusters),
+      api.get<PluginInfo[]>("/api/plugins/enabled").then(setPlugins),
+    ]).finally(() => setLoading(false));
   }, []);
 
   return (
