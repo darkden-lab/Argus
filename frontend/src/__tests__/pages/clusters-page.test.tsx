@@ -57,7 +57,7 @@ describe('ClustersPage', () => {
     jest.clearAllMocks();
     usePermissionsStore.setState({
       permissions: [
-        { resource: '*', action: '*', scopeType: 'global', scopeId: '*' },
+        { resource: '*', action: '*', scope_type: 'global', scope_id: '*' },
       ],
       isLoaded: true,
     });
@@ -109,7 +109,7 @@ describe('ClustersPage', () => {
   it('hides Add Cluster button for users without write permission', async () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'clusters', action: 'read', scopeType: 'global', scopeId: '*' },
+        { resource: 'clusters', action: 'read', scope_type: 'global', scope_id: '*' },
       ],
       isLoaded: true,
     });

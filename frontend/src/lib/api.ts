@@ -29,6 +29,7 @@ async function tryRefreshToken(): Promise<boolean> {
 
     const data = await res.json();
     localStorage.setItem('access_token', data.access_token);
+    document.cookie = `access_token=${data.access_token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
     return true;
   } catch {
     return false;

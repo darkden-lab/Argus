@@ -10,7 +10,7 @@ describe('Permissions Store Security', () => {
     it('read-only user cannot access write actions', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+          { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
         ],
       });
 
@@ -23,7 +23,7 @@ describe('Permissions Store Security', () => {
     it('pods-only user cannot access secrets', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: '*', scopeType: 'global', scopeId: '*' },
+          { resource: 'pods', action: '*', scope_type: 'global', scope_id: '*' },
         ],
       });
 
@@ -36,7 +36,7 @@ describe('Permissions Store Security', () => {
     it('cluster-scoped user cannot access other clusters', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: '*', action: '*', scopeType: 'cluster', scopeId: 'cluster-1' },
+          { resource: '*', action: '*', scope_type: 'cluster', scope_id: 'cluster-1' },
         ],
       });
 
@@ -48,7 +48,7 @@ describe('Permissions Store Security', () => {
     it('namespace-scoped user cannot access other namespaces', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'namespace', scopeId: 'prod/default' },
+          { resource: 'pods', action: 'read', scope_type: 'namespace', scope_id: 'prod/default' },
         ],
       });
 
@@ -71,7 +71,7 @@ describe('Permissions Store Security', () => {
     it('namespace permission does not grant cluster-level access', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'namespace', scopeId: 'prod/default' },
+          { resource: 'pods', action: 'read', scope_type: 'namespace', scope_id: 'prod/default' },
         ],
       });
 
@@ -84,8 +84,8 @@ describe('Permissions Store Security', () => {
     it('multiple permissions combine correctly (union, not intersection)', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
-          { resource: 'deployments', action: 'read', scopeType: 'global', scopeId: '*' },
+          { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
+          { resource: 'deployments', action: 'read', scope_type: 'global', scope_id: '*' },
         ],
       });
 
@@ -100,7 +100,7 @@ describe('Permissions Store Security', () => {
     it('clearPermissions removes all access', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: '*', action: '*', scopeType: 'global', scopeId: '*' },
+          { resource: '*', action: '*', scope_type: 'global', scope_id: '*' },
         ],
         isLoaded: true,
       });
@@ -166,8 +166,8 @@ describe('Permissions Store Security', () => {
             {
               resource: '<script>alert(1)</script>',
               action: 'read',
-              scopeType: 'global',
-              scopeId: '*',
+              scope_type: 'global',
+              scope_id: '*',
             },
           ],
         }),

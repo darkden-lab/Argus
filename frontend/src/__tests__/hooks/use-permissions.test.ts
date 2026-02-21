@@ -15,7 +15,7 @@ describe('usePermission', () => {
   it('returns true when a matching global permission exists', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+        { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
       ],
     });
 
@@ -26,7 +26,7 @@ describe('usePermission', () => {
   it('returns false for non-matching resource', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+        { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
       ],
     });
 
@@ -37,7 +37,7 @@ describe('usePermission', () => {
   it('returns false for non-matching action', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+        { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
       ],
     });
 
@@ -48,7 +48,7 @@ describe('usePermission', () => {
   it('respects cluster-scoped permission with matching clusterId', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'pods', action: 'read', scopeType: 'cluster', scopeId: 'prod' },
+        { resource: 'pods', action: 'read', scope_type: 'cluster', scope_id: 'prod' },
       ],
     });
 
@@ -66,7 +66,7 @@ describe('usePermission', () => {
   it('respects namespace-scoped permission with clusterId and namespace', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'pods', action: 'read', scopeType: 'namespace', scopeId: 'prod/default' },
+        { resource: 'pods', action: 'read', scope_type: 'namespace', scope_id: 'prod/default' },
       ],
     });
 
@@ -88,7 +88,7 @@ describe('usePermission', () => {
     act(() => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+          { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
         ],
       });
     });
@@ -110,7 +110,7 @@ describe('useIsAdmin', () => {
   it('returns true when global wildcard admin permission exists', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: '*', action: '*', scopeType: 'global', scopeId: '*' },
+        { resource: '*', action: '*', scope_type: 'global', scope_id: '*' },
       ],
     });
 
@@ -121,8 +121,8 @@ describe('useIsAdmin', () => {
   it('returns false when only specific permissions exist', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
-        { resource: 'deployments', action: '*', scopeType: 'global', scopeId: '*' },
+        { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
+        { resource: 'deployments', action: '*', scope_type: 'global', scope_id: '*' },
       ],
     });
 
@@ -133,7 +133,7 @@ describe('useIsAdmin', () => {
   it('returns false for wildcard resource/action but cluster scope', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: '*', action: '*', scopeType: 'cluster', scopeId: 'prod' },
+        { resource: '*', action: '*', scope_type: 'cluster', scope_id: 'prod' },
       ],
     });
 

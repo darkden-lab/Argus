@@ -11,7 +11,7 @@ describe('RBACGate', () => {
   it('renders children when permission is granted', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+        { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
       ],
     });
 
@@ -57,7 +57,7 @@ describe('RBACGate', () => {
   it('respects cluster-scoped permissions', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: 'pods', action: 'read', scopeType: 'cluster', scopeId: 'prod' },
+        { resource: 'pods', action: 'read', scope_type: 'cluster', scope_id: 'prod' },
       ],
     });
 
@@ -79,7 +79,7 @@ describe('RBACGate', () => {
   it('renders children with admin wildcard permissions', () => {
     usePermissionsStore.setState({
       permissions: [
-        { resource: '*', action: '*', scopeType: 'global', scopeId: '*' },
+        { resource: '*', action: '*', scope_type: 'global', scope_id: '*' },
       ],
     });
 

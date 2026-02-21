@@ -77,6 +77,7 @@ func main() {
 
 	// RBAC Engine
 	rbacEngine := rbac.NewEngine(pool)
+	rbacHandlers := rbac.NewHandlers(rbacEngine)
 
 	// JWT & Auth
 	jwtService := auth.NewJWTService(cfg.JWTSecret)
@@ -170,8 +171,9 @@ func main() {
 		protected.Use(audit.Middleware(auditStore))
 	}
 
-	// Auth protected routes (/api/auth/me)
+	// Auth protected routes (/api/auth/me, /api/auth/permissions)
 	authHandlers.RegisterProtectedRoutes(protected)
+	rbacHandlers.RegisterRoutes(protected)
 
 	// Cluster routes
 	clusterHandlers := cluster.NewHandlers(clusterMgr)
@@ -257,7 +259,6 @@ func main() {
 
 	log.Println("Server stopped")
 
-	_ = rbacEngine // available for route-level RBAC when needed
 }
 
 func registerPlugins(engine *plugin.Engine) {

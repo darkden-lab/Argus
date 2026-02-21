@@ -4,8 +4,8 @@ import { api } from '@/lib/api';
 interface Permission {
   resource: string;
   action: string;
-  scopeType: string;
-  scopeId: string;
+  scope_type: string;
+  scope_id: string;
 }
 
 interface PermissionsResponse {
@@ -25,16 +25,16 @@ function matchesScope(
   clusterId?: string,
   namespace?: string
 ): boolean {
-  if (perm.scopeType === 'global' || perm.scopeId === '*') {
+  if (perm.scope_type === 'global' || perm.scope_id === '*') {
     return true;
   }
-  if (perm.scopeType === 'cluster') {
-    return !clusterId || perm.scopeId === clusterId || perm.scopeId === '*';
+  if (perm.scope_type === 'cluster') {
+    return !clusterId || perm.scope_id === clusterId || perm.scope_id === '*';
   }
-  if (perm.scopeType === 'namespace') {
+  if (perm.scope_type === 'namespace') {
     if (!clusterId && !namespace) return true;
-    // scopeId format: "clusterId/namespace" or "*/*" or "clusterId/*"
-    const [scopeCluster, scopeNs] = perm.scopeId.split('/');
+    // scope_id format: "clusterId/namespace" or "*/*" or "clusterId/*"
+    const [scopeCluster, scopeNs] = perm.scope_id.split('/');
     const clusterMatch = !clusterId || scopeCluster === '*' || scopeCluster === clusterId;
     const nsMatch = !namespace || scopeNs === '*' || scopeNs === namespace;
     return clusterMatch && nsMatch;

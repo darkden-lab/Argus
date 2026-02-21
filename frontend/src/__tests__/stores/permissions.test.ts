@@ -14,7 +14,7 @@ describe('usePermissionsStore', () => {
     it('returns true for matching resource and action with global scope', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+          { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
         ],
       });
       const result = usePermissionsStore.getState().hasPermission('pods', 'read');
@@ -24,7 +24,7 @@ describe('usePermissionsStore', () => {
     it('returns true for wildcard resource permission', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: '*', action: '*', scopeType: 'global', scopeId: '*' },
+          { resource: '*', action: '*', scope_type: 'global', scope_id: '*' },
         ],
       });
       const result = usePermissionsStore.getState().hasPermission('pods', 'delete');
@@ -34,7 +34,7 @@ describe('usePermissionsStore', () => {
     it('returns false for non-matching action', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+          { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
         ],
       });
       const result = usePermissionsStore.getState().hasPermission('pods', 'delete');
@@ -44,7 +44,7 @@ describe('usePermissionsStore', () => {
     it('returns false for non-matching resource', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+          { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
         ],
       });
       const result = usePermissionsStore.getState().hasPermission('deployments', 'read');
@@ -54,7 +54,7 @@ describe('usePermissionsStore', () => {
     it('handles cluster-scoped permissions', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'cluster', scopeId: 'prod' },
+          { resource: 'pods', action: 'read', scope_type: 'cluster', scope_id: 'prod' },
         ],
       });
       expect(
@@ -68,7 +68,7 @@ describe('usePermissionsStore', () => {
     it('handles cluster wildcard scope', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'cluster', scopeId: '*' },
+          { resource: 'pods', action: 'read', scope_type: 'cluster', scope_id: '*' },
         ],
       });
       expect(
@@ -79,7 +79,7 @@ describe('usePermissionsStore', () => {
     it('handles namespace-scoped permissions', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'namespace', scopeId: 'prod/default' },
+          { resource: 'pods', action: 'read', scope_type: 'namespace', scope_id: 'prod/default' },
         ],
       });
       expect(
@@ -93,7 +93,7 @@ describe('usePermissionsStore', () => {
     it('handles namespace wildcard permissions', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'namespace', scopeId: '*/default' },
+          { resource: 'pods', action: 'read', scope_type: 'namespace', scope_id: '*/default' },
         ],
       });
       expect(
@@ -104,7 +104,7 @@ describe('usePermissionsStore', () => {
     it('cluster-scoped allows access without clusterId filter', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: 'pods', action: 'read', scopeType: 'cluster', scopeId: 'prod' },
+          { resource: 'pods', action: 'read', scope_type: 'cluster', scope_id: 'prod' },
         ],
       });
       expect(
@@ -117,7 +117,7 @@ describe('usePermissionsStore', () => {
     it('clears all permissions and resets isLoaded', () => {
       usePermissionsStore.setState({
         permissions: [
-          { resource: '*', action: '*', scopeType: 'global', scopeId: '*' },
+          { resource: '*', action: '*', scope_type: 'global', scope_id: '*' },
         ],
         isLoaded: true,
       });
@@ -133,7 +133,7 @@ describe('usePermissionsStore', () => {
   describe('fetchPermissions', () => {
     it('sets permissions from API response', async () => {
       const mockPermissions = [
-        { resource: 'pods', action: 'read', scopeType: 'global', scopeId: '*' },
+        { resource: 'pods', action: 'read', scope_type: 'global', scope_id: '*' },
       ];
 
       global.fetch = jest.fn().mockResolvedValueOnce({

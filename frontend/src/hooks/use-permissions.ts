@@ -14,7 +14,7 @@ export function usePermission(
 export function useIsAdmin(): boolean {
   return usePermissionsStore((state) =>
     state.permissions.some(
-      (p) => p.resource === '*' && p.action === '*' && p.scopeType === 'global'
+      (p) => p.resource === '*' && p.action === '*' && p.scope_type === 'global'
     )
   );
 }
