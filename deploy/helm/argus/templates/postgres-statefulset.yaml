@@ -37,8 +37,30 @@ spec:
                 secretKeyRef:
                   name: {{ include "argus.fullname" . }}-secret
                   key: dbPassword
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
           resources:
             {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.postgresql.env.username | quote }}
+                - -d
+                - {{ .Values.postgresql.env.database | quote }}
+            initialDelaySeconds: 15
+            periodSeconds: 15
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.postgresql.env.username | quote }}
+                - -d
+                - {{ .Values.postgresql.env.database | quote }}
+            initialDelaySeconds: 5
+            periodSeconds: 10
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data

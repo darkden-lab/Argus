@@ -20,7 +20,8 @@ spec:
       serviceAccountName: {{ include "argus.serviceAccountName" . }}
       securityContext:
         runAsNonRoot: true
-        fsGroup: 1000
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: backend
           image: "{{ .Values.backend.image.repository }}:{{ .Values.backend.image.tag }}"
@@ -30,6 +31,7 @@ spec:
             capabilities:
               drop: ["ALL"]
             readOnlyRootFilesystem: true
+            runAsUser: 65534
           ports:
             - name: http
               containerPort: 8080
