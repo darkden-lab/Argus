@@ -19,20 +19,6 @@ func newUserHandlersSvc() *UserManagementHandlers {
 	return &UserManagementHandlers{service: authSvc, pool: nil}
 }
 
-// callUserHandler executes a handler with panic recovery and returns the recorder
-// and whether a panic occurred.
-func callUserHandler(h func(w http.ResponseWriter, r *http.Request), req *http.Request) (rec *httptest.ResponseRecorder, panicked bool) {
-	rec = httptest.NewRecorder()
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = true
-			}
-		}()
-		h(rec, req)
-	}()
-	return rec, panicked
-}
 
 // requestWithClaims returns req with admin claims injected into context.
 func requestWithClaims(req *http.Request) *http.Request {
