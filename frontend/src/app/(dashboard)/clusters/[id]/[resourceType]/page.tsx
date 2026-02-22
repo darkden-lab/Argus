@@ -147,7 +147,7 @@ export default function ResourceListPage() {
         loading={loading}
         onRowClick={(row) =>
           router.push(
-            `/clusters/${clusterId}/${resourceType}/${row.metadata.name}`
+            `/clusters/${clusterId}/${resourceType}/${encodeURIComponent(row.metadata.name)}${row.metadata.namespace ? `?namespace=${encodeURIComponent(row.metadata.namespace)}` : ""}`
           )
         }
       />

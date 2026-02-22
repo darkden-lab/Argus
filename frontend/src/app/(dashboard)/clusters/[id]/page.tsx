@@ -359,7 +359,7 @@ export default function ClusterDetailPage() {
                     loading={loading[res.type]}
                     onRowClick={(row) =>
                       router.push(
-                        `/clusters/${clusterId}/${res.type}/${row.metadata.name}`
+                        `/clusters/${clusterId}/${res.type}/${encodeURIComponent(row.metadata.name)}${row.metadata.namespace ? `?namespace=${encodeURIComponent(row.metadata.namespace)}` : ""}`
                       )
                     }
                   />

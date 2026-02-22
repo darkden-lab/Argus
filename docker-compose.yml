@@ -54,17 +54,18 @@ services:
       dockerfile: ../deploy/docker/Dockerfile.backend
     ports:
       - "8080:8080"
+      - "9090:9090"
     environment:
       DATABASE_URL: postgres://dashboard:devpassword@postgres:5432/argus?sslmode=disable
       JWT_SECRET: dev-jwt-secret
-      ENCRYPTION_KEY: dev-encryption-key-32chars00000000
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       # Uncomment to enable Kafka (requires --profile kafka):
       # KAFKA_BROKERS: kafka:29092
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO /dev/null http://localhost:8080/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -qO /dev/null http://127.0.0.1:8080/healthz || exit 1"]
       interval: 10s
       timeout: 3s
       retries: 3
