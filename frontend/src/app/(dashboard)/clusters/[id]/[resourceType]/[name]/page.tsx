@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { ResourceDetail } from "@/components/resources/resource-detail";
 import { Button } from "@/components/ui/button";
@@ -89,9 +89,11 @@ function toYaml(obj: unknown, indent = 0): string {
 export default function ResourceDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const clusterId = params.id as string;
   const resourceType = params.resourceType as string;
   const resourceName = params.name as string;
+  const namespace = searchParams.get("namespace") ?? "";
   const [resource, setResource] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
@@ -101,19 +103,21 @@ export default function ResourceDetailPage() {
   const canDelete = usePermission("clusters", "delete", clusterId);
 
   useEffect(() => {
+    const nsParam = namespace ? `?namespace=${encodeURIComponent(namespace)}` : "";
     api
       .get<Record<string, unknown>>(
-        `/api/clusters/${clusterId}/resources/${gvr}/${resourceName}`
+        `/api/clusters/${clusterId}/resources/${gvr}/${encodeURIComponent(resourceName)}${nsParam}`
       )
       .then(setResource)
       .catch(() => setResource(null))
       .finally(() => setLoading(false));
-  }, [clusterId, gvr, resourceName]);
+  }, [clusterId, gvr, resourceName, namespace]);
 
   async function handleDelete() {
     setDeleting(true);
     try {
-      await api.del(`/api/clusters/${clusterId}/resources/${gvr}/${resourceName}`);
+      const nsParam = namespace ? `?namespace=${encodeURIComponent(namespace)}` : "";
+      await api.del(`/api/clusters/${clusterId}/resources/${gvr}/${encodeURIComponent(resourceName)}${nsParam}`);
       router.push(`/clusters/${clusterId}/${resourceType}`);
     } catch {
       setDeleting(false);

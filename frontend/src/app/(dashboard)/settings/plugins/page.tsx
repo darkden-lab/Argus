@@ -22,6 +22,16 @@ interface Plugin {
   enabled: boolean;
 }
 
+interface PluginApiResponse {
+  manifest: {
+    id: string;
+    name: string;
+    version: string;
+    description: string;
+  };
+  enabled: boolean;
+}
+
 export default function PluginsPage() {
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [loading, setLoading] = useState(true);
@@ -29,8 +39,18 @@ export default function PluginsPage() {
 
   useEffect(() => {
     api
-      .get<Plugin[]>("/api/plugins")
-      .then(setPlugins)
+      .get<PluginApiResponse[]>("/api/plugins")
+      .then((data) =>
+        setPlugins(
+          data.map((p) => ({
+            id: p.manifest.id,
+            name: p.manifest.name,
+            version: p.manifest.version,
+            description: p.manifest.description,
+            enabled: p.enabled,
+          }))
+        )
+      )
       .catch(() => {})
       .finally(() => setLoading(false));
   }, []);

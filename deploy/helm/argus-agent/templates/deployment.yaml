@@ -48,11 +48,11 @@ spec:
                 configMapKeyRef:
                   name: {{ include "argus-agent.fullname" . }}-config
                   key: DASHBOARD_TLS_ENABLED
-            - name: DASHBOARD_TOKEN
+            - name: AGENT_REGISTRATION_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: {{ include "argus-agent.fullname" . }}-secret
-                  key: DASHBOARD_TOKEN
+                  key: AGENT_REGISTRATION_TOKEN
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
           livenessProbe:

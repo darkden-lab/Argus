@@ -1,11 +1,13 @@
 package core
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gorilla/mux"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
 	"github.com/darkden-lab/argus/backend/internal/httputil"
+	"github.com/darkden-lab/argus/backend/pkg/agentpb"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 )
@@ -29,10 +31,21 @@ func (h *ConvenienceHandlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/events", h.ListEvents).Methods(http.MethodGet)
 }
 
+// proxyAgentList is a convenience wrapper around proxyAgentResponse for GET requests.
+func (h *ConvenienceHandlers) proxyAgentList(w http.ResponseWriter, r *http.Request, clusterID, path string) {
+	proxyAgentResponse(w, r, h.clusterMgr, clusterID, &agentpb.K8SRequest{
+		Method: "GET",
+		Path:   path,
+	})
+}
+
 // ListNamespaces returns all namespaces in the cluster.
 func (h *ConvenienceHandlers) ListNamespaces(w http.ResponseWriter, r *http.Request) {
-	client, err := h.getClient(w, r)
+	clusterID := mux.Vars(r)["clusterID"]
+
+	client, err := h.clusterMgr.GetClient(clusterID)
 	if err != nil {
+		h.proxyAgentList(w, r, clusterID, "/api/v1/namespaces")
 		return
 	}
 
@@ -47,8 +60,11 @@ func (h *ConvenienceHandlers) ListNamespaces(w http.ResponseWriter, r *http.Requ
 
 // ListNodes returns all nodes in the cluster.
 func (h *ConvenienceHandlers) ListNodes(w http.ResponseWriter, r *http.Request) {
-	client, err := h.getClient(w, r)
+	clusterID := mux.Vars(r)["clusterID"]
+
+	client, err := h.clusterMgr.GetClient(clusterID)
 	if err != nil {
+		h.proxyAgentList(w, r, clusterID, "/api/v1/nodes")
 		return
 	}
 
@@ -63,15 +79,23 @@ func (h *ConvenienceHandlers) ListNodes(w http.ResponseWriter, r *http.Request) 
 
 // ListEvents returns events in a given namespace (all namespaces if ?namespace is empty).
 func (h *ConvenienceHandlers) ListEvents(w http.ResponseWriter, r *http.Request) {
-	client, err := h.getClient(w, r)
-	if err != nil {
+	clusterID := mux.Vars(r)["clusterID"]
+	namespace := r.URL.Query().Get("namespace")
+	if !isValidK8sSegment(namespace) {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid namespace")
 		return
 	}
 
-	namespace := r.URL.Query().Get("namespace")
+	client, err := h.clusterMgr.GetClient(clusterID)
+	if err != nil {
+		path := "/api/v1/events"
+		if namespace != "" {
+			path = fmt.Sprintf("/api/v1/namespaces/%s/events", namespace)
+		}
+		h.proxyAgentList(w, r, clusterID, path)
+		return
+	}
 
-	// Use the dynamic client so we can list across namespaces without the typed
-	// client requiring a specific namespace interface.
 	gvr := schema.GroupVersionResource{Group: "", Version: "v1", Resource: "events"}
 	eventList, err := client.DynClient.Resource(gvr).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
 	if err != nil {
@@ -81,16 +105,3 @@ func (h *ConvenienceHandlers) ListEvents(w http.ResponseWriter, r *http.Request)
 
 	httputil.WriteJSON(w, http.StatusOK, eventList)
 }
-
-// getClient is a helper that extracts the clusterID from the URL and returns
-// the corresponding ClusterClient, writing an error response on failure.
-func (h *ConvenienceHandlers) getClient(w http.ResponseWriter, r *http.Request) (*cluster.ClusterClient, error) {
-	clusterID := mux.Vars(r)["clusterID"]
-	client, err := h.clusterMgr.GetClient(clusterID)
-	if err != nil {
-		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
-		return nil, err
-	}
-	return client, nil
-}
-

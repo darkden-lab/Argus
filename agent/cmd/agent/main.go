@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -29,6 +30,19 @@ func main() {
 		sig := <-sigCh
 		log.Printf("Received signal %s, shutting down...", sig)
 		cancel()
+	}()
+
+	// Start health server for Kubernetes probes.
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("ok")) //nolint:errcheck
+		})
+		log.Println("Health server listening on :8443")
+		if err := http.ListenAndServe(":8443", mux); err != nil {
+			log.Printf("Health server error: %v", err)
+		}
 	}()
 
 	// Create the K8s proxy that handles requests from the dashboard.

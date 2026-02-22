@@ -163,8 +163,22 @@ func (h *Handlers) GetPreferences(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Build available_channels list: always include in_app, plus any enabled configured channels (deduped by type).
+	seen := map[string]bool{"in_app": true}
+	availableChannels := []string{"in_app"}
+	chs, chErr := h.chanStore.List(r.Context())
+	if chErr == nil {
+		for _, ch := range chs {
+			if ch.Enabled && !seen[ch.Type] {
+				seen[ch.Type] = true
+				availableChannels = append(availableChannels, ch.Type)
+			}
+		}
+	}
+
 	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"preferences": prefs,
+		"preferences":        prefs,
+		"available_channels": availableChannels,
 	})
 }
 

@@ -103,6 +103,11 @@ func (m *Manager) GetClient(clusterID string) (*ClusterClient, error) {
 	return nil, fmt.Errorf("no client found for cluster %s", clusterID)
 }
 
+// GetAgentServer returns the gRPC agent server, or nil if not set.
+func (m *Manager) GetAgentServer() *AgentServer {
+	return m.agentServer
+}
+
 // GetClusterConnectionType returns the connection type for a cluster.
 func (m *Manager) GetClusterConnectionType(ctx context.Context, clusterID string) (string, error) {
 	c, err := m.store.GetCluster(ctx, clusterID)
