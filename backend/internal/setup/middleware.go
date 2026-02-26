@@ -68,9 +68,17 @@ func GuardMiddleware(service *Service) mux.MiddlewareFunc {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			required, err := state.isSetupRequired(service, r)
 			if err != nil {
-				// On error, let the request through — fail open so existing
-				// deployments are not blocked by a transient DB issue.
-				next.ServeHTTP(w, r)
+				// If we previously confirmed setup is complete, fail open
+				// (safe — setup never reverts to required).
+				if state.initialized && !state.required {
+					next.ServeHTTP(w, r)
+					return
+				}
+				// Unknown state (never checked or was required) — deny.
+				httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
+					"error":   "setup_check_failed",
+					"message": "Unable to verify system state. Please try again.",
+				})
 				return
 			}
 

@@ -207,8 +207,8 @@ func main() {
 	userMgmtHandlers := auth.NewUserManagementHandlers(authService, pool)
 	userMgmtHandlers.RegisterRoutes(protected)
 
-	// OIDC group -> role mapping routes
-	oidcMappingHandlers := auth.NewOIDCMappingHandlers(pool)
+	// OIDC group -> role mapping routes (write endpoints require settings:write RBAC)
+	oidcMappingHandlers := auth.NewOIDCMappingHandlers(pool, rbac.RBACMiddleware(rbacEngine, "settings", "write"))
 	oidcMappingHandlers.RegisterRoutes(protected)
 
 	// Cluster routes

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
@@ -12,21 +13,29 @@ import (
 
 // OIDCMappingHandlers provides CRUD endpoints for OIDC group -> role mappings.
 type OIDCMappingHandlers struct {
-	pool *pgxpool.Pool
+	pool          *pgxpool.Pool
+	rbacWriteGuard mux.MiddlewareFunc
 }
 
-// NewOIDCMappingHandlers creates new mapping handlers.
-func NewOIDCMappingHandlers(pool *pgxpool.Pool) *OIDCMappingHandlers {
-	return &OIDCMappingHandlers{pool: pool}
+// NewOIDCMappingHandlers creates new mapping handlers. The rbacWriteGuard
+// middleware is applied to all write endpoints to enforce admin-only access.
+func NewOIDCMappingHandlers(pool *pgxpool.Pool, rbacWriteGuard mux.MiddlewareFunc) *OIDCMappingHandlers {
+	return &OIDCMappingHandlers{pool: pool, rbacWriteGuard: rbacWriteGuard}
 }
 
 // RegisterRoutes registers mapping endpoints on the protected router.
+// Read endpoints require authentication; write endpoints require admin (settings:write).
 func (h *OIDCMappingHandlers) RegisterRoutes(r *mux.Router) {
+	// Read endpoints — any authenticated user
 	r.HandleFunc("/api/settings/oidc/mappings", h.listMappings).Methods("GET")
-	r.HandleFunc("/api/settings/oidc/mappings", h.createMapping).Methods("POST")
-	r.HandleFunc("/api/settings/oidc/mappings/{id}", h.deleteMapping).Methods("DELETE")
 	r.HandleFunc("/api/settings/oidc/default-role", h.getDefaultRole).Methods("GET")
-	r.HandleFunc("/api/settings/oidc/default-role", h.updateDefaultRole).Methods("PUT")
+
+	// Write endpoints — require settings:write RBAC permission (admin only)
+	writeRoutes := r.PathPrefix("").Subrouter()
+	writeRoutes.Use(h.rbacWriteGuard)
+	writeRoutes.HandleFunc("/api/settings/oidc/mappings", h.createMapping).Methods("POST")
+	writeRoutes.HandleFunc("/api/settings/oidc/mappings/{id}", h.deleteMapping).Methods("DELETE")
+	writeRoutes.HandleFunc("/api/settings/oidc/default-role", h.updateDefaultRole).Methods("PUT")
 }
 
 type mappingResponse struct {
@@ -102,7 +111,8 @@ func (h *OIDCMappingHandlers) createMapping(w http.ResponseWriter, r *http.Reque
 		req.OIDCGroup, roleID, req.ClusterID, req.Namespace,
 	).Scan(&m.ID, &m.OIDCGroup, &m.RoleID, &m.ClusterID, &m.Namespace, &m.CreatedAt)
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "failed to create mapping: "+err.Error())
+		log.Printf("oidc mapping: failed to create mapping: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to create mapping")
 		return
 	}
 	m.RoleName = req.RoleName
@@ -138,12 +148,27 @@ func (h *OIDCMappingHandlers) getDefaultRole(w http.ResponseWriter, r *http.Requ
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"default_role": role})
 }
 
+// allowedDefaultRoles is the set of valid values for the OIDC default role.
+var allowedDefaultRoles = map[string]bool{
+	"":          true,
+	"none":      true,
+	"viewer":    true,
+	"developer": true,
+	"operator":  true,
+	"admin":     true,
+}
+
 func (h *OIDCMappingHandlers) updateDefaultRole(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		DefaultRole string `json:"default_role"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if !allowedDefaultRoles[req.DefaultRole] {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid role name; allowed: none, viewer, developer, operator, admin")
 		return
 	}
 

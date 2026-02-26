@@ -4,7 +4,11 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
+	"log"
+	"net"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -152,14 +156,23 @@ func (h *Handlers) TestOIDC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateIssuerURL(req.IssuerURL); err != nil {
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
 	defer cancel()
 
 	_, err := oidc.NewProvider(ctx, req.IssuerURL)
 	if err != nil {
+		log.Printf("oidc test: provider discovery failed for URL %q: %v", req.IssuerURL, err)
 		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 			"success": false,
-			"error":   err.Error(),
+			"error":   "Provider discovery failed. Check the issuer URL and try again.",
 		})
 		return
 	}
@@ -168,6 +181,33 @@ func (h *Handlers) TestOIDC(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"message": "OIDC provider discovered successfully",
 	})
+}
+
+// validateIssuerURL validates the issuer URL to prevent SSRF attacks.
+// Only HTTPS is allowed and private/internal IP ranges are blocked.
+func validateIssuerURL(rawURL string) error {
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return fmt.Errorf("invalid URL format")
+	}
+	if u.Scheme != "https" {
+		return fmt.Errorf("issuer URL must use HTTPS")
+	}
+	host := u.Hostname()
+	ip := net.ParseIP(host)
+	if ip != nil {
+		privateRanges := []string{
+			"127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12",
+			"192.168.0.0/16", "169.254.0.0/16", "::1/128", "fc00::/7",
+		}
+		for _, cidr := range privateRanges {
+			_, ipNet, _ := net.ParseCIDR(cidr)
+			if ipNet.Contains(ip) {
+				return fmt.Errorf("issuer URL must not target private or internal addresses")
+			}
+		}
+	}
+	return nil
 }
 
 // GetOIDCProviders handles GET /api/settings/oidc/providers.

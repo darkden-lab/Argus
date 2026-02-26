@@ -174,17 +174,20 @@ func (s *OIDCService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var claims struct {
-		Subject string   `json:"sub"`
-		Email   string   `json:"email"`
-		Name    string   `json:"name"`
-		Groups  []string `json:"groups"`
+		Subject string `json:"sub"`
+		Email   string `json:"email"`
+		Name    string `json:"name"`
+		Groups  []string
 	}
+
+	// Extract standard claims (sub, email, name)
 	if err := idToken.Claims(&claims); err != nil {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to extract claims"})
 		return
 	}
 
-	// Extract groups from a dynamic claim name (configurable via OIDC settings)
+	// Extract groups from a dynamic claim name (configurable via OIDC settings).
+	// Use allClaims map to support configurable claim names (not just "groups").
 	groupsClaim := "groups" // default
 	if s.pool != nil {
 		var raw []byte
@@ -198,7 +201,6 @@ func (s *OIDCService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Extract all claims as raw map to get dynamic groups claim
 	var allClaims map[string]interface{}
 	if err := idToken.Claims(&allClaims); err == nil {
 		if groupsRaw, ok := allClaims[groupsClaim]; ok {

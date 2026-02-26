@@ -17,8 +17,13 @@ import (
 // 3. Response format and Content-Type
 // 4. Handler behavior when pool is nil (panics at DB layer, proving validation passed)
 
+// noopMiddleware is a no-op RBAC guard for testing.
+func noopMiddleware(next http.Handler) http.Handler {
+	return next
+}
+
 func newMappingHandlers() *OIDCMappingHandlers {
-	return NewOIDCMappingHandlers(nil)
+	return NewOIDCMappingHandlers(nil, noopMiddleware)
 }
 
 // callMappingHandler runs a handler with panic recovery.
@@ -42,7 +47,7 @@ func callMappingHandler(fn func(w http.ResponseWriter, r *http.Request), req *ht
 // --- NewOIDCMappingHandlers ---
 
 func TestNewOIDCMappingHandlers_NilPool(t *testing.T) {
-	h := NewOIDCMappingHandlers(nil)
+	h := NewOIDCMappingHandlers(nil, noopMiddleware)
 	if h == nil {
 		t.Fatal("expected non-nil OIDCMappingHandlers with nil pool")
 	}
@@ -224,6 +229,35 @@ func TestDeleteMapping_NilPool_PanicsAtDB(t *testing.T) {
 }
 
 // --- updateDefaultRole ---
+
+func TestUpdateDefaultRole_InvalidRole_Returns400(t *testing.T) {
+	h := newMappingHandlers()
+	body, _ := json.Marshal(map[string]string{"default_role": "superadmin"})
+	req := httptest.NewRequest("PUT", "/api/settings/oidc/default-role", bytes.NewBuffer(body))
+	rec, panicked := callMappingHandler(h.updateDefaultRole, req)
+
+	if panicked {
+		t.Error("did not expect panic for invalid role name")
+	}
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400 for invalid role 'superadmin', got %d", rec.Code)
+	}
+}
+
+func TestUpdateDefaultRole_AllAllowedRoles(t *testing.T) {
+	allowed := []string{"", "none", "viewer", "developer", "operator", "admin"}
+	for _, role := range allowed {
+		h := newMappingHandlers()
+		body, _ := json.Marshal(map[string]string{"default_role": role})
+		req := httptest.NewRequest("PUT", "/api/settings/oidc/default-role", bytes.NewBuffer(body))
+		rec, panicked := callMappingHandler(h.updateDefaultRole, req)
+
+		// Valid role should NOT return 400 — it should either panic at DB (nil pool) or succeed
+		if !panicked && rec.Code == http.StatusBadRequest {
+			t.Errorf("expected role %q to be allowed, but got 400", role)
+		}
+	}
+}
 
 func TestUpdateDefaultRole_BadJSON_Returns400(t *testing.T) {
 	h := newMappingHandlers()

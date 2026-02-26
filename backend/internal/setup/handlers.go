@@ -2,6 +2,7 @@ package setup
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"net/mail"
 	"strings"
@@ -69,21 +70,7 @@ func (h *Handlers) handleStatus(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) handleInit(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	// 1. Check if setup is actually required.
-	required, err := h.service.IsSetupRequired(ctx)
-	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "failed to check setup status")
-		return
-	}
-	if !required {
-		httputil.WriteJSON(w, http.StatusForbidden, map[string]string{
-			"error":   "setup_already_completed",
-			"message": "Initial setup has already been completed",
-		})
-		return
-	}
-
-	// 2. Parse and validate request body.
+	// 1. Parse and validate request body BEFORE acquiring lock (cheap check first).
 	var req initRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
@@ -99,7 +86,7 @@ func (h *Handlers) handleInit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 3. Run everything in a transaction.
+	// 2. Begin transaction with advisory lock to serialize concurrent setup attempts.
 	tx, err := h.pool.Begin(ctx)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to start transaction")
@@ -107,14 +94,38 @@ func (h *Handlers) handleInit(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	// 3a. Create user via authService (uses its own pool, but the user INSERT
-	// is idempotent on email). We create outside the tx because AuthService
-	// owns its own connection; a conflict here still rolls back cleanly.
+	// Acquire advisory lock — prevents two concurrent POST /api/setup/init from racing.
+	if _, err := tx.Exec(ctx, `SELECT pg_advisory_xact_lock(1)`); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to acquire setup lock")
+		return
+	}
+
+	// 2a. Re-check setup required INSIDE the locked transaction (prevents TOCTOU).
+	var alreadyDone bool
+	err = tx.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM settings WHERE key = $1 AND value::text = '"true"')`,
+		"system_setup_completed",
+	).Scan(&alreadyDone)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to check setup status")
+		return
+	}
+	if alreadyDone {
+		httputil.WriteJSON(w, http.StatusForbidden, map[string]string{
+			"error":   "setup_already_completed",
+			"message": "Initial setup has already been completed",
+		})
+		return
+	}
+
+	// 3. Create user via authService (uses its own pool connection, but the
+	// advisory lock prevents concurrent setup attempts).
 	user, err := h.authService.Register(ctx, req.Email, req.Password, req.DisplayName)
 	if err != nil {
+		log.Printf("setup: failed to create admin user: %v", err)
 		httputil.WriteJSON(w, http.StatusConflict, map[string]string{
 			"error":   "user_creation_failed",
-			"message": "Failed to create admin user: " + err.Error(),
+			"message": "Failed to create admin account. The email may already be registered.",
 		})
 		return
 	}
