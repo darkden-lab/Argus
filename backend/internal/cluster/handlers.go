@@ -10,20 +10,27 @@ import (
 )
 
 type Handlers struct {
-	manager *Manager
+	manager        *Manager
+	rbacWriteGuard mux.MiddlewareFunc
 }
 
-func NewHandlers(manager *Manager) *Handlers {
-	return &Handlers{manager: manager}
+func NewHandlers(manager *Manager, rbacWriteGuard mux.MiddlewareFunc) *Handlers {
+	return &Handlers{manager: manager, rbacWriteGuard: rbacWriteGuard}
 }
 
 func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	api := r.PathPrefix("/api/clusters").Subrouter()
-	api.HandleFunc("", h.handleCreate).Methods("POST")
 	api.HandleFunc("", h.handleList).Methods("GET")
 	api.HandleFunc("/{id}", h.handleGet).Methods("GET")
-	api.HandleFunc("/{id}", h.handleDelete).Methods("DELETE")
-	api.HandleFunc("/{id}/health", h.handleHealthCheck).Methods("POST")
+
+	// Write endpoints require clusters:write RBAC
+	writeAPI := api.PathPrefix("").Subrouter()
+	if h.rbacWriteGuard != nil {
+		writeAPI.Use(h.rbacWriteGuard)
+	}
+	writeAPI.HandleFunc("", h.handleCreate).Methods("POST")
+	writeAPI.HandleFunc("/{id}", h.handleDelete).Methods("DELETE")
+	writeAPI.HandleFunc("/{id}/health", h.handleHealthCheck).Methods("POST")
 }
 
 type createClusterRequest struct {

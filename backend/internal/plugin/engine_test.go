@@ -369,7 +369,7 @@ func TestHandlers_HandleList(t *testing.T) {
 	_ = e.Register(p)
 	_ = e.Enable(ctx, "prometheus")
 
-	h := NewHandlers(e)
+	h := NewHandlers(e, nil)
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -394,7 +394,7 @@ func TestHandlers_HandleListEnabled(t *testing.T) {
 	_ = e.Register(p2)
 	_ = e.Enable(ctx, "prometheus")
 
-	h := NewHandlers(e)
+	h := NewHandlers(e, nil)
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -409,7 +409,7 @@ func TestHandlers_HandleListEnabled(t *testing.T) {
 
 func TestHandlers_HandleEnable_NotFound(t *testing.T) {
 	e := NewEngine(nil)
-	h := NewHandlers(e)
+	h := NewHandlers(e, nil)
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -424,7 +424,7 @@ func TestHandlers_HandleEnable_NotFound(t *testing.T) {
 
 func TestHandlers_HandleDisable_NotFound(t *testing.T) {
 	e := NewEngine(nil)
-	h := NewHandlers(e)
+	h := NewHandlers(e, nil)
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -442,7 +442,7 @@ func TestHandlers_EnableDisableFlow(t *testing.T) {
 	p := newMockPlugin("istio", "Istio", "1.0.0")
 	_ = e.Register(p)
 
-	h := NewHandlers(e)
+	h := NewHandlers(e, nil)
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -465,7 +465,7 @@ func TestHandlers_EnableDisableFlow(t *testing.T) {
 
 func TestHandlers_ListEmpty(t *testing.T) {
 	e := NewEngine(nil)
-	h := NewHandlers(e)
+	h := NewHandlers(e, nil)
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 
@@ -485,7 +485,7 @@ func TestHandlers_ListEmpty(t *testing.T) {
 
 func TestNewHandlers(t *testing.T) {
 	e := NewEngine(nil)
-	h := NewHandlers(e)
+	h := NewHandlers(e, nil)
 	if h == nil {
 		t.Fatal("expected non-nil handlers")
 	}

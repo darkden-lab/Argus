@@ -108,9 +108,17 @@ func main() {
 		log.Printf("WARNING: OIDC setup failed: %v (OIDC disabled)", err)
 	}
 
+	// RBAC Guards for endpoint protection
+	settingsWriteGuard := rbac.RBACMiddleware(rbacEngine, "settings", "write")
+	clustersWriteGuard := rbac.RBACMiddleware(rbacEngine, "clusters", "write")
+	pluginsWriteGuard := rbac.RBACMiddleware(rbacEngine, "plugins", "write")
+	notificationsWriteGuard := rbac.RBACMiddleware(rbacEngine, "notifications", "write")
+	aiWriteGuard := rbac.RBACMiddleware(rbacEngine, "ai", "write")
+	auditReadGuard := rbac.RBACMiddleware(rbacEngine, "audit", "read")
+
 	// Audit Log
 	auditStore := audit.NewStore(pool)
-	auditHandlers := audit.NewHandlers(auditStore)
+	auditHandlers := audit.NewHandlers(auditStore, auditReadGuard)
 
 	// Plugin Engine
 	pluginEngine := plugin.NewEngine(pool)
@@ -149,7 +157,7 @@ func main() {
 		digest := notifications.NewDigestAggregator(prefStore, chanStore, notifStore, notifRouter.GetChannels())
 		digest.Start()
 
-		notifHandlers = notifications.NewHandlers(notifStore, prefStore, chanStore, notifRouter, cfg.EncryptionKey)
+		notifHandlers = notifications.NewHandlers(notifStore, prefStore, chanStore, notifRouter, cfg.EncryptionKey, notificationsWriteGuard)
 		log.Println("Notifications system initialized")
 	}
 
@@ -174,7 +182,7 @@ func main() {
 	setupHandlers.RegisterRoutes(r)
 
 	// Settings public routes (OIDC provider presets, no auth required)
-	settingsHandlers := settings.NewHandlers(pool, cfg)
+	settingsHandlers := settings.NewHandlers(pool, cfg, settingsWriteGuard, oidcService)
 	settingsHandlers.RegisterPublicRoutes(r)
 
 	// Auth routes with strict rate limiting (10 req/s, burst 20 per IP)
@@ -212,7 +220,7 @@ func main() {
 	oidcMappingHandlers.RegisterRoutes(protected)
 
 	// Cluster routes
-	clusterHandlers := cluster.NewHandlers(clusterMgr)
+	clusterHandlers := cluster.NewHandlers(clusterMgr, clustersWriteGuard)
 	clusterHandlers.RegisterRoutes(protected)
 
 	// Agent token management routes (protected)
@@ -242,7 +250,7 @@ func main() {
 	notifWSHandler.RegisterRoutes(r)
 
 	// Plugin management routes
-	pluginHandlers := plugin.NewHandlers(pluginEngine)
+	pluginHandlers := plugin.NewHandlers(pluginEngine, pluginsWriteGuard)
 	pluginHandlers.RegisterRoutes(protected)
 
 	// Plugin-registered routes
@@ -287,7 +295,7 @@ func main() {
 	aiChatHandler := ai.NewChatHandler(aiService, jwtService)
 	aiChatHandler.RegisterRoutes(r)
 
-	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer)
+	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiWriteGuard)
 	aiAdminHandlers.RegisterRoutes(protected)
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)

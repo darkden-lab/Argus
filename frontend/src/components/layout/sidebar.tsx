@@ -199,6 +199,7 @@ export function Sidebar() {
               size="icon"
               className="h-7 w-7 text-sidebar-foreground/50 hover:text-sidebar-foreground"
               onClick={toggleSidebar}
+              aria-label="Collapse sidebar"
             >
               <ChevronLeft className="h-4 w-4" />
             </Button>
@@ -262,6 +263,7 @@ export function Sidebar() {
                 <TooltipTrigger asChild>
                   <button
                     onClick={openAiChat}
+                    aria-label="AI Assistant"
                     className={cn(
                       "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
                       "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
@@ -334,6 +336,7 @@ export function Sidebar() {
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <button
+                    aria-label="Select cluster"
                     className={cn(
                       "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm transition-colors hover:bg-sidebar-accent/50",
                       collapsed && "justify-center px-0"
@@ -404,6 +407,7 @@ export function Sidebar() {
               <TooltipTrigger asChild>
                 <DropdownMenuTrigger asChild>
                   <button
+                    aria-label="User menu"
                     className={cn(
                       "flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-sidebar-accent/50",
                       collapsed && "justify-center px-0"
@@ -476,6 +480,7 @@ export function Sidebar() {
               size="icon"
               className="mt-1 h-7 w-full text-sidebar-foreground/50 hover:text-sidebar-foreground"
               onClick={toggleSidebar}
+              aria-label="Expand sidebar"
             >
               <ChevronRight className="h-4 w-4" />
             </Button>

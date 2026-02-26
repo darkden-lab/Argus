@@ -11,15 +11,17 @@ import (
 
 // AdminHandlers provides REST endpoints for AI configuration and management.
 type AdminHandlers struct {
-	pool    *pgxpool.Pool
-	indexer *rag.Indexer
+	pool           *pgxpool.Pool
+	indexer        *rag.Indexer
+	rbacWriteGuard mux.MiddlewareFunc
 }
 
 // NewAdminHandlers creates admin API handlers for AI.
-func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer) *AdminHandlers {
+func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, rbacWriteGuard mux.MiddlewareFunc) *AdminHandlers {
 	return &AdminHandlers{
-		pool:    pool,
-		indexer: indexer,
+		pool:           pool,
+		indexer:        indexer,
+		rbacWriteGuard: rbacWriteGuard,
 	}
 }
 
@@ -27,10 +29,16 @@ func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer) *AdminHandlers {
 func (h *AdminHandlers) RegisterRoutes(r *mux.Router) {
 	ai := r.PathPrefix("/api/ai").Subrouter()
 	ai.HandleFunc("/config", h.getConfig).Methods(http.MethodGet)
-	ai.HandleFunc("/config", h.updateConfig).Methods(http.MethodPut)
-	ai.HandleFunc("/config/test", h.testConnection).Methods(http.MethodPost)
 	ai.HandleFunc("/rag/status", h.ragStatus).Methods(http.MethodGet)
-	ai.HandleFunc("/rag/reindex", h.triggerReindex).Methods(http.MethodPost)
+
+	// Write endpoints require ai:write RBAC
+	writeAI := ai.PathPrefix("").Subrouter()
+	if h.rbacWriteGuard != nil {
+		writeAI.Use(h.rbacWriteGuard)
+	}
+	writeAI.HandleFunc("/config", h.updateConfig).Methods(http.MethodPut)
+	writeAI.HandleFunc("/config/test", h.testConnection).Methods(http.MethodPost)
+	writeAI.HandleFunc("/rag/reindex", h.triggerReindex).Methods(http.MethodPost)
 }
 
 func (h *AdminHandlers) getConfig(w http.ResponseWriter, r *http.Request) {

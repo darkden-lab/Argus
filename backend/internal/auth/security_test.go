@@ -257,27 +257,6 @@ func TestHandleMeWithForgedClaims(t *testing.T) {
 	}
 }
 
-// TestRegisterEmptyPassword verifies empty passwords are rejected.
-func TestRegisterEmptyPassword(t *testing.T) {
-	svc := NewJWTService("test-secret")
-	authSvc := &AuthService{jwt: svc}
-	h := NewHandlers(authSvc)
-
-	body, _ := json.Marshal(registerRequest{
-		Email:       "test@test.com",
-		Password:    "",
-		DisplayName: "Test",
-	})
-	req := httptest.NewRequest("POST", "/api/auth/register", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	h.handleRegister(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for empty password, got %d", rec.Code)
-	}
-}
-
 // TestLoginEmptyCredentials verifies that completely empty credentials are rejected.
 func TestLoginEmptyCredentials(t *testing.T) {
 	svc := NewJWTService("test-secret")

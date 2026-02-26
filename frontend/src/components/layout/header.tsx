@@ -137,6 +137,7 @@ export function Header() {
             <Button
               variant="ghost"
               className="relative h-8 w-8 rounded-full"
+              aria-label="User menu"
             >
               <Avatar className="h-8 w-8">
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">

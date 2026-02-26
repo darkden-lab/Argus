@@ -8,7 +8,7 @@ kind: Pod
 spec:
   containers:
     - name: golang
-      image: golang:1.22-alpine
+      image: golang:1.25-alpine
       command: ['sleep']
       args: ['infinity']
     - name: node

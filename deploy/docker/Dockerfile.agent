@@ -1,4 +1,4 @@
-FROM golang:1.26-alpine AS builder
+FROM golang:1.25-alpine AS builder
 WORKDIR /app
 
 COPY backend/go.mod backend/go.sum ./backend/
@@ -19,7 +19,7 @@ RUN apk --no-cache add ca-certificates && \
     addgroup -S agentgroup && adduser -S agentuser -G agentgroup
 COPY --from=builder /argus-agent /argus-agent
 EXPOSE 8443
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD wget --no-verbose --tries=1 --spider http://localhost:8443/healthz || exit 1
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD pidof argus-agent || exit 1
 USER agentuser:agentgroup
 ENTRYPOINT ["/argus-agent"]

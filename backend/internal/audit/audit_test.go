@@ -66,7 +66,7 @@ func TestNewStore(t *testing.T) {
 
 func TestNewHandlers(t *testing.T) {
 	store := NewStore(nil)
-	handlers := NewHandlers(store)
+	handlers := NewHandlers(store, nil)
 	if handlers == nil {
 		t.Fatal("expected non-nil handlers")
 	}
@@ -161,7 +161,7 @@ func TestEntry_NilOptionalFields(t *testing.T) {
 
 func TestHandlers_RegisterRoutes(t *testing.T) {
 	store := NewStore(nil)
-	h := NewHandlers(store)
+	h := NewHandlers(store, nil)
 	r := mux.NewRouter()
 	h.RegisterRoutes(r)
 

@@ -151,7 +151,7 @@ func TestNewStore(t *testing.T) {
 func TestNewHandlers(t *testing.T) {
 	key := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	m := NewManager(nil, key)
-	h := NewHandlers(m)
+	h := NewHandlers(m, nil)
 	if h == nil {
 		t.Fatal("expected non-nil handlers")
 	}

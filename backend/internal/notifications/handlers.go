@@ -15,26 +15,29 @@ import (
 
 // Handlers provides HTTP handlers for the notifications API.
 type Handlers struct {
-	notifStore    *NotificationStore
-	prefStore     *PreferencesStore
-	chanStore     *ChannelStore
-	router        *Router
-	encryptionKey string
+	notifStore     *NotificationStore
+	prefStore      *PreferencesStore
+	chanStore      *ChannelStore
+	router         *Router
+	encryptionKey  string
+	rbacWriteGuard mux.MiddlewareFunc
 }
 
 // NewHandlers creates a new Handlers.
-func NewHandlers(notifStore *NotificationStore, prefStore *PreferencesStore, chanStore *ChannelStore, router *Router, encryptionKey string) *Handlers {
+func NewHandlers(notifStore *NotificationStore, prefStore *PreferencesStore, chanStore *ChannelStore, router *Router, encryptionKey string, rbacWriteGuard mux.MiddlewareFunc) *Handlers {
 	return &Handlers{
-		notifStore:    notifStore,
-		prefStore:     prefStore,
-		chanStore:     chanStore,
-		router:        router,
-		encryptionKey: encryptionKey,
+		notifStore:     notifStore,
+		prefStore:      prefStore,
+		chanStore:      chanStore,
+		router:         router,
+		encryptionKey:  encryptionKey,
+		rbacWriteGuard: rbacWriteGuard,
 	}
 }
 
 // RegisterRoutes wires the notification endpoints onto the provided router.
 func (h *Handlers) RegisterRoutes(r *mux.Router) {
+	// User-level endpoints (no admin RBAC, user-scoped)
 	r.HandleFunc("/api/notifications", h.ListNotifications).Methods("GET")
 	r.HandleFunc("/api/notifications/unread-count", h.UnreadCount).Methods("GET")
 	r.HandleFunc("/api/notifications/{id}/read", h.MarkRead).Methods("PUT")
@@ -42,10 +45,16 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/notifications/preferences", h.GetPreferences).Methods("GET")
 	r.HandleFunc("/api/notifications/preferences", h.UpdatePreferences).Methods("PUT")
 	r.HandleFunc("/api/notifications/channels", h.ListChannels).Methods("GET")
-	r.HandleFunc("/api/notifications/channels", h.CreateChannel).Methods("POST")
-	r.HandleFunc("/api/notifications/channels/{id}", h.UpdateChannel).Methods("PUT")
-	r.HandleFunc("/api/notifications/channels/{id}", h.DeleteChannel).Methods("DELETE")
-	r.HandleFunc("/api/notifications/channels/{id}/test", h.TestChannel).Methods("POST")
+
+	// Admin channel management requires notifications:write RBAC
+	writeRoutes := r.PathPrefix("").Subrouter()
+	if h.rbacWriteGuard != nil {
+		writeRoutes.Use(h.rbacWriteGuard)
+	}
+	writeRoutes.HandleFunc("/api/notifications/channels", h.CreateChannel).Methods("POST")
+	writeRoutes.HandleFunc("/api/notifications/channels/{id}", h.UpdateChannel).Methods("PUT")
+	writeRoutes.HandleFunc("/api/notifications/channels/{id}", h.DeleteChannel).Methods("DELETE")
+	writeRoutes.HandleFunc("/api/notifications/channels/{id}/test", h.TestChannel).Methods("POST")
 }
 
 // getUserID extracts the user ID from the JWT claims in the request context.

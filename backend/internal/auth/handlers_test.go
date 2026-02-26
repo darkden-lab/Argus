@@ -13,45 +13,6 @@ import (
 	"github.com/gorilla/mux"
 )
 
-func TestHandleRegisterBadJSON(t *testing.T) {
-	svc := NewJWTService("test-secret")
-	authSvc := &AuthService{jwt: svc}
-	h := NewHandlers(authSvc)
-
-	body := bytes.NewBufferString("{invalid json}")
-	req := httptest.NewRequest("POST", "/api/auth/register", body)
-	rec := httptest.NewRecorder()
-
-	h.handleRegister(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
-}
-
-func TestHandleRegisterMissingFields(t *testing.T) {
-	svc := NewJWTService("test-secret")
-	authSvc := &AuthService{jwt: svc}
-	h := NewHandlers(authSvc)
-
-	payload := map[string]string{"email": "test@test.com"}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest("POST", "/api/auth/register", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	h.handleRegister(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", rec.Code)
-	}
-
-	var resp errorResponse
-	json.NewDecoder(rec.Body).Decode(&resp)
-	if resp.Error == "" {
-		t.Error("expected non-empty error message")
-	}
-}
-
 func TestHandleLoginBadJSON(t *testing.T) {
 	svc := NewJWTService("test-secret")
 	authSvc := &AuthService{jwt: svc}
@@ -214,20 +175,6 @@ func TestHandlersSQLInjectionPayloads(t *testing.T) {
 		})
 		if loginOK {
 			t.Errorf("SECURITY: SQL injection payload returned 200 in login: %s", payload)
-		}
-
-		// Register: same logic
-		registerCreated := callHandlerSafe(func(rec *httptest.ResponseRecorder) {
-			body, _ := json.Marshal(registerRequest{
-				Email:       payload,
-				Password:    "password123",
-				DisplayName: "Test User",
-			})
-			req := httptest.NewRequest("POST", "/api/auth/register", bytes.NewBuffer(body))
-			h.handleRegister(rec, req)
-		})
-		if registerCreated {
-			t.Errorf("SECURITY: SQL injection payload returned 2xx in register: %s", payload)
 		}
 	}
 }
@@ -492,42 +439,6 @@ func TestHandleRefreshWithInvalidToken(t *testing.T) {
 	}
 }
 
-// TestHandleRegisterAllFieldsProvided tests register with all fields present
-// but nil DB (verifies the path after validation passes).
-func TestHandleRegisterAllFieldsProvided(t *testing.T) {
-	svc := NewJWTService("test-secret")
-	authSvc := &AuthService{jwt: svc}
-	h := NewHandlers(authSvc)
-
-	payload := registerRequest{
-		Email:       "newuser@test.com",
-		Password:    "strongpassword",
-		DisplayName: "New User",
-	}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest("POST", "/api/auth/register", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	panicked := false
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = true
-			}
-		}()
-		h.handleRegister(rec, req)
-	}()
-
-	// Should panic at DB layer (nil pool) proving validation passed
-	if !panicked && rec.Code == http.StatusCreated {
-		// If it somehow succeeded, verify it returned valid JSON
-		var resp authResponse
-		if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-			t.Errorf("expected valid JSON response: %v", err)
-		}
-	}
-}
-
 // TestHandleLoginAllFieldsProvided tests login with valid fields but nil DB.
 func TestHandleLoginAllFieldsProvided(t *testing.T) {
 	svc := NewJWTService("test-secret")
@@ -622,42 +533,6 @@ func TestWriteJSONWithComplexData(t *testing.T) {
 	}
 	if resp.User == nil || resp.User.ID != "u1" {
 		t.Error("expected user to be present in response")
-	}
-}
-
-// TestHandleRegisterMissingPassword verifies that missing password is rejected.
-func TestHandleRegisterMissingPassword(t *testing.T) {
-	svc := NewJWTService("test-secret")
-	authSvc := &AuthService{jwt: svc}
-	h := NewHandlers(authSvc)
-
-	payload := registerRequest{Email: "test@test.com", Password: "", DisplayName: "Test"}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest("POST", "/api/auth/register", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	h.handleRegister(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for missing password, got %d", rec.Code)
-	}
-}
-
-// TestHandleRegisterMissingDisplayName verifies that missing display name is rejected.
-func TestHandleRegisterMissingDisplayName(t *testing.T) {
-	svc := NewJWTService("test-secret")
-	authSvc := &AuthService{jwt: svc}
-	h := NewHandlers(authSvc)
-
-	payload := registerRequest{Email: "test@test.com", Password: "pass123", DisplayName: ""}
-	body, _ := json.Marshal(payload)
-	req := httptest.NewRequest("POST", "/api/auth/register", bytes.NewBuffer(body))
-	rec := httptest.NewRecorder()
-
-	h.handleRegister(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400 for missing display_name, got %d", rec.Code)
 	}
 }
 

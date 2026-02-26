@@ -38,20 +38,28 @@ type OidcConfig struct {
 
 // Handlers provides HTTP handlers for application settings.
 type Handlers struct {
-	pool *pgxpool.Pool
-	cfg  *config.Config
+	pool           *pgxpool.Pool
+	cfg            *config.Config
+	rbacWriteGuard mux.MiddlewareFunc
+	oidcService    *auth.OIDCService
 }
 
 // NewHandlers creates a new Handlers.
-func NewHandlers(pool *pgxpool.Pool, cfg *config.Config) *Handlers {
-	return &Handlers{pool: pool, cfg: cfg}
+func NewHandlers(pool *pgxpool.Pool, cfg *config.Config, rbacWriteGuard mux.MiddlewareFunc, oidcService *auth.OIDCService) *Handlers {
+	return &Handlers{pool: pool, cfg: cfg, rbacWriteGuard: rbacWriteGuard, oidcService: oidcService}
 }
 
 // RegisterRoutes wires the settings endpoints onto the provided router.
 func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/settings/oidc", h.GetOIDC).Methods("GET")
-	r.HandleFunc("/api/settings/oidc", h.UpdateOIDC).Methods("PUT")
-	r.HandleFunc("/api/settings/oidc/test", h.TestOIDC).Methods("POST")
+
+	// Write endpoints require settings:write RBAC
+	writeRoutes := r.PathPrefix("").Subrouter()
+	if h.rbacWriteGuard != nil {
+		writeRoutes.Use(h.rbacWriteGuard)
+	}
+	writeRoutes.HandleFunc("/api/settings/oidc", h.UpdateOIDC).Methods("PUT")
+	writeRoutes.HandleFunc("/api/settings/oidc/test", h.TestOIDC).Methods("POST")
 }
 
 // RegisterPublicRoutes registers settings routes that don't require authentication.
@@ -134,6 +142,13 @@ func (h *Handlers) UpdateOIDC(w http.ResponseWriter, r *http.Request) {
 	if err := upsertSetting(r.Context(), h.pool, "oidc", raw); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to save settings")
 		return
+	}
+
+	// Reload OIDC provider at runtime so changes take effect without restart
+	if h.oidcService != nil {
+		if err := h.oidcService.Reload(r.Context(), h.pool); err != nil {
+			log.Printf("settings: OIDC reload failed: %v (will use previous config)", err)
+		}
 	}
 
 	// Don't return the secret

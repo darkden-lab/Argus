@@ -58,6 +58,7 @@ func startStateCleanup() {
 
 // OIDCService handles OIDC authentication flows.
 type OIDCService struct {
+	mu           sync.RWMutex
 	provider     *oidc.Provider
 	oauth2Config oauth2.Config
 	verifier     *oidc.IDTokenVerifier
@@ -112,8 +113,75 @@ func NewOIDCService(ctx context.Context, cfg OIDCConfig, database *db.DB, jwtSer
 
 // Enabled returns true if OIDC is configured.
 func (s *OIDCService) Enabled() bool {
-	return s != nil && s.provider != nil
+	if s == nil {
+		return false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.provider != nil
 }
+
+// Reload reads the OIDC configuration from the database and recreates the
+// provider, oauth2 config, and verifier. This allows runtime config changes
+// without restarting the server.
+func (s *OIDCService) Reload(ctx context.Context, pool *pgxpool.Pool) error {
+	if s == nil || pool == nil {
+		return nil
+	}
+
+	var raw []byte
+	err := pool.QueryRow(ctx, "SELECT value FROM settings WHERE key = $1", "oidc").Scan(&raw)
+	if err != nil {
+		return fmt.Errorf("failed to read OIDC config from DB: %w", err)
+	}
+
+	var cfg struct {
+		Enabled      bool   `json:"enabled"`
+		IssuerURL    string `json:"issuer_url"`
+		ClientID     string `json:"client_id"`
+		ClientSecret string `json:"client_secret"`
+		RedirectURL  string `json:"redirect_url"`
+	}
+	if err := json.Unmarshal(raw, &cfg); err != nil {
+		return fmt.Errorf("failed to parse OIDC config: %w", err)
+	}
+
+	if !cfg.Enabled || cfg.IssuerURL == "" || cfg.ClientID == "" {
+		// OIDC disabled — clear the provider
+		s.mu.Lock()
+		s.provider = nil
+		s.mu.Unlock()
+		log.Println("oidc: reload — OIDC disabled")
+		return nil
+	}
+
+	provider, err := oidc.NewProvider(ctx, cfg.IssuerURL)
+	if err != nil {
+		return fmt.Errorf("failed to discover OIDC provider at %s: %w", cfg.IssuerURL, err)
+	}
+
+	oauth2Cfg := oauth2.Config{
+		ClientID:     cfg.ClientID,
+		ClientSecret: cfg.ClientSecret,
+		RedirectURL:  cfg.RedirectURL,
+		Endpoint:     provider.Endpoint(),
+		Scopes:       []string{oidc.ScopeOpenID, "profile", "email"},
+	}
+
+	verifier := provider.Verifier(&oidc.Config{
+		ClientID: cfg.ClientID,
+	})
+
+	s.mu.Lock()
+	s.provider = provider
+	s.oauth2Config = oauth2Cfg
+	s.verifier = verifier
+	s.mu.Unlock()
+
+	log.Printf("oidc: reload — provider reconfigured (issuer=%s)", cfg.IssuerURL)
+	return nil
+}
+
 
 // RegisterRoutes registers OIDC endpoints on the router (no auth middleware required).
 func (s *OIDCService) RegisterRoutes(r *mux.Router) {
@@ -130,7 +198,9 @@ func (s *OIDCService) HandleAuthorize(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	s.mu.RLock()
 	url := s.oauth2Config.AuthCodeURL(state)
+	s.mu.RUnlock()
 	http.Redirect(w, r, url, http.StatusFound)
 }
 
@@ -155,7 +225,12 @@ func (s *OIDCService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	oauth2Token, err := s.oauth2Config.Exchange(r.Context(), code)
+	s.mu.RLock()
+	oauth2Cfg := s.oauth2Config
+	verifier := s.verifier
+	s.mu.RUnlock()
+
+	oauth2Token, err := oauth2Cfg.Exchange(r.Context(), code)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to exchange authorization code"})
 		return
@@ -167,7 +242,7 @@ func (s *OIDCService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	idToken, err := s.verifier.Verify(r.Context(), rawIDToken)
+	idToken, err := verifier.Verify(r.Context(), rawIDToken)
 	if err != nil {
 		writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "invalid ID token"})
 		return

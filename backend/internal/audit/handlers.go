@@ -1,26 +1,33 @@
 package audit
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/gorilla/mux"
+
+	"github.com/darkden-lab/argus/backend/internal/httputil"
 )
 
 // Handlers provides HTTP handlers for the audit log.
 type Handlers struct {
-	store *Store
+	store         *Store
+	rbacReadGuard mux.MiddlewareFunc
 }
 
 // NewHandlers creates a new Handlers.
-func NewHandlers(store *Store) *Handlers {
-	return &Handlers{store: store}
+func NewHandlers(store *Store, rbacReadGuard mux.MiddlewareFunc) *Handlers {
+	return &Handlers{store: store, rbacReadGuard: rbacReadGuard}
 }
 
 // RegisterRoutes wires the audit log endpoints onto the provided router.
 func (h *Handlers) RegisterRoutes(r *mux.Router) {
-	r.HandleFunc("/api/audit-log", h.List).Methods("GET")
+	// Audit log requires audit:read RBAC
+	auditRoutes := r.PathPrefix("").Subrouter()
+	if h.rbacReadGuard != nil {
+		auditRoutes.Use(h.rbacReadGuard)
+	}
+	auditRoutes.HandleFunc("/api/audit-log", h.List).Methods("GET")
 }
 
 // List handles GET /api/audit-log with query filters and pagination.
@@ -42,15 +49,11 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 
 	entries, total, err := h.store.List(r.Context(), params)
 	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
 		"entries": entries,
 		"total":   total,
 		"limit":   params.Limit,
