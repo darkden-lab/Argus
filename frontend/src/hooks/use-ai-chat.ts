@@ -13,30 +13,29 @@ interface ChatWsMessage {
     | "load_history"
     | "context_update";
   content?: string;
-  conversationId?: string;
-  confirmId?: string;
+  conversation_id?: string;
+  confirmation_id?: string;
   approved?: boolean;
   context?: PageContext;
 }
 
 interface ChatServerMessage {
   type:
-    | "message_start"
-    | "message_delta"
-    | "message_end"
+    | "assistant_message"
+    | "stream_delta"
+    | "stream_end"
     | "tool_use"
     | "confirm_request"
     | "conversation_created"
     | "history"
     | "error";
-  messageId?: string;
   content?: string;
-  role?: "assistant" | "tool";
-  conversationId?: string;
+  conversation_id?: string;
+  confirmation_id?: string;
+  tool_name?: string;
+  tool_args?: string;
   title?: string;
   messages?: ChatMessage[];
-  toolCall?: ChatMessage["toolCall"];
-  confirmAction?: ChatMessage["confirmAction"];
   error?: string;
 }
 
@@ -92,7 +91,7 @@ export function useAiChat() {
     }
 
     const ws = new WebSocket(
-      `${WS_URL}/api/ai/chat?token=${encodeURIComponent(token)}`
+      `${WS_URL}/ws/ai/chat?token=${encodeURIComponent(token)}`
     );
     wsRef.current = ws;
 
@@ -106,62 +105,72 @@ export function useAiChat() {
         const store = storeRef.current;
 
         switch (msg.type) {
-          case "message_start":
-            store.setIsStreaming(true);
-            store.addMessage({
-              id: msg.messageId || crypto.randomUUID(),
-              role: msg.role || "assistant",
-              content: "",
-              timestamp: new Date().toISOString(),
-              isStreaming: true,
-            });
-            break;
-
-          case "message_delta":
-            if (msg.messageId && msg.content) {
-              store.appendToMessage(msg.messageId, msg.content);
+          case "stream_delta": {
+            // If not already streaming, start a new assistant message
+            const state = useAiChatStore.getState();
+            const lastMsg = state.messages[state.messages.length - 1];
+            if (!lastMsg || !lastMsg.isStreaming) {
+              store.setIsStreaming(true);
+              const newId = crypto.randomUUID();
+              store.addMessage({
+                id: newId,
+                role: "assistant",
+                content: msg.content || "",
+                timestamp: new Date().toISOString(),
+                isStreaming: true,
+              });
+            } else if (msg.content) {
+              store.appendToMessage(lastMsg.id, msg.content);
             }
             break;
+          }
 
-          case "message_end":
-            if (msg.messageId) {
-              store.updateMessage(msg.messageId, { isStreaming: false });
+          case "stream_end": {
+            const state = useAiChatStore.getState();
+            const streamingMsg = state.messages.findLast((m) => m.isStreaming);
+            if (streamingMsg) {
+              store.updateMessage(streamingMsg.id, { isStreaming: false });
             }
             store.setIsStreaming(false);
             break;
+          }
 
-          case "tool_use":
+          case "assistant_message":
             store.addMessage({
-              id: msg.messageId || crypto.randomUUID(),
-              role: "tool",
+              id: crypto.randomUUID(),
+              role: "assistant",
               content: msg.content || "",
               timestamp: new Date().toISOString(),
-              toolCall: msg.toolCall,
             });
             break;
 
           case "confirm_request":
-            if (msg.messageId && msg.confirmAction) {
+            if (msg.confirmation_id) {
               store.addMessage({
-                id: msg.messageId,
+                id: crypto.randomUUID(),
                 role: "assistant",
                 content: msg.content || "Action requires confirmation",
                 timestamp: new Date().toISOString(),
-                confirmAction: msg.confirmAction,
+                confirmAction: {
+                  id: msg.confirmation_id,
+                  tool: msg.tool_name || "",
+                  description: msg.content || "",
+                  status: "pending" as const,
+                },
               });
             }
             break;
 
           case "conversation_created":
-            if (msg.conversationId) {
+            if (msg.conversation_id) {
               store.addConversation({
-                id: msg.conversationId,
+                id: msg.conversation_id,
                 title: msg.title || "New conversation",
                 createdAt: new Date().toISOString(),
                 updatedAt: new Date().toISOString(),
                 messageCount: 0,
               });
-              store.setActiveConversation(msg.conversationId);
+              store.setActiveConversation(msg.conversation_id);
             }
             break;
 
@@ -237,7 +246,7 @@ export function useAiChat() {
       const msg: ChatWsMessage = {
         type: "user_message",
         content,
-        conversationId: useAiChatStore.getState().activeConversationId || undefined,
+        conversation_id: useAiChatStore.getState().activeConversationId || undefined,
         context: pageContext,
       };
       wsRef.current.send(JSON.stringify(msg));
@@ -250,7 +259,7 @@ export function useAiChat() {
 
     const msg: ChatWsMessage = {
       type: "confirm_action",
-      confirmId,
+      confirmation_id: confirmId,
       approved,
     };
     wsRef.current.send(JSON.stringify(msg));
@@ -273,7 +282,7 @@ export function useAiChat() {
 
     const msg: ChatWsMessage = {
       type: "load_history",
-      conversationId,
+      conversation_id: conversationId,
     };
     wsRef.current.send(JSON.stringify(msg));
   }, []);

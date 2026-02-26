@@ -4,12 +4,14 @@ import { useEffect } from "react";
 import { Sidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { MainContent } from "@/components/layout/main-content";
+import { CommandPalette } from "@/components/command-palette/command-palette";
 import { usePermissionsStore } from "@/stores/permissions";
 import { useAuthStore } from "@/stores/auth";
 import { k8sWs } from "@/lib/ws";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ToastContainer } from "@/components/ui/toast";
 import { ChatPanel, ChatToggleButton } from "@/components/ai/chat-panel";
+import { TerminalPanel } from "@/components/terminal/terminal-panel";
 
 export default function DashboardLayout({
   children,
@@ -46,9 +48,11 @@ export default function DashboardLayout({
           <ErrorBoundary>{children}</ErrorBoundary>
         </MainContent>
       </div>
+      <CommandPalette />
       <ToastContainer />
       <ChatPanel />
       <ChatToggleButton />
+      <TerminalPanel />
     </div>
   );
 }

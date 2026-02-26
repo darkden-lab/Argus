@@ -17,6 +17,9 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/darkden-lab/argus/backend/docs"
 	"github.com/darkden-lab/argus/backend/pkg/agentpb"
+	"github.com/darkden-lab/argus/backend/internal/ai"
+	"github.com/darkden-lab/argus/backend/internal/ai/providers"
+	"github.com/darkden-lab/argus/backend/internal/ai/rag"
 	"github.com/darkden-lab/argus/backend/internal/audit"
 	"github.com/darkden-lab/argus/backend/internal/auth"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
@@ -217,6 +220,10 @@ func main() {
 		notifHandlers.RegisterRoutes(protected)
 	}
 
+	// Notifications WebSocket (auth handled inside handler)
+	notifWSHandler := notifications.NewWSHandler(jwtService)
+	notifWSHandler.RegisterRoutes(r)
+
 	// Plugin management routes
 	pluginHandlers := plugin.NewHandlers(pluginEngine)
 	pluginHandlers.RegisterRoutes(protected)
@@ -235,6 +242,38 @@ func main() {
 	// Terminal WebSocket (auth handled inside handler)
 	terminalHandler := terminal.NewHandler(jwtService, clusterMgr)
 	terminalHandler.RegisterRoutes(r)
+
+	// AI Chat system
+	aiCfg := ai.LoadConfigFromEnv()
+	var aiProvider ai.LLMProvider
+	switch aiCfg.Provider {
+	case ai.ProviderClaude:
+		aiProvider = providers.NewClaude(aiCfg.APIKey, aiCfg.Model)
+	case ai.ProviderOpenAI:
+		aiProvider = providers.NewOpenAI(aiCfg.APIKey, aiCfg.Model, aiCfg.BaseURL)
+	case ai.ProviderOllama:
+		aiProvider = providers.NewOllama(aiCfg.BaseURL, aiCfg.Model)
+	default:
+		aiProvider = providers.NewClaude(aiCfg.APIKey, aiCfg.Model)
+	}
+
+	var aiRetriever *rag.Retriever
+	var aiIndexer *rag.Indexer
+	if pool != nil {
+		ragStore := rag.NewStore(pool)
+		embedder := &ai.ProviderEmbedder{Provider: aiProvider}
+		aiRetriever = rag.NewRetriever(ragStore, embedder, 5)
+		aiIndexer = rag.NewIndexer(ragStore, embedder, clusterMgr)
+	}
+
+	aiService := ai.NewService(aiProvider, aiRetriever, clusterMgr, pool, aiCfg)
+	aiChatHandler := ai.NewChatHandler(aiService, jwtService)
+	aiChatHandler.RegisterRoutes(r)
+
+	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer)
+	aiAdminHandlers.RegisterRoutes(protected)
+
+	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)
 
 	// Start health check ticker
 	go func() {

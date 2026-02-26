@@ -7,12 +7,32 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ResourceTable, StatusBadge, type Column } from "@/components/resources/resource-table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Download, MessageSquare, Terminal, Copy, Check } from "lucide-react";
+import { ArrowLeft, Download, MessageSquare, Terminal, Copy, Check, Rocket, Database, Timer } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
+import { StatusDot } from "@/components/ui/status-dot";
 import { useAiChatStore } from "@/stores/ai-chat";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useK8sWildcard } from "@/hooks/use-k8s-websocket";
+import { cn } from "@/lib/utils";
 import type { WatchEvent } from "@/lib/ws";
+import {
+  compositeApps,
+  compositeDatabases,
+  compositeJobs,
+  getStatusDot,
+  formatAge,
+  truncateImage,
+  type App,
+  type Database as DbType,
+  type CompositeJob,
+  type K8sDeployment,
+  type K8sService,
+  type K8sIngress,
+  type K8sStatefulSet,
+  type K8sPVC,
+  type K8sCronJob,
+  type K8sJob,
+} from "@/lib/abstractions";
 
 interface K8sResource {
   metadata: {
@@ -37,6 +57,35 @@ const resourceTabs = [
     id: "overview",
     label: "Overview",
     resources: [],
+  },
+  {
+    id: "apps",
+    label: "Apps",
+    icon: Rocket,
+    resources: [
+      { type: "deployments", gvr: "apps/v1/deployments", label: "Deployments" },
+      { type: "services", gvr: "_/v1/services", label: "Services" },
+      { type: "ingresses", gvr: "networking.k8s.io/v1/ingresses", label: "Ingresses" },
+    ],
+  },
+  {
+    id: "databases",
+    label: "Databases",
+    icon: Database,
+    resources: [
+      { type: "statefulsets", gvr: "apps/v1/statefulsets", label: "StatefulSets" },
+      { type: "persistentvolumeclaims", gvr: "_/v1/persistentvolumeclaims", label: "PVCs" },
+      { type: "services", gvr: "_/v1/services", label: "Services" },
+    ],
+  },
+  {
+    id: "jobs",
+    label: "Jobs",
+    icon: Timer,
+    resources: [
+      { type: "cronjobs", gvr: "batch/v1/cronjobs", label: "CronJobs" },
+      { type: "jobs", gvr: "batch/v1/jobs", label: "Jobs" },
+    ],
   },
   {
     id: "workloads",
@@ -73,6 +122,9 @@ const resourceTabs = [
     ],
   },
 ];
+
+// Tabs grouped under "Resources (Advanced)" collapsible
+const advancedTabIds = new Set(["workloads", "networking", "storage", "config"]);
 
 function getAge(timestamp: string | undefined): string {
   if (!timestamp) return "-";
@@ -113,8 +165,27 @@ export default function ClusterDetailPage() {
   const [nodeCount, setNodeCount] = useState(0);
   const [isDownloading, setIsDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const openChat = useAiChatStore((s) => s.open);
   const setPageContext = useAiChatStore((s) => s.setPageContext);
+
+  // Computed abstractions
+  const apps: App[] = compositeApps(
+    (resources.deployments ?? []) as unknown as K8sDeployment[],
+    (resources.services ?? []) as unknown as K8sService[],
+    (resources.ingresses ?? []) as unknown as K8sIngress[]
+  );
+
+  const databases: DbType[] = compositeDatabases(
+    (resources.statefulsets ?? []) as unknown as K8sStatefulSet[],
+    (resources.persistentvolumeclaims ?? []) as unknown as K8sPVC[],
+    (resources.services ?? []) as unknown as K8sService[]
+  );
+
+  const jobs: CompositeJob[] = compositeJobs(
+    (resources.cronjobs ?? []) as unknown as K8sCronJob[],
+    (resources.jobs ?? []) as unknown as K8sJob[]
+  );
 
   const handleWsEvent = useCallback(
     (event: WatchEvent) => {
@@ -228,6 +299,10 @@ export default function ClusterDetailPage() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Separate primary tabs and advanced tabs
+  const primaryTabs = resourceTabs.filter((t) => !advancedTabIds.has(t.id));
+  const advancedTabs = resourceTabs.filter((t) => advancedTabIds.has(t.id));
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -276,14 +351,39 @@ export default function ClusterDetailPage() {
       </div>
 
       <Tabs value={activeTab} onValueChange={handleTabChange}>
-        <TabsList>
-          {resourceTabs.map((tab) => (
-            <TabsTrigger key={tab.id} value={tab.id}>
-              {tab.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        <div className="flex items-center gap-2">
+          <TabsList>
+            {primaryTabs.map((tab) => (
+              <TabsTrigger key={tab.id} value={tab.id}>
+                {tab.icon && <tab.icon className="mr-1.5 h-3.5 w-3.5" />}
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
 
+          {/* Advanced tabs toggle */}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground"
+            onClick={() => setShowAdvanced(!showAdvanced)}
+          >
+            {showAdvanced ? "Hide" : "Show"} Resources (Advanced)
+          </Button>
+        </div>
+
+        {/* Advanced tabs row */}
+        {showAdvanced && (
+          <TabsList className="mt-2">
+            {advancedTabs.map((tab) => (
+              <TabsTrigger key={tab.id} value={tab.id}>
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        )}
+
+        {/* Overview Tab */}
         <TabsContent value="overview" className="mt-4 space-y-4">
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-md border p-4">
@@ -346,8 +446,192 @@ export default function ClusterDetailPage() {
           </div>
         </TabsContent>
 
+        {/* Apps Tab */}
+        <TabsContent value="apps" className="mt-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            High-level view of applications composed from Deployments, Services, and Ingresses.
+          </p>
+          {(loading.deployments || loading.services || loading.ingresses) ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              Loading apps...
+            </div>
+          ) : apps.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Rocket className="h-8 w-8 text-muted-foreground" />
+              <p className="mt-2 text-sm text-muted-foreground">No apps found in this cluster.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {apps.map((app) => (
+                <div
+                  key={app.id}
+                  className="rounded-lg border p-4 space-y-2 hover:border-primary/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StatusDot status={getStatusDot(app.status)} size="sm" />
+                      <span className="text-sm font-medium truncate">{app.name}</span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {app.namespace}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground font-mono truncate">
+                    {truncateImage(app.image)}
+                  </p>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      Replicas: {app.replicas.ready}/{app.replicas.desired}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {app.serviceType !== "None" ? app.serviceType : "No svc"}
+                    </span>
+                  </div>
+                  {app.hosts.length > 0 && (
+                    <div className="flex flex-wrap gap-1">
+                      {app.hosts.map((host) => (
+                        <Badge key={host} variant="secondary" className="text-[10px]">
+                          {app.hasTLS ? "https://" : ""}{host}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    Age: {formatAge(app.createdAt)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Databases Tab */}
+        <TabsContent value="databases" className="mt-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Detected database workloads composed from StatefulSets, PVCs, and Services.
+          </p>
+          {(loading.statefulsets || loading.persistentvolumeclaims) ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              Loading databases...
+            </div>
+          ) : databases.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Database className="h-8 w-8 text-muted-foreground" />
+              <p className="mt-2 text-sm text-muted-foreground">No databases found in this cluster.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {databases.map((db) => (
+                <div
+                  key={db.id}
+                  className="rounded-lg border p-4 space-y-2 hover:border-primary/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StatusDot status={getStatusDot(db.status)} size="sm" />
+                      <span className="text-sm font-medium truncate">{db.name}</span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {db.namespace}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Badge
+                      variant="secondary"
+                      className={cn(
+                        "text-[10px]",
+                        db.engine === "postgresql" && "bg-blue-500/10 text-blue-600",
+                        db.engine === "mariadb" && "bg-orange-500/10 text-orange-600",
+                        db.engine === "mysql" && "bg-cyan-500/10 text-cyan-600",
+                        db.engine === "redis" && "bg-red-500/10 text-red-600"
+                      )}
+                    >
+                      {db.engine}
+                    </Badge>
+                    {db.isCNPG && (
+                      <Badge variant="outline" className="text-[10px]">CNPG</Badge>
+                    )}
+                    {db.isMariaDB && (
+                      <Badge variant="outline" className="text-[10px]">Operator</Badge>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      Replicas: {db.replicas.ready}/{db.replicas.desired}
+                    </span>
+                    <span className="text-muted-foreground">
+                      Storage: {db.storage}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Age: {formatAge(db.createdAt)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Jobs Tab */}
+        <TabsContent value="jobs" className="mt-4 space-y-4">
+          <p className="text-sm text-muted-foreground">
+            CronJobs and standalone Jobs running in this cluster.
+          </p>
+          {(loading.cronjobs || loading.jobs) ? (
+            <div className="flex items-center justify-center py-8 text-muted-foreground">
+              Loading jobs...
+            </div>
+          ) : jobs.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-center">
+              <Timer className="h-8 w-8 text-muted-foreground" />
+              <p className="mt-2 text-sm text-muted-foreground">No jobs found in this cluster.</p>
+            </div>
+          ) : (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {jobs.map((job) => (
+                <div
+                  key={job.id}
+                  className="rounded-lg border p-4 space-y-2 hover:border-primary/30 transition-colors"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <StatusDot status={getStatusDot(job.status)} size="sm" />
+                      <span className="text-sm font-medium truncate">{job.name}</span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] shrink-0">
+                      {job.namespace}
+                    </Badge>
+                  </div>
+                  {job.schedule && (
+                    <p className="text-xs font-mono text-muted-foreground">
+                      Schedule: {job.schedule}
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground font-mono truncate">
+                    {truncateImage(job.image)}
+                  </p>
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">
+                      Completed: {job.completions.succeeded}/{job.completions.total}
+                    </span>
+                    {job.lastRun && (
+                      <span className="text-muted-foreground">
+                        Last: {formatAge(job.lastRun)} ago
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">
+                    Age: {formatAge(job.createdAt)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
+        {/* Advanced resource tabs */}
         {resourceTabs
-          .filter((tab) => tab.id !== "overview")
+          .filter((tab) => advancedTabIds.has(tab.id))
           .map((tab) => (
             <TabsContent key={tab.id} value={tab.id} className="mt-4 space-y-6">
               {tab.resources.map((res) => (

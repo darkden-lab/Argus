@@ -18,6 +18,25 @@ jest.mock('@/hooks/use-k8s-websocket', () => ({
   useRelativeTime: () => 'Never',
 }));
 
+// Mock the dashboard store
+jest.mock('@/stores/dashboard', () => ({
+  useDashboardStore: () => ({
+    clusters: [],
+    stats: {
+      totalApps: 0,
+      healthyApps: 0,
+      totalDatabases: 0,
+      runningDatabases: 0,
+      totalJobs: 0,
+      activeJobs: 0,
+      totalClusters: 0,
+      healthyClusters: 0,
+    },
+    loading: false,
+    fetchAll: jest.fn(),
+  }),
+}));
+
 describe('DashboardPage', () => {
   it('renders the dashboard title', async () => {
     render(<DashboardPage />);
@@ -31,48 +50,57 @@ describe('DashboardPage', () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Overview of your Kubernetes clusters.')).toBeInTheDocument();
+      expect(screen.getByText('Overview of your infrastructure at a glance.')).toBeInTheDocument();
     });
   });
 
-  it('renders cluster health card with empty state when API fails', async () => {
+  it('renders stat cards', async () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Cluster Health')).toBeInTheDocument();
-    });
-
-    // No placeholder clusters should be shown
-    expect(screen.queryByText('production')).not.toBeInTheDocument();
-    expect(screen.queryByText('staging')).not.toBeInTheDocument();
-  });
-
-  it('renders resource summary with zero counts when API fails', async () => {
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Resource Summary')).toBeInTheDocument();
-    });
-
-    expect(screen.getByText('Pods')).toBeInTheDocument();
-    expect(screen.getByText('Deployments')).toBeInTheDocument();
-    expect(screen.getByText('Services')).toBeInTheDocument();
-    expect(screen.getByText('Namespaces')).toBeInTheDocument();
-  });
-
-  it('renders recent events card', async () => {
-    render(<DashboardPage />);
-
-    await waitFor(() => {
-      expect(screen.getByText('Recent Events')).toBeInTheDocument();
+      expect(screen.getByText('Apps')).toBeInTheDocument();
+      expect(screen.getByText('Databases')).toBeInTheDocument();
+      expect(screen.getByText('Jobs')).toBeInTheDocument();
+      // "Clusters" appears multiple times (stat card + section header)
+      const clusterElements = screen.getAllByText('Clusters');
+      expect(clusterElements.length).toBeGreaterThanOrEqual(1);
     });
   });
 
-  it('renders plugin status card', async () => {
+  it('renders cluster empty state when no clusters', async () => {
     render(<DashboardPage />);
 
     await waitFor(() => {
-      expect(screen.getByText('Active Plugins')).toBeInTheDocument();
+      expect(screen.getByText('No clusters connected.')).toBeInTheDocument();
+    });
+  });
+
+  it('renders recent activity section', async () => {
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Recent Activity')).toBeInTheDocument();
+    });
+  });
+
+  it('renders quick actions', async () => {
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Quick Actions')).toBeInTheDocument();
+      expect(screen.getByText('Deploy App')).toBeInTheDocument();
+      // "Add Cluster" appears in both quick actions and empty state
+      const addClusterElements = screen.getAllByText('Add Cluster');
+      expect(addClusterElements.length).toBeGreaterThanOrEqual(1);
+      expect(screen.getByText('View Monitoring')).toBeInTheDocument();
+    });
+  });
+
+  it('renders plugins section', async () => {
+    render(<DashboardPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText('Plugins')).toBeInTheDocument();
     });
   });
 });

@@ -1,0 +1,7 @@
+# Force LF line endings for shell scripts (prevents CRLF issues on Windows)
+*.sh text eol=lf
+
+# Force LF for other unix-specific files
+Makefile text eol=lf
+Dockerfile text eol=lf
+*.proto text eol=lf

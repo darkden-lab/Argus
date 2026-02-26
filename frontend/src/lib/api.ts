@@ -97,5 +97,6 @@ export const api = {
   get: <T>(path: string) => fetchWithAuth<T>(path, 'GET'),
   post: <T>(path: string, body?: unknown) => fetchWithAuth<T>(path, 'POST', body),
   put: <T>(path: string, body?: unknown) => fetchWithAuth<T>(path, 'PUT', body),
+  patch: <T>(path: string, body?: unknown) => fetchWithAuth<T>(path, 'PATCH', body),
   del: <T>(path: string) => fetchWithAuth<T>(path, 'DELETE'),
 };

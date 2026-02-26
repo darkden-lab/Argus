@@ -46,7 +46,7 @@ describe('LoginPage', () => {
     });
 
     expect(screen.getByText('Argus')).toBeInTheDocument();
-    expect(screen.getByText('Sign in to manage your clusters')).toBeInTheDocument();
+    expect(screen.getByText('Multi-cluster Kubernetes Dashboard')).toBeInTheDocument();
     expect(screen.getByLabelText('Email')).toBeInTheDocument();
     expect(screen.getByLabelText('Password')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
@@ -179,5 +179,13 @@ describe('LoginPage', () => {
     });
 
     expect(screen.queryByText(/sign in with/i)).not.toBeInTheDocument();
+  });
+
+  it('renders the brand tagline', async () => {
+    await act(async () => {
+      renderLoginPage();
+    });
+
+    expect(screen.getByText(/Kubernetes Infrastructure Management/)).toBeInTheDocument();
   });
 });

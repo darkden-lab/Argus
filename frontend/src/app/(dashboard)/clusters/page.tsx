@@ -1,30 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { ResourceTable, StatusBadge, type Column } from "@/components/resources/resource-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   Tooltip,
   TooltipContent,
@@ -35,13 +16,15 @@ import {
   Plus,
   FileKey2,
   Bot,
-  Copy,
-  Check,
-  Loader2,
-  RefreshCw,
+  LayoutGrid,
+  List,
+  Search,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { RBACGate } from "@/components/auth/rbac-gate";
 import { cn } from "@/lib/utils";
+import { ClusterCard } from "@/components/clusters/cluster-card";
+import { AddClusterWizard } from "@/components/clusters/add-cluster-wizard";
 
 type ConnectionType = "kubeconfig" | "agent";
 
@@ -54,23 +37,7 @@ interface Cluster {
   agent_status?: string;
   labels: Record<string, string>;
   last_health: string;
-}
-
-interface AgentTokenResponse {
-  token_id: string;
-  install_command: string;
-  token: string;
-  token_info: {
-    id: string;
-    cluster_name: string;
-    created_by: string;
-    permissions: string;
-    used: boolean;
-    cluster_id?: string;
-    expires_at: string;
-    created_at: string;
-    used_at?: string;
-  };
+  node_count?: number;
 }
 
 function ConnectionTypeIcon({ type }: { type?: ConnectionType }) {
@@ -135,37 +102,20 @@ const columns: Column<Cluster>[] = [
   { key: "last_health", label: "Last Health Check" },
 ];
 
-const permissionsPresets = [
-  { value: "read-only", label: "Read Only", description: "View resources across all namespaces" },
-  { value: "operator", label: "Operator", description: "View, scale, restart workloads" },
-  { value: "admin", label: "Admin", description: "Full cluster access" },
-  { value: "custom", label: "Custom", description: "Define custom RBAC rules" },
-];
+type ViewMode = "grid" | "table";
 
 export default function ClustersPage() {
   const router = useRouter();
   const [clusters, setClusters] = useState<Cluster[]>([]);
   const [loading, setLoading] = useState(true);
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [dialogTab, setDialogTab] = useState("kubeconfig");
-
-  // Kubeconfig form state
-  const [adding, setAdding] = useState(false);
-  const [kubeconfigForm, setKubeconfigForm] = useState({
-    name: "",
-    api_server_url: "",
-    kubeconfig: "",
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [gridSearch, setGridSearch] = useState("");
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    if (typeof window !== "undefined") {
+      return (localStorage.getItem("argus:clusters-view") as ViewMode) || "grid";
+    }
+    return "grid";
   });
-
-  // Agent form state
-  const [agentForm, setAgentForm] = useState({
-    name: "",
-    permissions: "read-only",
-  });
-  const [generatingToken, setGeneratingToken] = useState(false);
-  const [agentToken, setAgentToken] = useState<AgentTokenResponse | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [waitingForAgent, setWaitingForAgent] = useState(false);
 
   useEffect(() => {
     api
@@ -175,53 +125,26 @@ export default function ClustersPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  function resetDialog() {
-    setDialogTab("kubeconfig");
-    setKubeconfigForm({ name: "", api_server_url: "", kubeconfig: "" });
-    setAgentForm({ name: "", permissions: "read-only" });
-    setAgentToken(null);
-    setWaitingForAgent(false);
-    setCopied(false);
-  }
-
-  async function handleAddKubeconfig() {
-    setAdding(true);
-    try {
-      const created = await api.post<Cluster>("/api/clusters", kubeconfigForm);
-      setClusters((prev) => [...prev, created]);
-      setDialogOpen(false);
-      resetDialog();
-    } catch {
-      // handled by api
-    } finally {
-      setAdding(false);
+  function handleViewChange(mode: ViewMode) {
+    setViewMode(mode);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("argus:clusters-view", mode);
     }
   }
 
-  async function handleGenerateAgentToken() {
-    setGeneratingToken(true);
-    try {
-      const response = await api.post<AgentTokenResponse>(
-        "/api/clusters/agent-token",
-        {
-          cluster_name: agentForm.name,
-          permissions: agentForm.permissions,
-        }
-      );
-      setAgentToken(response);
-      setWaitingForAgent(true);
-    } catch {
-      // handled by api
-    } finally {
-      setGeneratingToken(false);
-    }
-  }
+  const filteredClusters = useMemo(() => {
+    if (!gridSearch) return clusters;
+    const q = gridSearch.toLowerCase();
+    return clusters.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        c.api_server_url.toLowerCase().includes(q) ||
+        c.status.toLowerCase().includes(q)
+    );
+  }, [clusters, gridSearch]);
 
-  async function handleCopyCommand() {
-    if (!agentToken) return;
-    await navigator.clipboard.writeText(agentToken.install_command);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  function handleClusterAdded(cluster: Cluster) {
+    setClusters((prev) => [...prev, cluster]);
   }
 
   return (
@@ -233,241 +156,105 @@ export default function ClustersPage() {
             Manage your Kubernetes clusters.
           </p>
         </div>
-        <RBACGate resource="clusters" action="write">
-          <Dialog
-            open={dialogOpen}
-            onOpenChange={(open) => {
-              setDialogOpen(open);
-              if (!open) resetDialog();
-            }}
-          >
-            <DialogTrigger asChild>
-              <Button size="sm">
-                <Plus className="mr-1.5 h-4 w-4" />
-                Add Cluster
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-lg">
-              <DialogHeader>
-                <DialogTitle>Add Cluster</DialogTitle>
-              </DialogHeader>
-              <Tabs value={dialogTab} onValueChange={setDialogTab}>
-                <TabsList className="w-full">
-                  <TabsTrigger value="kubeconfig" className="flex-1">
-                    <FileKey2 className="mr-1.5 h-4 w-4" />
-                    Kubeconfig
-                  </TabsTrigger>
-                  <TabsTrigger value="agent" className="flex-1">
-                    <Bot className="mr-1.5 h-4 w-4" />
-                    Deploy Agent
-                  </TabsTrigger>
-                </TabsList>
+        <div className="flex items-center gap-2">
+          {/* View mode toggle */}
+          <div className="flex items-center rounded-lg border border-border p-0.5">
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={viewMode === "grid" ? "secondary" : "ghost"}
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => handleViewChange("grid")}
+                  >
+                    <LayoutGrid className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Grid view</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={viewMode === "table" ? "secondary" : "ghost"}
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => handleViewChange("table")}
+                  >
+                    <List className="h-3.5 w-3.5" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Table view</TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
 
-                {/* Kubeconfig Tab */}
-                <TabsContent value="kubeconfig">
-                  <div className="space-y-4 py-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="cluster-name">Cluster Name</Label>
-                      <Input
-                        id="cluster-name"
-                        placeholder="production"
-                        value={kubeconfigForm.name}
-                        onChange={(e) =>
-                          setKubeconfigForm((f) => ({
-                            ...f,
-                            name: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="api-server">API Server URL</Label>
-                      <Input
-                        id="api-server"
-                        placeholder="https://k8s.example.com:6443"
-                        value={kubeconfigForm.api_server_url}
-                        onChange={(e) =>
-                          setKubeconfigForm((f) => ({
-                            ...f,
-                            api_server_url: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="kubeconfig">Kubeconfig</Label>
-                      <Textarea
-                        id="kubeconfig"
-                        placeholder="Paste kubeconfig YAML..."
-                        className="min-h-[150px] font-mono text-xs"
-                        value={kubeconfigForm.kubeconfig}
-                        onChange={(e) =>
-                          setKubeconfigForm((f) => ({
-                            ...f,
-                            kubeconfig: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  </div>
-                  <DialogFooter>
-                    <Button
-                      variant="outline"
-                      onClick={() => setDialogOpen(false)}
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      onClick={handleAddKubeconfig}
-                      disabled={
-                        adding ||
-                        !kubeconfigForm.name ||
-                        !kubeconfigForm.api_server_url
-                      }
-                    >
-                      {adding ? "Adding..." : "Add Cluster"}
-                    </Button>
-                  </DialogFooter>
-                </TabsContent>
-
-                {/* Deploy Agent Tab */}
-                <TabsContent value="agent">
-                  {!agentToken ? (
-                    <>
-                      <div className="space-y-4 py-2">
-                        <div className="space-y-2">
-                          <Label htmlFor="agent-cluster-name">
-                            Cluster Name
-                          </Label>
-                          <Input
-                            id="agent-cluster-name"
-                            placeholder="production"
-                            value={agentForm.name}
-                            onChange={(e) =>
-                              setAgentForm((f) => ({
-                                ...f,
-                                name: e.target.value,
-                              }))
-                            }
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label>Permissions Preset</Label>
-                          <Select
-                            value={agentForm.permissions}
-                            onValueChange={(v) =>
-                              setAgentForm((f) => ({ ...f, permissions: v }))
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {permissionsPresets.map((preset) => (
-                                <SelectItem
-                                  key={preset.value}
-                                  value={preset.value}
-                                >
-                                  <div className="flex flex-col">
-                                    <span>{preset.label}</span>
-                                    <span className="text-xs text-muted-foreground">
-                                      {preset.description}
-                                    </span>
-                                  </div>
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                      </div>
-                      <DialogFooter>
-                        <Button
-                          variant="outline"
-                          onClick={() => setDialogOpen(false)}
-                        >
-                          Cancel
-                        </Button>
-                        <Button
-                          onClick={handleGenerateAgentToken}
-                          disabled={generatingToken || !agentForm.name}
-                        >
-                          {generatingToken ? (
-                            <>
-                              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                              Generating...
-                            </>
-                          ) : (
-                            "Generate Command"
-                          )}
-                        </Button>
-                      </DialogFooter>
-                    </>
-                  ) : (
-                    <div className="space-y-4 py-2">
-                      <div className="rounded-md bg-muted p-3">
-                        <div className="flex items-center justify-between mb-2">
-                          <Label className="text-xs text-muted-foreground">
-                            Run this command in your target cluster:
-                          </Label>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-6 px-2"
-                            onClick={handleCopyCommand}
-                          >
-                            {copied ? (
-                              <Check className="h-3.5 w-3.5 text-green-500" />
-                            ) : (
-                              <Copy className="h-3.5 w-3.5" />
-                            )}
-                          </Button>
-                        </div>
-                        <pre className="text-xs font-mono whitespace-pre-wrap break-all text-foreground/80 max-h-[200px] overflow-y-auto">
-                          {agentToken.install_command}
-                        </pre>
-                      </div>
-
-                      {waitingForAgent && (
-                        <div className="flex items-center gap-2 rounded-md border border-dashed p-3">
-                          <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" />
-                          <div>
-                            <p className="text-sm font-medium">
-                              Waiting for agent to connect...
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                              Run the command above, then the agent will appear
-                              here automatically.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
-                      <DialogFooter>
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            setDialogOpen(false);
-                            resetDialog();
-                          }}
-                        >
-                          Close
-                        </Button>
-                      </DialogFooter>
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </DialogContent>
-          </Dialog>
-        </RBACGate>
+          <RBACGate resource="clusters" action="write">
+            <Button size="sm" onClick={() => setWizardOpen(true)}>
+              <Plus className="mr-1.5 h-4 w-4" />
+              Add Cluster
+            </Button>
+          </RBACGate>
+        </div>
       </div>
 
-      <ResourceTable
-        data={clusters}
-        columns={columns}
-        loading={loading}
-        onRowClick={(row) => router.push(`/clusters/${row.id}`)}
-        searchPlaceholder="Filter clusters..."
+      {/* Grid view */}
+      {viewMode === "grid" && (
+        <>
+          {loading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              Loading clusters...
+            </div>
+          ) : clusters.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                <LayoutGrid className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="mt-4 text-sm font-medium">No clusters</h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Add your first Kubernetes cluster to get started.
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                <Input
+                  placeholder="Filter clusters..."
+                  value={gridSearch}
+                  onChange={(e) => setGridSearch(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {filteredClusters.map((cluster) => (
+                  <ClusterCard key={cluster.id} cluster={cluster} />
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {filteredClusters.length} of {clusters.length} cluster(s)
+              </p>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Table view */}
+      {viewMode === "table" && (
+        <ResourceTable
+          data={clusters}
+          columns={columns}
+          loading={loading}
+          onRowClick={(row) => router.push(`/clusters/${row.id}`)}
+          searchPlaceholder="Filter clusters..."
+        />
+      )}
+
+      {/* Add Cluster Wizard */}
+      <AddClusterWizard
+        open={wizardOpen}
+        onOpenChange={setWizardOpen}
+        onClusterAdded={handleClusterAdded}
       />
     </div>
   );

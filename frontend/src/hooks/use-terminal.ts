@@ -7,12 +7,12 @@ const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
 export type TerminalMode = "smart" | "raw";
 
 interface TerminalMessage {
-  type: "input" | "resize" | "mode" | "context";
+  type: "input" | "resize" | "mode" | "set_context";
   data?: string;
   cols?: number;
   rows?: number;
   mode?: TerminalMode;
-  cluster?: string;
+  cluster_id?: string;
   namespace?: string;
 }
 
@@ -68,7 +68,7 @@ export function useTerminal({
       mode,
     });
 
-    const ws = new WebSocket(`${WS_URL}/api/terminal?${params}`);
+    const ws = new WebSocket(`${WS_URL}/ws/terminal?${params}`);
     wsRef.current = ws;
 
     ws.onopen = () => {
@@ -153,8 +153,8 @@ export function useTerminal({
     (newCluster: string, newNamespace: string) => {
       if (wsRef.current?.readyState === WebSocket.OPEN) {
         const msg: TerminalMessage = {
-          type: "context",
-          cluster: newCluster,
+          type: "set_context",
+          cluster_id: newCluster,
           namespace: newNamespace,
         };
         wsRef.current.send(JSON.stringify(msg));

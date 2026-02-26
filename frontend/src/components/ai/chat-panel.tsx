@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback, useState } from "react";
 import {
   MessageSquare,
   X,
@@ -9,6 +9,9 @@ import {
   PanelLeftClose,
   Send,
   Loader2,
+  GripVertical,
+  Server,
+  FolderOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -18,6 +21,17 @@ import { useAiChatStore } from "@/stores/ai-chat";
 import { useAiChat } from "@/hooks/use-ai-chat";
 import { ChatMessage } from "./chat-message";
 import { ConfirmAction } from "./confirm-action";
+
+const MIN_WIDTH = 320;
+const MAX_WIDTH = 700;
+const DEFAULT_WIDTH = 420;
+
+const suggestedPrompts = [
+  { label: "What pods are failing?", icon: "alert" },
+  { label: "Show resource usage", icon: "chart" },
+  { label: "Help me scale my deployment", icon: "scale" },
+  { label: "Explain this error", icon: "help" },
+];
 
 export function ChatPanel() {
   const {
@@ -31,6 +45,7 @@ export function ChatPanel() {
     activeConversationId,
     showSidebar,
     toggleSidebar,
+    pageContext,
   } = useAiChatStore();
 
   const {
@@ -42,6 +57,18 @@ export function ChatPanel() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const startWidthRef = useRef(DEFAULT_WIDTH);
+
+  const [panelWidth, setPanelWidth] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("argus:ai-panel-width");
+      if (stored) return parseInt(stored, 10);
+    }
+    return DEFAULT_WIDTH;
+  });
 
   // Auto-scroll to bottom on new messages
   useEffect(() => {
@@ -54,6 +81,47 @@ export function ChatPanel() {
       setTimeout(() => inputRef.current?.focus(), 300);
     }
   }, [isOpen]);
+
+  // Save width to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      localStorage.setItem("argus:ai-panel-width", String(panelWidth));
+    }
+  }, [panelWidth]);
+
+  const handleDragStart = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      isDraggingRef.current = true;
+      startXRef.current = e.clientX;
+      startWidthRef.current = panelWidth;
+      document.body.style.cursor = "col-resize";
+      document.body.style.userSelect = "none";
+
+      function handleMouseMove(ev: MouseEvent) {
+        if (!isDraggingRef.current) return;
+        // Dragging left edge means positive delta = increase width
+        const delta = startXRef.current - ev.clientX;
+        const newWidth = Math.min(
+          Math.max(startWidthRef.current + delta, MIN_WIDTH),
+          MAX_WIDTH
+        );
+        setPanelWidth(newWidth);
+      }
+
+      function handleMouseUp() {
+        isDraggingRef.current = false;
+        document.body.style.cursor = "";
+        document.body.style.userSelect = "";
+        document.removeEventListener("mousemove", handleMouseMove);
+        document.removeEventListener("mouseup", handleMouseUp);
+      }
+
+      document.addEventListener("mousemove", handleMouseMove);
+      document.addEventListener("mouseup", handleMouseUp);
+    },
+    [panelWidth]
+  );
 
   const handleSubmit = () => {
     const trimmed = inputValue.trim();
@@ -69,10 +137,31 @@ export function ChatPanel() {
     }
   };
 
+  const handleSuggestedPrompt = (prompt: string) => {
+    if (isStreaming) return;
+    sendMessage(prompt);
+  };
+
   if (!isOpen) return null;
 
+  const hasContext = pageContext.cluster || pageContext.namespace;
+
   return (
-    <div className="fixed inset-y-0 right-0 z-40 flex w-[420px] flex-col border-l border-border bg-background shadow-xl">
+    <div
+      ref={panelRef}
+      className="fixed inset-y-0 right-0 z-40 flex flex-col border-l border-border bg-background shadow-xl"
+      style={{ width: `${panelWidth}px` }}
+    >
+      {/* Drag handle on left edge */}
+      <div
+        className="absolute inset-y-0 left-0 z-50 w-1.5 cursor-col-resize hover:bg-primary/20 transition-colors"
+        onMouseDown={handleDragStart}
+      >
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 flex items-center justify-center w-4 h-8 -ml-1.5 opacity-0 hover:opacity-100 transition-opacity">
+          <GripVertical className="h-4 w-4 text-muted-foreground" />
+        </div>
+      </div>
+
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b border-border px-4">
         <div className="flex items-center gap-2">
@@ -110,6 +199,24 @@ export function ChatPanel() {
           </Button>
         </div>
       </div>
+
+      {/* Context bar */}
+      {hasContext && (
+        <div className="flex items-center gap-3 border-b border-border px-4 py-1.5 bg-muted/30">
+          {pageContext.cluster && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <Server className="h-3 w-3" />
+              <span>Cluster: <span className="font-medium text-foreground">{pageContext.cluster}</span></span>
+            </div>
+          )}
+          {pageContext.namespace && (
+            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <FolderOpen className="h-3 w-3" />
+              <span>Namespace: <span className="font-medium text-foreground">{pageContext.namespace}</span></span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-1 min-h-0">
         {/* Conversation sidebar */}
@@ -151,7 +258,7 @@ export function ChatPanel() {
           <ScrollArea className="flex-1">
             <div className="py-4">
               {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+                <div className="flex flex-col items-center justify-center px-6 py-8 text-center">
                   <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
                     <MessageSquare className="h-6 w-6 text-muted-foreground" />
                   </div>
@@ -162,6 +269,24 @@ export function ChatPanel() {
                     Ask questions about your Kubernetes clusters, get
                     troubleshooting help, or manage resources.
                   </p>
+
+                  {/* Suggested prompts */}
+                  <div className="mt-6 grid w-full grid-cols-2 gap-2 px-2">
+                    {suggestedPrompts.map((prompt) => (
+                      <button
+                        key={prompt.label}
+                        className={cn(
+                          "rounded-lg border border-border px-3 py-2.5 text-left text-xs transition-colors",
+                          "hover:bg-accent hover:text-accent-foreground hover:border-primary/30",
+                          "text-muted-foreground"
+                        )}
+                        onClick={() => handleSuggestedPrompt(prompt.label)}
+                        disabled={isStreaming}
+                      >
+                        {prompt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 messages.map((msg) => (

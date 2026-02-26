@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, useCallback } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
+import { toast } from "@/stores/toast";
 import { ResourceDetail } from "@/components/resources/resource-detail";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
@@ -62,6 +63,84 @@ function resourceToOverview(resource: Record<string, unknown>): Array<{ key: str
   return entries;
 }
 
+function parseSimpleYaml(yaml: string): Record<string, unknown> {
+  // Parse the simple YAML format produced by toYaml back to an object.
+  // This handles the subset of YAML our toYaml generates (no multi-line strings, no anchors, etc.)
+  const lines = yaml.split("\n");
+  const root: Record<string, unknown> = {};
+  const stack: { indent: number; obj: Record<string, unknown> | unknown[]; key?: string }[] = [
+    { indent: -1, obj: root },
+  ];
+
+  for (const line of lines) {
+    if (line.trim() === "" || line.trim() === "{}") continue;
+
+    const stripped = line.replace(/^(\s*)/, "");
+    const currentIndent = line.length - stripped.length;
+
+    // Pop stack to find parent
+    while (stack.length > 1 && stack[stack.length - 1].indent >= currentIndent) {
+      stack.pop();
+    }
+    const parent = stack[stack.length - 1];
+
+    if (stripped.startsWith("- ")) {
+      // Array item
+      const value = stripped.slice(2).trim();
+      if (Array.isArray(parent.obj)) {
+        if (value.includes(": ")) {
+          const obj: Record<string, unknown> = {};
+          const colonIdx = value.indexOf(": ");
+          obj[value.slice(0, colonIdx)] = parseYamlValue(value.slice(colonIdx + 2));
+          (parent.obj as unknown[]).push(obj);
+          stack.push({ indent: currentIndent + 2, obj });
+        } else {
+          (parent.obj as unknown[]).push(parseYamlValue(value));
+        }
+      }
+    } else if (stripped.includes(": ")) {
+      const colonIdx = stripped.indexOf(": ");
+      const key = stripped.slice(0, colonIdx);
+      const value = stripped.slice(colonIdx + 2);
+
+      if (!Array.isArray(parent.obj)) {
+        parent.obj[key] = parseYamlValue(value);
+      }
+    } else if (stripped.endsWith(":")) {
+      // Object or array follows
+      const key = stripped.slice(0, -1);
+      // Peek at next line to determine if array or object
+      const nextLineIdx = lines.indexOf(line) + 1;
+      const nextLine = nextLineIdx < lines.length ? lines[nextLineIdx].trim() : "";
+
+      let child: Record<string, unknown> | unknown[];
+      if (nextLine.startsWith("- ")) {
+        child = [];
+      } else {
+        child = {};
+      }
+
+      if (!Array.isArray(parent.obj)) {
+        parent.obj[key] = child;
+      }
+      stack.push({ indent: currentIndent, obj: child, key });
+    }
+  }
+
+  return root;
+}
+
+function parseYamlValue(value: string): unknown {
+  if (value === "null") return null;
+  if (value === "true") return true;
+  if (value === "false") return false;
+  if (value === "[]") return [];
+  if (value === "{}") return {};
+  const num = Number(value);
+  if (!isNaN(num) && value !== "") return num;
+  return value;
+}
+
 function toYaml(obj: unknown, indent = 0): string {
   const pad = "  ".repeat(indent);
   if (obj === null || obj === undefined) return `${pad}null`;
@@ -89,12 +168,11 @@ function toYaml(obj: unknown, indent = 0): string {
 export default function ResourceDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const searchParams = useSearchParams();
   const clusterId = params.id as string;
   const resourceType = params.resourceType as string;
   const resourceName = params.name as string;
-  const namespace = searchParams.get("namespace") ?? "";
   const [resource, setResource] = useState<Record<string, unknown> | null>(null);
+  const [events, setEvents] = useState<Array<{ type: string; reason: string; message: string; timestamp: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState(false);
 
@@ -102,31 +180,72 @@ export default function ResourceDetailPage() {
   const kind = resourceType.charAt(0).toUpperCase() + resourceType.slice(1).replace(/s$/, "");
   const canDelete = usePermission("clusters", "delete", clusterId);
 
-  useEffect(() => {
-    const nsParam = namespace ? `?namespace=${encodeURIComponent(namespace)}` : "";
-    api
+  const fetchResource = useCallback(() => {
+    return api
       .get<Record<string, unknown>>(
-        `/api/clusters/${clusterId}/resources/${gvr}/${encodeURIComponent(resourceName)}${nsParam}`
+        `/api/clusters/${clusterId}/resources/${gvr}/${resourceName}`
       )
       .then(setResource)
-      .catch(() => setResource(null))
-      .finally(() => setLoading(false));
-  }, [clusterId, gvr, resourceName, namespace]);
+      .catch(() => setResource(null));
+  }, [clusterId, gvr, resourceName]);
+
+  useEffect(() => {
+    fetchResource().finally(() => setLoading(false));
+  }, [fetchResource]);
+
+  useEffect(() => {
+    const meta = resource?.metadata as Record<string, unknown> | undefined;
+    const ns = meta?.namespace as string | undefined;
+    if (!ns) return;
+
+    api
+      .get<{ items?: Array<Record<string, unknown>> }>(
+        `/api/clusters/${clusterId}/resources/_/v1/events?namespace=${encodeURIComponent(ns)}`
+      )
+      .then((data) => {
+        const items = data.items ?? [];
+        const filtered = items.filter((e) => {
+          const involved = e.involvedObject as Record<string, unknown> | undefined;
+          return involved?.name === resourceName;
+        });
+        setEvents(
+          filtered.map((e) => ({
+            type: (e.type as string) ?? "Normal",
+            reason: (e.reason as string) ?? "",
+            message: (e.message as string) ?? "",
+            timestamp: ((e.metadata as Record<string, unknown>)?.creationTimestamp as string) ??
+              (e.lastTimestamp as string) ?? "",
+          }))
+        );
+      })
+      .catch(() => setEvents([]));
+  }, [clusterId, resource, resourceName]);
 
   async function handleDelete() {
     setDeleting(true);
     try {
-      const nsParam = namespace ? `?namespace=${encodeURIComponent(namespace)}` : "";
-      await api.del(`/api/clusters/${clusterId}/resources/${gvr}/${encodeURIComponent(resourceName)}${nsParam}`);
+      await api.del(`/api/clusters/${clusterId}/resources/${gvr}/${resourceName}`);
       router.push(`/clusters/${clusterId}/${resourceType}`);
     } catch {
       setDeleting(false);
     }
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  async function handleSaveYaml(_yaml: string) {
-    // In a real implementation, this would parse YAML and PUT to the API
+  async function handleSaveYaml(yaml: string) {
+    try {
+      const parsed = parseSimpleYaml(yaml);
+      await api.put(
+        `/api/clusters/${clusterId}/resources/${gvr}/${resourceName}`,
+        parsed
+      );
+      await fetchResource();
+      toast("Resource updated", { variant: "success", description: `${resourceName} saved successfully.` });
+    } catch (err) {
+      toast("Failed to save", {
+        variant: "error",
+        description: err instanceof Error ? err.message : "Could not update resource.",
+      });
+    }
   }
 
   if (loading) {
@@ -172,7 +291,7 @@ export default function ResourceDetailPage() {
         namespace={meta?.namespace as string | undefined}
         overview={resourceToOverview(resource)}
         yaml={toYaml(resource)}
-        events={[]}
+        events={events}
         onDelete={canDelete ? handleDelete : undefined}
         onSaveYaml={handleSaveYaml}
         deleting={deleting}

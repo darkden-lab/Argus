@@ -10,7 +10,9 @@ Argus - Multi-cluster Kubernetes admin dashboard with plugin-based architecture.
 
 ```bash
 # Full stack with Docker Compose
-make dev                    # docker compose up
+make dev                    # docker compose up (foreground)
+make docker-up              # docker compose up -d (background)
+make docker-down            # docker compose down
 make build                  # docker compose build
 
 # Backend (Go 1.25)
@@ -19,6 +21,8 @@ cd backend && go test ./...            # all backend tests
 cd backend && go test ./internal/auth/ # single package
 cd backend && go test -v -run TestFunctionName ./internal/auth/ # single test
 cd backend && go vet ./...
+make cli-build              # build argus CLI to bin/argus
+make agent-build            # build cluster agent to bin/argus-agent
 
 # Frontend (Next.js 16, Node)
 cd frontend && npm install
@@ -30,6 +34,9 @@ cd frontend && npm run lint            # ESLint
 
 # Protobuf generation
 make proto                  # generates Go code from proto/agent/v1/agent.proto
+
+# All tests
+make test                   # backend go test + frontend jest
 
 # Linting
 make lint                   # backend go vet + frontend eslint
@@ -53,6 +60,9 @@ make clean                  # remove build artifacts and caches
 
 # E2E smoke test
 make e2e-smoke              # full Docker Compose stack test
+
+# Kafka (optional)
+docker compose --profile kafka up     # start with Kafka + Zookeeper
 ```
 
 ## Architecture
@@ -156,7 +166,8 @@ See `.env.example` for a complete list with descriptions.
 - **Backend tests**: `*_test.go` files alongside source. Run with `go test ./...`
 - **Frontend unit tests**: `src/__tests__/**/*.test.{ts,tsx}`, setup in `src/__tests__/setup.ts`
 - **Frontend e2e**: `e2e/` directory, Playwright config targets `http://localhost:3000`
-- **Frontend scope**: 19 test suites, 223+ tests
+- **Frontend scope**: 28 test suites, 336+ tests
+- **Jest config**: `jest.config.mjs` (ESM `.mjs`, not `.ts` — avoids ts-node dependency with Jest 30)
 - **Coverage reporters**: text, json-summary, lcov
 - **E2E smoke test**: `scripts/e2e-smoke.sh` (Docker Compose integration test)
 
@@ -172,3 +183,13 @@ See `.env.example` for a complete list with descriptions.
 - Frontend env: `NEXT_PUBLIC_API_URL` for API base URL
 - Plugins use `//go:embed` for manifest.json loading (not runtime.Caller)
 - Dependabot configured for Go, npm, GitHub Actions, Docker (`.github/dependabot.yml`)
+
+## Gotchas
+
+- **Docker healthcheck**: Use `127.0.0.1` not `localhost` in Alpine containers (wget resolves to IPv6 `[::1]` which fails)
+- **K8s runAsNonRoot**: Must use numeric UID (not user names like "appuser"). Backend: `65534` (nobody), Frontend: `1001` (nextjs)
+- **Docker Desktop K8s**: Images loaded via `docker load` appear as `docker.io/library/<name>` — use `imagePullPolicy: IfNotPresent`
+- **PGDATA in StatefulSet**: Needs subpath to avoid `lost+found` conflict
+- **ESLint 10**: Breaks `eslint-plugin-react` — do not upgrade past ESLint 9
+- **minimatch override**: `>=10.2.1` in package.json resolves HIGH ReDoS vulnerability (GHSA-3ppc-4f35-3m26)
+- **ts-jest 29.x with Jest 30**: Works currently but may break — monitor compatibility

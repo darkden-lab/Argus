@@ -77,6 +77,29 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString();
 }
 
+function getTimeGroup(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const diffMs = now.getTime() - date.getTime();
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffDays === 0) return "Today";
+  if (diffDays === 1) return "Yesterday";
+  if (diffDays <= 7) return "This Week";
+  if (diffDays <= 30) return "This Month";
+  return "Older";
+}
+
+function groupNotificationsByTime(notifications: Notification[]): Map<string, Notification[]> {
+  const groups = new Map<string, Notification[]>();
+  for (const n of notifications) {
+    const group = getTimeGroup(n.created_at);
+    if (!groups.has(group)) groups.set(group, []);
+    groups.get(group)!.push(n);
+  }
+  return groups;
+}
+
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
@@ -203,63 +226,103 @@ export default function NotificationsPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {notifications.map((notification) => {
-            const config = severityConfig[notification.severity];
-            const Icon = config.icon;
+        <div className="space-y-6">
+          {Array.from(groupNotificationsByTime(notifications)).map(([group, items]) => (
+            <div key={group}>
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+                {group}
+              </h3>
+              <div className="space-y-2">
+                {items.map((notification) => {
+                  const config = severityConfig[notification.severity];
+                  const Icon = config.icon;
+                  const meta = notification.metadata ?? {};
 
-            return (
-              <div
-                key={notification.id}
-                className={cn(
-                  "flex gap-4 rounded-lg border p-4 transition-colors",
-                  !notification.read && "bg-accent/20 border-accent"
-                )}
-              >
-                <div className="mt-0.5 shrink-0">
-                  <Icon className={cn("h-5 w-5", config.className)} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <p
-                        className={cn(
-                          "text-sm",
-                          !notification.read && "font-semibold"
-                        )}
-                      >
-                        {notification.title}
-                      </p>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] px-1.5 py-0"
-                      >
-                        {notification.category}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-xs text-muted-foreground">
-                        {formatDate(notification.created_at)}
-                      </span>
-                      {!notification.read && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-xs"
-                          onClick={() => handleMarkRead(notification.id)}
-                        >
-                          Mark read
-                        </Button>
+                  return (
+                    <div
+                      key={notification.id}
+                      className={cn(
+                        "flex gap-4 rounded-lg border p-4 transition-colors",
+                        !notification.read && "bg-accent/20 border-accent"
                       )}
+                    >
+                      <div className="mt-0.5 shrink-0">
+                        <Icon className={cn("h-5 w-5", config.className)} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2">
+                            <p
+                              className={cn(
+                                "text-sm",
+                                !notification.read && "font-semibold"
+                              )}
+                            >
+                              {notification.title}
+                            </p>
+                            <Badge
+                              variant="outline"
+                              className="text-[10px] px-1.5 py-0"
+                            >
+                              {notification.category}
+                            </Badge>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs text-muted-foreground">
+                              {formatDate(notification.created_at)}
+                            </span>
+                            {!notification.read && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 px-2 text-xs"
+                                onClick={() => handleMarkRead(notification.id)}
+                              >
+                                Mark read
+                              </Button>
+                            )}
+                          </div>
+                        </div>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          {notification.body}
+                        </p>
+                        {/* Action buttons based on metadata */}
+                        {(meta.cluster_id || meta.resource_name) && (
+                          <div className="flex gap-2 mt-2">
+                            {meta.cluster_id && meta.resource_name && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-xs"
+                                onClick={() => {
+                                  const resourceType = meta.resource_type ?? "pods";
+                                  window.location.href = `/clusters/${meta.cluster_id}/${resourceType}`;
+                                }}
+                              >
+                                View Resource
+                              </Button>
+                            )}
+                            {meta.cluster_id && (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-xs"
+                                onClick={() => {
+                                  window.location.href = `/clusters/${meta.cluster_id}`;
+                                }}
+                              >
+                                View Cluster
+                              </Button>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    {notification.body}
-                  </p>
-                </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          ))}
         </div>
       )}
 
