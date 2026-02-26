@@ -149,11 +149,17 @@ export default function UsersPage() {
                     value={form.password}
                     onChange={(e) => setForm({ ...form, password: e.target.value })}
                     required
+                    minLength={8}
                   />
+                  {form.password.length > 0 && form.password.length < 8 && (
+                    <p className="text-xs text-destructive">
+                      Password must be at least 8 characters.
+                    </p>
+                  )}
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit" disabled={submitting}>
+                <Button type="submit" disabled={submitting || (form.password.length > 0 && form.password.length < 8)}>
                   {submitting && <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />}
                   Create User
                 </Button>

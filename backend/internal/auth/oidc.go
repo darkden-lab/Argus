@@ -8,10 +8,12 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/darkden-lab/argus/backend/internal/db"
 	"golang.org/x/oauth2"
 )
@@ -25,18 +27,49 @@ type OIDCConfig struct {
 	FrontendURL  string
 }
 
+// oidcStateEntry holds a state value with its expiry time.
+type oidcStateEntry struct {
+	expiry time.Time
+}
+
+// oidcStates stores OIDC state parameters in memory with TTL.
+var oidcStates sync.Map
+
+var stateCleanupOnce sync.Once
+
+func startStateCleanup() {
+	stateCleanupOnce.Do(func() {
+		go func() {
+			ticker := time.NewTicker(1 * time.Hour)
+			defer ticker.Stop()
+			for range ticker.C {
+				now := time.Now()
+				oidcStates.Range(func(key, value interface{}) bool {
+					entry := value.(oidcStateEntry)
+					if now.After(entry.expiry) {
+						oidcStates.Delete(key)
+					}
+					return true
+				})
+			}
+		}()
+	})
+}
+
 // OIDCService handles OIDC authentication flows.
 type OIDCService struct {
 	provider     *oidc.Provider
 	oauth2Config oauth2.Config
 	verifier     *oidc.IDTokenVerifier
 	db           *db.DB
+	pool         *pgxpool.Pool
 	jwt          *JWTService
 	frontendURL  string
+	groupMapper  *OIDCGroupMapper
 }
 
 // NewOIDCService creates a new OIDCService. Returns nil, nil if OIDC is not configured.
-func NewOIDCService(ctx context.Context, cfg OIDCConfig, database *db.DB, jwtService *JWTService) (*OIDCService, error) {
+func NewOIDCService(ctx context.Context, cfg OIDCConfig, database *db.DB, jwtService *JWTService, pool *pgxpool.Pool) (*OIDCService, error) {
 	if cfg.Issuer == "" || cfg.ClientID == "" {
 		return nil, nil
 	}
@@ -63,13 +96,17 @@ func NewOIDCService(ctx context.Context, cfg OIDCConfig, database *db.DB, jwtSer
 		frontendURL = "http://localhost:3000"
 	}
 
+	startStateCleanup()
+
 	return &OIDCService{
 		provider:     provider,
 		oauth2Config: oauth2Cfg,
 		verifier:     verifier,
 		db:           database,
+		pool:         pool,
 		jwt:          jwtService,
 		frontendURL:  frontendURL,
+		groupMapper:  NewOIDCGroupMapper(pool),
 	}, nil
 }
 
@@ -137,13 +174,42 @@ func (s *OIDCService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var claims struct {
-		Subject string `json:"sub"`
-		Email   string `json:"email"`
-		Name    string `json:"name"`
+		Subject string   `json:"sub"`
+		Email   string   `json:"email"`
+		Name    string   `json:"name"`
+		Groups  []string `json:"groups"`
 	}
 	if err := idToken.Claims(&claims); err != nil {
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to extract claims"})
 		return
+	}
+
+	// Extract groups from a dynamic claim name (configurable via OIDC settings)
+	groupsClaim := "groups" // default
+	if s.pool != nil {
+		var raw []byte
+		if err := s.pool.QueryRow(r.Context(), "SELECT value FROM settings WHERE key = $1", "oidc").Scan(&raw); err == nil {
+			var oidcCfg struct {
+				GroupsClaim string `json:"groups_claim"`
+			}
+			if json.Unmarshal(raw, &oidcCfg) == nil && oidcCfg.GroupsClaim != "" {
+				groupsClaim = oidcCfg.GroupsClaim
+			}
+		}
+	}
+
+	// Extract all claims as raw map to get dynamic groups claim
+	var allClaims map[string]interface{}
+	if err := idToken.Claims(&allClaims); err == nil {
+		if groupsRaw, ok := allClaims[groupsClaim]; ok {
+			if groupsList, ok := groupsRaw.([]interface{}); ok {
+				for _, g := range groupsList {
+					if gs, ok := g.(string); ok {
+						claims.Groups = append(claims.Groups, gs)
+					}
+				}
+			}
+		}
 	}
 
 	if claims.Email == "" {
@@ -159,6 +225,18 @@ func (s *OIDCService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		log.Printf("oidc: failed to upsert user: %v", err)
 		writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to create/update user"})
 		return
+	}
+
+	// Map OIDC groups to RBAC roles
+	if len(claims.Groups) > 0 {
+		if err := s.groupMapper.MapGroupsToRoles(r.Context(), user.ID, claims.Groups); err != nil {
+			log.Printf("oidc: failed to map groups to roles: %v", err)
+		}
+	}
+
+	// Apply default role if user has no roles
+	if err := s.groupMapper.ApplyDefaultRole(r.Context(), user.ID); err != nil {
+		log.Printf("oidc: failed to apply default role: %v", err)
 	}
 
 	accessToken, err := s.jwt.GenerateToken(user.ID, user.Email)
@@ -186,6 +264,21 @@ func (s *OIDCService) HandleProviderInfo(w http.ResponseWriter, r *http.Request)
 	}
 	if s.Enabled() {
 		info["authorize_url"] = "/api/auth/oidc/authorize"
+		// Read provider_name from settings DB
+		if s.pool != nil {
+			var raw []byte
+			err := s.pool.QueryRow(r.Context(),
+				"SELECT value FROM settings WHERE key = $1", "oidc",
+			).Scan(&raw)
+			if err == nil {
+				var oidcSettings struct {
+					ProviderName string `json:"provider_name"`
+				}
+				if json.Unmarshal(raw, &oidcSettings) == nil && oidcSettings.ProviderName != "" {
+					info["provider_name"] = oidcSettings.ProviderName
+				}
+			}
+		}
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
@@ -207,57 +300,20 @@ func (s *OIDCService) generateState() (string, error) {
 	return state, nil
 }
 
-// storeState persists an OIDC state parameter in the database with an expiry time.
+// storeState persists an OIDC state parameter in memory with an expiry time.
 func (s *OIDCService) storeState(state string, expiry time.Time) error {
-	if s.db == nil || s.db.Pool == nil {
-		return fmt.Errorf("database not available")
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	expiryJSON, err := json.Marshal(expiry.Format(time.RFC3339))
-	if err != nil {
-		return fmt.Errorf("failed to marshal expiry: %w", err)
-	}
-
-	_, err = s.db.Pool.Exec(ctx,
-		`INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, NOW())
-		 ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW()`,
-		"oidc_state_"+state, expiryJSON,
-	)
-	return err
+	oidcStates.Store(state, oidcStateEntry{expiry: expiry})
+	return nil
 }
 
-// validateState checks if a state parameter is valid in the database and removes it.
+// validateState checks if a state parameter is valid and removes it.
 func (s *OIDCService) validateState(state string) bool {
-	if s.db == nil || s.db.Pool == nil {
+	val, ok := oidcStates.LoadAndDelete(state)
+	if !ok {
 		return false
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	var expiryJSON []byte
-	err := s.db.Pool.QueryRow(ctx,
-		`DELETE FROM settings WHERE key = $1 RETURNING value`,
-		"oidc_state_"+state,
-	).Scan(&expiryJSON)
-	if err != nil {
-		return false
-	}
-
-	var expiryStr string
-	if err := json.Unmarshal(expiryJSON, &expiryStr); err != nil {
-		return false
-	}
-
-	expiry, err := time.Parse(time.RFC3339, expiryStr)
-	if err != nil {
-		return false
-	}
-
-	return time.Now().Before(expiry)
+	entry := val.(oidcStateEntry)
+	return time.Now().Before(entry.expiry)
 }
 
 // upsertOIDCUser creates or updates a user from OIDC claims.

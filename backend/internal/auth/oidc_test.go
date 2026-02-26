@@ -14,7 +14,7 @@ func TestOIDCServiceNilWhenNotConfigured(t *testing.T) {
 		Issuer:   "",
 		ClientID: "",
 	}
-	svc, err := NewOIDCService(nil, cfg, nil, nil)
+	svc, err := NewOIDCService(nil, cfg, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -65,7 +65,7 @@ func TestOIDCNewServiceEmptyIssuer(t *testing.T) {
 		ClientID:     "some-client-id",
 		ClientSecret: "secret",
 	}
-	svc, err := NewOIDCService(nil, cfg, nil, nil)
+	svc, err := NewOIDCService(nil, cfg, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -81,7 +81,7 @@ func TestOIDCNewServiceEmptyClientID(t *testing.T) {
 		ClientID:     "",
 		ClientSecret: "secret",
 	}
-	svc, err := NewOIDCService(nil, cfg, nil, nil)
+	svc, err := NewOIDCService(nil, cfg, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -93,7 +93,7 @@ func TestOIDCNewServiceEmptyClientID(t *testing.T) {
 // TestOIDCNewServiceBothEmpty verifies NewOIDCService returns nil when both are empty.
 func TestOIDCNewServiceBothEmpty(t *testing.T) {
 	cfg := OIDCConfig{}
-	svc, err := NewOIDCService(nil, cfg, nil, nil)
+	svc, err := NewOIDCService(nil, cfg, nil, nil, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

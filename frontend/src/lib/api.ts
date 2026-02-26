@@ -71,6 +71,14 @@ async function fetchWithAuth<T>(path: string, method: string, body?: unknown, re
   }
 
   if (res.status === 403) {
+    const data = await res.json().catch(() => ({}));
+    if (data?.error === 'setup_required') {
+      if (typeof window !== 'undefined' && !isRedirecting) {
+        isRedirecting = true;
+        window.location.href = '/setup';
+      }
+      throw new ApiError('Setup required', 403);
+    }
     const err = new ApiError('Forbidden: You do not have permission to perform this action.', 403);
     toast('Access Denied', { description: err.message, variant: 'error' });
     throw err;

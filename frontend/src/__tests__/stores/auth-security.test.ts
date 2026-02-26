@@ -18,31 +18,33 @@ describe('Auth Store Security', () => {
   });
 
   describe('token storage and cleanup on logout', () => {
-    it('removes both access and refresh tokens from localStorage on logout', () => {
+    it('removes both access and refresh tokens from localStorage on logout', async () => {
       localStorage.setItem('access_token', 'secret-token');
       localStorage.setItem('refresh_token', 'secret-refresh');
+      global.fetch = jest.fn().mockResolvedValueOnce({ ok: true });
       useAuthStore.setState({ user: mockUser, isAuthenticated: true });
 
-      useAuthStore.getState().logout();
+      await useAuthStore.getState().logout();
 
       expect(localStorage.getItem('access_token')).toBeNull();
       expect(localStorage.getItem('refresh_token')).toBeNull();
     });
 
-    it('clears user state completely on logout', () => {
+    it('clears user state completely on logout', async () => {
+      global.fetch = jest.fn().mockResolvedValueOnce({ ok: true });
       useAuthStore.setState({ user: mockUser, isAuthenticated: true });
 
-      useAuthStore.getState().logout();
+      await useAuthStore.getState().logout();
 
       expect(useAuthStore.getState().user).toBeNull();
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
     });
 
-    it('does not leave stale tokens if only access_token existed', () => {
+    it('does not leave stale tokens if only access_token existed', async () => {
       localStorage.setItem('access_token', 'only-access');
       useAuthStore.setState({ user: mockUser, isAuthenticated: true });
 
-      useAuthStore.getState().logout();
+      await useAuthStore.getState().logout();
 
       expect(localStorage.getItem('access_token')).toBeNull();
       expect(localStorage.getItem('refresh_token')).toBeNull();
@@ -65,21 +67,6 @@ describe('Auth Store Security', () => {
       // access_token was undefined, stored as "undefined" string
       // The store still sets isAuthenticated=true after fetching user
       // This tests that the flow completes without crashing
-      expect(useAuthStore.getState().isAuthenticated).toBe(true);
-    });
-
-    it('handles null user in register response gracefully', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          access_token: 'tok',
-          user: null,
-        }),
-      });
-
-      await useAuthStore.getState().register('test@example.com', 'pass', 'Test');
-
-      expect(useAuthStore.getState().user).toBeNull();
       expect(useAuthStore.getState().isAuthenticated).toBe(true);
     });
 

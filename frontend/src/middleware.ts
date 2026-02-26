@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const publicPaths = ['/login', '/register'];
+const publicPaths = ['/login', '/register', '/setup', '/auth'];
 
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -17,6 +17,11 @@ export function middleware(request: NextRequest) {
     pathname.startsWith('/favicon') ||
     pathname.startsWith('/api')
   ) {
+    return NextResponse.next();
+  }
+
+  // Setup page is always accessible (the page itself checks setup_required)
+  if (pathname.startsWith('/setup')) {
     return NextResponse.next();
   }
 

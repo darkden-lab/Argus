@@ -113,46 +113,15 @@ describe('useAuthStore', () => {
     });
   });
 
-  describe('register', () => {
-    it('stores tokens on successful registration', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          user: mockUser,
-          access_token: 'reg-token',
-          refresh_token: 'reg-refresh',
-        }),
-      });
-
-      await useAuthStore.getState().register('new@example.com', 'pass', 'New User');
-
-      expect(localStorage.setItem).toHaveBeenCalledWith('access_token', 'reg-token');
-      expect(localStorage.setItem).toHaveBeenCalledWith('refresh_token', 'reg-refresh');
-      expect(useAuthStore.getState().isAuthenticated).toBe(true);
-    });
-
-    it('throws on failed registration', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
-        ok: false,
-        json: async () => ({ error: 'Email already exists' }),
-      });
-
-      await expect(
-        useAuthStore.getState().register('dup@example.com', 'pass', 'Dup')
-      ).rejects.toThrow('Email already exists');
-
-      expect(useAuthStore.getState().isLoading).toBe(false);
-    });
-  });
-
   describe('logout', () => {
-    it('clears tokens and state', () => {
+    it('clears tokens and state', async () => {
+      global.fetch = jest.fn().mockResolvedValueOnce({ ok: true });
       useAuthStore.setState({
         user: mockUser,
         isAuthenticated: true,
       });
 
-      useAuthStore.getState().logout();
+      await useAuthStore.getState().logout();
 
       expect(localStorage.removeItem).toHaveBeenCalledWith('access_token');
       expect(localStorage.removeItem).toHaveBeenCalledWith('refresh_token');
@@ -160,14 +129,30 @@ describe('useAuthStore', () => {
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
     });
 
-    it('redirects to login page', () => {
-      // Spy on window.location.href assignment via jsdom
-      // In jsdom, assigning to location.href triggers navigation
-      // We can't easily spy on it, so we just verify state changes
+    it('calls backend logout endpoint with refresh token', async () => {
+      localStorage.setItem('refresh_token', 'my-refresh');
+      localStorage.setItem('access_token', 'my-access');
+      global.fetch = jest.fn().mockResolvedValueOnce({ ok: true });
       useAuthStore.setState({ user: mockUser, isAuthenticated: true });
-      useAuthStore.getState().logout();
 
-      // After logout, state should be cleared
+      await useAuthStore.getState().logout();
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/auth/logout'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ refresh_token: 'my-refresh' }),
+        })
+      );
+    });
+
+    it('still clears state even if backend logout fails', async () => {
+      localStorage.setItem('refresh_token', 'my-refresh');
+      global.fetch = jest.fn().mockRejectedValueOnce(new Error('Network error'));
+      useAuthStore.setState({ user: mockUser, isAuthenticated: true });
+
+      await useAuthStore.getState().logout();
+
       expect(useAuthStore.getState().user).toBeNull();
       expect(useAuthStore.getState().isAuthenticated).toBe(false);
     });

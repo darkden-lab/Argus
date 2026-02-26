@@ -200,6 +200,20 @@ See [SECURITY.md](SECURITY.md) for the security policy, vulnerability reporting 
 - **Commercial license**: Required for 2+ clusters in production
 - **Change date**: Converts to Apache 2.0 on 2030-02-20
 
+## Documentation
+
+- [API Reference](docs/api-reference.md)
+- [Deployment Guide](docs/deployment-guide.md)
+- [Architecture](docs/architecture.md)
+- [Plugin Development](docs/plugin-development.md)
+- [Cluster Agent](docs/cluster-agent.md)
+- OIDC Setup Guides:
+  - [Microsoft Entra ID](docs/oidc-setup/entraid.md)
+  - [Google](docs/oidc-setup/google.md)
+  - [Okta](docs/oidc-setup/okta.md)
+  - [Keycloak](docs/oidc-setup/keycloak.md)
+  - [Auth0](docs/oidc-setup/auth0.md)
+
 ---
 
 Built by [darkden-lab](https://github.com/darkden-lab)

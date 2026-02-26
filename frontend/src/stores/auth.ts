@@ -35,7 +35,6 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  register: (email: string, password: string, displayName: string) => Promise<void>;
   logout: () => void;
   fetchUser: () => Promise<void>;
 }
@@ -73,34 +72,22 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
-  register: async (email: string, password: string, displayName: string) => {
-    set({ isLoading: true });
-    try {
-      const res = await fetch(`${API_URL}/api/auth/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password, display_name: displayName }),
-      });
-
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Registration failed');
+  logout: async () => {
+    const refreshToken = localStorage.getItem('refresh_token');
+    if (refreshToken) {
+      try {
+        await fetch(`${API_URL}/api/auth/logout`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('access_token')}`,
+          },
+          body: JSON.stringify({ refresh_token: refreshToken }),
+        });
+      } catch {
+        // Best effort - continue with local cleanup
       }
-
-      const data: AuthResponse = await res.json();
-      setToken('access_token', data.access_token);
-      if (data.refresh_token) {
-        setToken('refresh_token', data.refresh_token);
-      }
-
-      set({ user: data.user ?? null, isAuthenticated: true, isLoading: false });
-    } catch (error) {
-      set({ isLoading: false });
-      throw error;
     }
-  },
-
-  logout: () => {
     removeTokens();
     set({ user: null, isAuthenticated: false });
     window.location.href = '/login';

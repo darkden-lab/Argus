@@ -25,8 +25,22 @@ export default function LoginPage() {
   const [oidcInfo, setOidcInfo] = useState<OidcInfo | null>(null);
 
   useEffect(() => {
-    fetch(`${API_URL}/api/auth/oidc/info`)
+    fetch(`${API_URL}/api/setup/status`)
       .then((res) => res.json())
+      .then((data: { setup_required: boolean }) => {
+        if (data.setup_required) {
+          router.push('/setup');
+        }
+      })
+      .catch(() => {}); // Silently fail - setup endpoint may not exist on older backends
+  }, [router]);
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/auth/oidc/info`)
+      .then((res) => {
+        if (!res.ok) throw new Error('OIDC info unavailable');
+        return res.json();
+      })
       .then((data: OidcInfo) => setOidcInfo(data))
       .catch(() => setOidcInfo({ enabled: false }));
   }, []);

@@ -32,6 +32,7 @@ import (
 	"github.com/darkden-lab/argus/backend/internal/proxy"
 	"github.com/darkden-lab/argus/backend/internal/rbac"
 	"github.com/darkden-lab/argus/backend/internal/settings"
+	"github.com/darkden-lab/argus/backend/internal/setup"
 	"github.com/darkden-lab/argus/backend/internal/terminal"
 	"github.com/darkden-lab/argus/backend/internal/ws"
 	"google.golang.org/grpc"
@@ -91,6 +92,10 @@ func main() {
 	authService := auth.NewAuthService(database, jwtService)
 	authHandlers := auth.NewHandlers(authService)
 
+	// Setup wizard
+	setupService := setup.NewService(pool)
+	setupHandlers := setup.NewHandlers(setupService, authService, jwtService, pool)
+
 	// OIDC (optional)
 	oidcService, err := auth.NewOIDCService(ctx, auth.OIDCConfig{
 		Issuer:       cfg.OIDCIssuer,
@@ -98,7 +103,7 @@ func main() {
 		ClientSecret: cfg.OIDCClientSecret,
 		RedirectURL:  cfg.OIDCRedirectURL,
 		FrontendURL:  cfg.FrontendURL,
-	}, database, jwtService)
+	}, database, jwtService, pool)
 	if err != nil {
 		log.Printf("WARNING: OIDC setup failed: %v (OIDC disabled)", err)
 	}
@@ -165,6 +170,13 @@ func main() {
 	agentHandlers := cluster.NewAgentHandlers(clusterMgr, agentRegistry)
 	agentHandlers.RegisterPublicRoutes(r)
 
+	// Setup wizard routes (public, no auth required)
+	setupHandlers.RegisterRoutes(r)
+
+	// Settings public routes (OIDC provider presets, no auth required)
+	settingsHandlers := settings.NewHandlers(pool, cfg)
+	settingsHandlers.RegisterPublicRoutes(r)
+
 	// Auth routes with strict rate limiting (10 req/s, burst 20 per IP)
 	authSubrouter := r.PathPrefix("").Subrouter()
 	authSubrouter.Use(mw.StrictRateLimitMiddleware(10, 20))
@@ -177,6 +189,8 @@ func main() {
 	// Protected routes
 	protected := r.PathPrefix("").Subrouter()
 	protected.Use(mw.AuthMiddleware(jwtService))
+	// Guard: block all protected routes if initial setup is pending
+	protected.Use(setup.GuardMiddleware(setupService))
 	if pool != nil {
 		protected.Use(audit.Middleware(auditStore))
 	}
@@ -192,6 +206,10 @@ func main() {
 	// User management routes
 	userMgmtHandlers := auth.NewUserManagementHandlers(authService, pool)
 	userMgmtHandlers.RegisterRoutes(protected)
+
+	// OIDC group -> role mapping routes
+	oidcMappingHandlers := auth.NewOIDCMappingHandlers(pool)
+	oidcMappingHandlers.RegisterRoutes(protected)
 
 	// Cluster routes
 	clusterHandlers := cluster.NewHandlers(clusterMgr)
@@ -211,8 +229,7 @@ func main() {
 	// Audit log routes
 	auditHandlers.RegisterRoutes(protected)
 
-	// Settings routes
-	settingsHandlers := settings.NewHandlers(pool, cfg)
+	// Settings routes (protected)
 	settingsHandlers.RegisterRoutes(protected)
 
 	// Notification routes
