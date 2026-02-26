@@ -89,11 +89,10 @@ func TestListMappings_NilPool_PanicsAtDB(t *testing.T) {
 	h := newMappingHandlers()
 	req := httptest.NewRequest("GET", "/api/settings/oidc/mappings", nil)
 
-	_, panicked := callMappingHandler(h.listMappings, req)
+	rec, panicked := callMappingHandler(h.listMappings, req)
 	// Should panic at h.pool.Query(nil pool)
-	if !panicked {
-		// If it didn't panic, it should have returned an error code (not 200)
-		// This branch is unlikely with nil pool but handle gracefully
+	if !panicked && rec.Code == http.StatusOK {
+		t.Error("expected panic or non-200 response with nil pool")
 	}
 	// Test passes: either panicked (reached DB layer) or wrote an error response
 }

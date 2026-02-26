@@ -168,13 +168,6 @@ func TestValidateInitRequest_FieldErrorsHaveMessages(t *testing.T) {
 
 // --- HandleStatus tests ---
 
-// mockSetupService is a stub Service that controls IsSetupRequired behavior
-// without requiring a real database.
-type mockSetupBehavior struct {
-	required bool
-	err      error
-}
-
 // We can test handleStatus indirectly by using a Handlers with a Service that
 // has nil pool (IsSetupRequired returns false, nil for nil pool).
 func TestHandleStatus_SetupNotRequired(t *testing.T) {
