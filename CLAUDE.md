@@ -24,7 +24,7 @@ cd backend && go vet ./...
 make cli-build              # build argus CLI to bin/argus
 make agent-build            # build cluster agent to bin/argus-agent
 
-# Frontend (Next.js 16, Node)
+# Frontend (Next.js 16, Node 22+)
 cd frontend && npm install
 cd frontend && npm run dev             # dev server on :3000
 cd frontend && npm test                # Jest unit tests
@@ -42,6 +42,7 @@ make test                   # backend go test + frontend jest
 make lint                   # backend go vet + frontend eslint
 make lint-backend           # go vet
 make lint-frontend          # eslint
+# CI uses golangci-lint (config: backend/.golangci.yml) — includes errcheck, staticcheck, gocritic, misspell
 
 # Coverage
 make coverage               # backend + frontend coverage reports
@@ -96,8 +97,8 @@ Key internal packages:
 
 - **Framework**: Next.js 16 (App Router, React 19, TypeScript)
 - **Styling**: Tailwind CSS 4 + shadcn/ui (radix-ui)
-- **State**: Zustand stores in `src/stores/` (auth, notifications, ai-chat, plugins, permissions, toast)
-- **Testing**: Jest + React Testing Library (unit), Playwright (e2e)
+- **State**: Zustand stores in `src/stores/` (auth, cluster, dashboard, notifications, ai-chat, plugins, permissions, toast, ui)
+- **Testing**: Jest 30 + React Testing Library (unit), Playwright (e2e)
 
 Route structure (`src/app/`):
 - `(dashboard)/` — main layout with sidebar: clusters, dashboard, plugins, settings, notifications, terminal
@@ -183,6 +184,9 @@ See `.env.example` for a complete list with descriptions.
 - Frontend env: `NEXT_PUBLIC_API_URL` for API base URL
 - Plugins use `//go:embed` for manifest.json loading (not runtime.Caller)
 - Dependabot configured for Go, npm, GitHub Actions, Docker (`.github/dependabot.yml`)
+- Database uses `pgvector/pgvector:0.8.0-pg16` image (PostgreSQL 16 with pgvector for AI embeddings)
+- Backend auto-runs migrations on startup via `db.RunMigrations()` — no need to run `make migrate-up` for dev
+- Backend handlers follow `NewHandlers() + RegisterRoutes(router)` pattern — each package self-registers its routes
 
 ## Gotchas
 
@@ -191,5 +195,7 @@ See `.env.example` for a complete list with descriptions.
 - **Docker Desktop K8s**: Images loaded via `docker load` appear as `docker.io/library/<name>` — use `imagePullPolicy: IfNotPresent`
 - **PGDATA in StatefulSet**: Needs subpath to avoid `lost+found` conflict
 - **ESLint 10**: Breaks `eslint-plugin-react` — do not upgrade past ESLint 9
-- **minimatch override**: `>=10.2.1` in package.json resolves HIGH ReDoS vulnerability (GHSA-3ppc-4f35-3m26)
 - **ts-jest 29.x with Jest 30**: Works currently but may break — monitor compatibility
+- **React Compiler lint rules**: Disabled in `eslint.config.mjs` (set-state-in-effect, static-components, refs, purity, immutability) — re-enable only when adopting React Compiler
+- **Frontend path alias**: `@/*` maps to `./src/*` — use `@/` imports in all frontend code
+- **golangci-lint exclusions**: `pkg/agentpb` is excluded (generated code); errcheck and gocritic relaxed in `_test.go`
