@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
+import { type K8sHTTPRoute as HTTPRoute } from "@/lib/abstractions";
 import { useClusterStore } from "@/stores/cluster";
 import { NetworkMap } from "@/components/networking/network-map";
 import { NetworkPolicyDetail, type NetworkPolicyFull } from "@/components/networking/network-policy-detail";
