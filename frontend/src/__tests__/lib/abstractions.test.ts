@@ -9,6 +9,7 @@ import {
   type K8sDeployment,
   type K8sService,
   type K8sIngress,
+  type K8sHTTPRoute,
   type K8sStatefulSet,
   type K8sPVC,
   type K8sCronJob,
@@ -211,6 +212,27 @@ function makeJob(overrides: Partial<K8sJob> = {}): K8sJob {
   };
 }
 
+function makeHTTPRoute(overrides: Partial<K8sHTTPRoute> = {}): K8sHTTPRoute {
+  return {
+    metadata: {
+      name: 'web-app-route',
+      namespace: 'default',
+      uid: 'hr-uid-1',
+    },
+    spec: {
+      hostnames: ['web-app.example.com'],
+      parentRefs: [{ name: 'main-gateway', namespace: 'default' }],
+      rules: [
+        {
+          matches: [{ path: { type: 'PathPrefix', value: '/' } }],
+          backendRefs: [{ name: 'web-app-svc', port: 80 }],
+        },
+      ],
+    },
+    ...overrides,
+  };
+}
+
 // ---------- Tests ----------
 
 describe('compositeApps', () => {
@@ -300,6 +322,99 @@ describe('compositeApps', () => {
 
   it('handles empty inputs', () => {
     expect(compositeApps([], [], [])).toEqual([]);
+  });
+
+  it('matches httproutes via backendRefs service name', () => {
+    const dep = makeDeployment();
+    const svc = makeService();
+    const hr = makeHTTPRoute();
+    const apps = compositeApps([dep], [svc], [], [hr]);
+
+    expect(apps[0].httproutes).toHaveLength(1);
+    expect(apps[0].httproutes[0].metadata.name).toBe('web-app-route');
+  });
+
+  it('does not match httproutes in different namespace', () => {
+    const dep = makeDeployment();
+    const svc = makeService();
+    const hr = makeHTTPRoute({
+      metadata: { name: 'web-app-route', namespace: 'other', uid: 'hr-uid-2' },
+    });
+    const apps = compositeApps([dep], [svc], [], [hr]);
+
+    expect(apps[0].httproutes).toHaveLength(0);
+  });
+
+  it('merges hosts from both ingress and httproute', () => {
+    const dep = makeDeployment();
+    const svc = makeService();
+    const ing = makeIngress();
+    const hr = makeHTTPRoute({
+      spec: {
+        hostnames: ['api.example.com'],
+        parentRefs: [{ name: 'main-gateway' }],
+        rules: [
+          {
+            backendRefs: [{ name: 'web-app-svc', port: 80 }],
+          },
+        ],
+      },
+    });
+    const apps = compositeApps([dep], [svc], [ing], [hr]);
+
+    expect(apps[0].hosts).toContain('web-app.example.com');
+    expect(apps[0].hosts).toContain('api.example.com');
+    expect(apps[0].hosts).toHaveLength(2);
+  });
+
+  it('backward compatible with 3-arg call', () => {
+    const dep = makeDeployment();
+    const svc = makeService();
+    const ing = makeIngress();
+    const apps = compositeApps([dep], [svc], [ing]);
+
+    expect(apps).toHaveLength(1);
+    expect(apps[0].httproutes).toHaveLength(0);
+    expect(apps[0].hosts).toContain('web-app.example.com');
+  });
+
+  it('handles httproutes with empty hostnames', () => {
+    const dep = makeDeployment();
+    const svc = makeService();
+    const hr = makeHTTPRoute({
+      spec: {
+        hostnames: [],
+        parentRefs: [{ name: 'main-gateway' }],
+        rules: [
+          {
+            backendRefs: [{ name: 'web-app-svc', port: 80 }],
+          },
+        ],
+      },
+    });
+    const apps = compositeApps([dep], [svc], [], [hr]);
+
+    expect(apps[0].httproutes).toHaveLength(1);
+    expect(apps[0].hostSources.filter((hs) => hs.source === 'httproute')).toHaveLength(0);
+  });
+
+  it('populates hostSources with correct source type', () => {
+    const dep = makeDeployment();
+    const svc = makeService();
+    const ing = makeIngress();
+    const hr = makeHTTPRoute();
+    const apps = compositeApps([dep], [svc], [ing], [hr]);
+
+    const ingressSources = apps[0].hostSources.filter((hs) => hs.source === 'ingress');
+    const httprouteSources = apps[0].hostSources.filter((hs) => hs.source === 'httproute');
+
+    expect(ingressSources).toHaveLength(1);
+    expect(ingressSources[0].hostname).toBe('web-app.example.com');
+    expect(ingressSources[0].resourceName).toBe('web-app-ingress');
+
+    expect(httprouteSources).toHaveLength(1);
+    expect(httprouteSources[0].hostname).toBe('web-app.example.com');
+    expect(httprouteSources[0].resourceName).toBe('web-app-route');
   });
 });
 

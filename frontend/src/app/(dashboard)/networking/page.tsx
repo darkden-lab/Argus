@@ -20,6 +20,7 @@ import { useClusterStore } from "@/stores/cluster";
 import { NetworkMap } from "@/components/networking/network-map";
 import { NetworkPolicyDetail, type NetworkPolicyFull } from "@/components/networking/network-policy-detail";
 import { CreateNetworkPolicyWizard } from "@/components/networking/create-network-policy-wizard";
+import { PrometheusConfigDialog } from "@/components/networking/prometheus-config-dialog";
 import {
   Globe,
   ArrowRightLeft,
@@ -33,6 +34,7 @@ import {
   Zap,
   CheckCircle2,
   XCircle,
+  Settings,
 } from "lucide-react";
 
 interface K8sMeta {
@@ -100,22 +102,6 @@ interface SimulationResult {
   matchedPolicies: string[];
 }
 
-interface HTTPRoute {
-  metadata: K8sMeta;
-  spec?: {
-    hostnames?: string[];
-    parentRefs?: Array<{ name: string; namespace?: string; sectionName?: string }>;
-    rules?: Array<{
-      matches?: Array<{
-        path?: { type?: string; value?: string };
-        headers?: Array<{ name: string; value: string }>;
-        method?: string;
-      }>;
-      backendRefs?: Array<{ name: string; namespace?: string; port?: number; weight?: number }>;
-    }>;
-  };
-}
-
 interface Gateway {
   metadata: K8sMeta;
   spec?: {
@@ -149,6 +135,9 @@ export default function NetworkingPage() {
 
   // Create network policy wizard
   const [showCreatePolicy, setShowCreatePolicy] = useState(false);
+
+  // Prometheus config dialog
+  const [promConfigOpen, setPromConfigOpen] = useState(false);
 
   // Simulator state
   const [simSourceNs, setSimSourceNs] = useState("");
@@ -528,7 +517,19 @@ export default function NetworkingPage() {
           {/* Network Map tab */}
           <TabsContent value="network-map" className="mt-4">
             {selectedCluster ? (
-              <NetworkMap clusterID={selectedCluster} />
+              <div className="space-y-3">
+                <div className="flex items-center justify-end">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setPromConfigOpen(true)}
+                  >
+                    <Settings className="mr-1.5 h-3.5 w-3.5" />
+                    Prometheus
+                  </Button>
+                </div>
+                <NetworkMap clusterID={selectedCluster} />
+              </div>
             ) : (
               <p className="text-center text-sm text-muted-foreground py-8">
                 Select a cluster to view the network map.
@@ -673,6 +674,15 @@ export default function NetworkingPage() {
         open={policyDetailOpen}
         onOpenChange={setPolicyDetailOpen}
       />
+
+      {/* Prometheus Config Dialog */}
+      {selectedCluster && (
+        <PrometheusConfigDialog
+          clusterId={selectedCluster}
+          open={promConfigOpen}
+          onOpenChange={setPromConfigOpen}
+        />
+      )}
     </div>
   );
 }

@@ -40,7 +40,7 @@ func TestIstioPluginManifest(t *testing.T) {
 
 func TestIstioPluginManifestFromFile(t *testing.T) {
 	// Exercises the full loadManifest path to catch JSON syntax errors early.
-	p, err := New()
+	p, err := New(nil)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
