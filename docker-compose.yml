@@ -7,14 +7,14 @@ services:
       POSTGRES_DB: argus
       POSTGRES_USER: dashboard
       POSTGRES_PASSWORD: devpassword
-    volumes:
-      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U dashboard -d argus"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 10s
+    volumes:
+      - pgdata:/var/lib/postgresql/data
     restart: unless-stopped
     deploy:
       resources:
@@ -59,6 +59,7 @@ services:
       DATABASE_URL: postgres://dashboard:devpassword@postgres:5432/argus?sslmode=disable
       JWT_SECRET: dev-jwt-secret
       ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      PLUGIN_ISTIO_ENABLED: "true"
       # Uncomment to enable Kafka (requires --profile kafka):
       # KAFKA_BROKERS: kafka:29092
     depends_on:
@@ -85,6 +86,9 @@ services:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8080
+      PLUGIN_ISTIO_ENABLED: "true"
+
+
     depends_on:
       backend:
         condition: service_healthy
