@@ -22,13 +22,15 @@ var wsUpgrader = websocket.Upgrader{
 type ChatHandler struct {
 	service    *Service
 	jwtService *auth.JWTService
+	config     AIConfig
 }
 
 // NewChatHandler creates a new AI chat WebSocket handler.
-func NewChatHandler(service *Service, jwtService *auth.JWTService) *ChatHandler {
+func NewChatHandler(service *Service, jwtService *auth.JWTService, config AIConfig) *ChatHandler {
 	return &ChatHandler{
 		service:    service,
 		jwtService: jwtService,
+		config:     config,
 	}
 }
 
@@ -51,6 +53,7 @@ type ChatWSMessage struct {
 type ChatWSResponse struct {
 	Type           string `json:"type"`            // "assistant_message", "stream_delta", "stream_end", "confirm_request", "error", "conversation_created"
 	Content        string `json:"content,omitempty"`
+	Error          string `json:"error,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	ConfirmationID string `json:"confirmation_id,omitempty"`
 	ToolName       string `json:"tool_name,omitempty"`
@@ -85,6 +88,27 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
+	// Send an immediate status message so the frontend knows whether AI is usable
+	if !h.config.Enabled {
+		writeWSJSON(conn, ChatWSResponse{
+			Type:    "error",
+			Content: "AI assistant is not enabled. Please enable it in Settings > AI Configuration.",
+			Error:   "not configured",
+		})
+		// Keep connection open so client can receive the error, then close gracefully
+		conn.Close()
+		return
+	}
+	if validErr := h.config.Validate(); validErr != nil {
+		writeWSJSON(conn, ChatWSResponse{
+			Type:    "error",
+			Content: "AI provider is not fully configured: " + validErr.Error() + ". Update the configuration in Settings > AI Configuration.",
+			Error:   "not configured",
+		})
+		conn.Close()
+		return
+	}
+
 	var currentConversation string
 	var currentContext ChatContext
 
@@ -99,7 +123,7 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 
 		var wsMsg ChatWSMessage
 		if err := json.Unmarshal(msg, &wsMsg); err != nil {
-			writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "invalid message format"})
+			writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "invalid message format", Error: "invalid message format"})
 			continue
 		}
 
@@ -116,7 +140,7 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 				r.Context(), claims.UserID, currentConversation, wsMsg.Content, currentContext,
 			)
 			if err != nil {
-				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: err.Error()})
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: err.Error(), Error: err.Error()})
 				continue
 			}
 
@@ -155,7 +179,7 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 			writeWSJSON(conn, ChatWSResponse{Type: "conversation_created"})
 
 		default:
-			writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "unknown message type"})
+			writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "unknown message type", Error: "unknown message type"})
 		}
 	}
 }

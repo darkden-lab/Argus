@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback } from "react";
 import { api } from "@/lib/api";
 import {
   compositeDatabases,
+  cnpgToDatabases,
   type Database,
   type K8sStatefulSet,
   type K8sPVC,
   type K8sService,
+  type CNPGCluster,
 } from "@/lib/abstractions";
 
 interface UseDatabasesResult {
@@ -57,7 +59,26 @@ export function useDatabases(clusterId: string | null): UseDatabasesResult {
           : [];
 
       const composed = compositeDatabases(statefulSets, pvcs, services);
-      setDatabases(composed);
+
+      // Try to fetch CNPG clusters if the plugin is enabled
+      let cnpgDbs: Database[] = [];
+      try {
+        const cnpgRes = await api.get<{ items?: CNPGCluster[] }>(
+          `/api/plugins/cnpg/clusters?clusterID=${clusterId}`
+        );
+        if (cnpgRes.items && cnpgRes.items.length > 0) {
+          cnpgDbs = cnpgToDatabases(cnpgRes.items);
+        }
+      } catch {
+        // CNPG plugin not enabled or not available — ignore
+      }
+
+      // Merge, deduplicating by name+namespace (prefer CNPG entries)
+      const cnpgKeys = new Set(cnpgDbs.map((d) => `${d.namespace}/${d.name}`));
+      const filtered = composed.filter(
+        (d) => !cnpgKeys.has(`${d.namespace}/${d.name}`)
+      );
+      setDatabases([...filtered, ...cnpgDbs]);
     } catch (err) {
       setError(
         err instanceof Error ? err.message : "Failed to fetch databases"

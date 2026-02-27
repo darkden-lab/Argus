@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useAiChatStore, type ChatMessage, type PageContext } from "@/stores/ai-chat";
+import { useAiChatStore, type ChatMessage, type PageContext, type AiStatus } from "@/stores/ai-chat";
+import { api } from "@/lib/api";
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
 
@@ -55,6 +56,9 @@ export function useAiChat() {
     addConversation,
     setActiveConversation,
     setConversations,
+    setAiStatus,
+    setConnectionState,
+    setConnectionError,
   } = useAiChatStore();
 
   const storeRef = useRef({
@@ -66,6 +70,9 @@ export function useAiChat() {
     addConversation,
     setActiveConversation,
     setConversations,
+    setAiStatus,
+    setConnectionState,
+    setConnectionError,
   });
   storeRef.current = {
     addMessage,
@@ -76,7 +83,22 @@ export function useAiChat() {
     addConversation,
     setActiveConversation,
     setConversations,
+    setAiStatus,
+    setConnectionState,
+    setConnectionError,
   };
+
+  // Fetch AI status when panel opens
+  const fetchAiStatus = useCallback(() => {
+    api
+      .get<AiStatus>("/api/ai/status")
+      .then((status) => {
+        storeRef.current.setAiStatus(status);
+      })
+      .catch(() => {
+        storeRef.current.setAiStatus(null);
+      });
+  }, []);
 
   const connect = useCallback(() => {
     const token =
@@ -84,11 +106,18 @@ export function useAiChat() {
         ? localStorage.getItem("access_token")
         : null;
 
-    if (!token) return;
+    if (!token) {
+      storeRef.current.setConnectionState("error");
+      storeRef.current.setConnectionError("Not authenticated. Please log in.");
+      return;
+    }
 
     if (wsRef.current) {
       wsRef.current.close();
     }
+
+    storeRef.current.setConnectionState("connecting");
+    storeRef.current.setConnectionError(null);
 
     const ws = new WebSocket(
       `${WS_URL}/ws/ai/chat?token=${encodeURIComponent(token)}`
@@ -97,6 +126,8 @@ export function useAiChat() {
 
     ws.onopen = () => {
       reconnectDelayRef.current = 1000;
+      storeRef.current.setConnectionState("connected");
+      storeRef.current.setConnectionError(null);
     };
 
     ws.onmessage = (event) => {
@@ -180,32 +211,47 @@ export function useAiChat() {
             }
             break;
 
-          case "error":
+          case "error": {
             store.setIsStreaming(false);
+            const errorText = msg.error || msg.content || "Unknown error";
+            const isNotConfigured =
+              /not configured|no provider/i.test(errorText);
+            const friendlyError = isNotConfigured
+              ? "AI assistant is not configured. Please set up an AI provider in Settings."
+              : errorText;
             store.addMessage({
               id: crypto.randomUUID(),
               role: "assistant",
-              content: `Error: ${msg.error || "Unknown error"}`,
+              content: `Error: ${friendlyError}`,
               timestamp: new Date().toISOString(),
             });
             break;
+          }
         }
       } catch {
         // Ignore malformed messages
       }
     };
 
-    ws.onclose = () => {
-      reconnectTimerRef.current = setTimeout(() => {
-        reconnectDelayRef.current = Math.min(
-          reconnectDelayRef.current * 2,
-          30000
-        );
-        connect();
-      }, reconnectDelayRef.current);
+    ws.onclose = (event) => {
+      storeRef.current.setConnectionState("disconnected");
+      // Only reconnect if the panel is still open and it wasn't a clean close
+      if (event.code !== 1000) {
+        reconnectTimerRef.current = setTimeout(() => {
+          reconnectDelayRef.current = Math.min(
+            reconnectDelayRef.current * 2,
+            30000
+          );
+          connect();
+        }, reconnectDelayRef.current);
+      }
     };
 
     ws.onerror = () => {
+      storeRef.current.setConnectionState("error");
+      storeRef.current.setConnectionError(
+        "Failed to connect to AI assistant. The server may be unavailable."
+      );
       ws.close();
     };
   }, []);
@@ -221,19 +267,35 @@ export function useAiChat() {
     }
   }, []);
 
-  // Connect when panel opens
+  // Connect when panel opens, fetch AI status
   useEffect(() => {
     if (isOpen) {
+      fetchAiStatus();
       connect();
     } else {
       disconnect();
     }
     return () => disconnect();
-  }, [isOpen, connect, disconnect]);
+  }, [isOpen, connect, disconnect, fetchAiStatus]);
 
   const sendMessage = useCallback(
     (content: string) => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        storeRef.current.addMessage({
+          id: crypto.randomUUID(),
+          role: "user",
+          content,
+          timestamp: new Date().toISOString(),
+        });
+        storeRef.current.addMessage({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content:
+            "Error: Unable to send message. The AI assistant is not connected. Please check your connection and AI configuration in Settings.",
+          timestamp: new Date().toISOString(),
+        });
+        return;
+      }
 
       const userMessage: ChatMessage = {
         id: crypto.randomUUID(),

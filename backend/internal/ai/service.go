@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"sync"
 
 	"github.com/darkden-lab/argus/backend/internal/ai/rag"
 	"github.com/darkden-lab/argus/backend/internal/ai/tools"
@@ -29,6 +30,7 @@ Current context is provided by the user's active page in the dashboard.`
 // Service orchestrates the AI chat pipeline: RAG retrieval, LLM calls, and
 // tool execution.
 type Service struct {
+	mu         sync.RWMutex
 	provider   LLMProvider
 	retriever  *rag.Retriever
 	executor   *tools.Executor
@@ -55,12 +57,35 @@ func NewService(
 	}
 }
 
+// SetRetriever sets the RAG retriever after construction.
+// This breaks a circular dependency: Service → Embedder → Service.
+func (s *Service) SetRetriever(r *rag.Retriever) {
+	s.retriever = r
+}
+
+// UpdateProvider swaps the active LLM provider and config at runtime.
+// This is safe to call concurrently with ProcessMessage.
+func (s *Service) UpdateProvider(provider LLMProvider, config AIConfig) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.provider = provider
+	s.config = config
+	log.Printf("ai service: provider updated to %s (model=%s, enabled=%v)", config.Provider, config.Model, config.Enabled)
+}
+
 // ChatContext holds the page context sent by the frontend.
 type ChatContext struct {
 	ClusterID string `json:"cluster_id,omitempty"`
 	Namespace string `json:"namespace,omitempty"`
 	Resource  string `json:"resource,omitempty"`
 	Name      string `json:"name,omitempty"`
+}
+
+// Snapshot returns a consistent copy of the current provider and config.
+func (s *Service) Snapshot() (LLMProvider, AIConfig) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.provider, s.config
 }
 
 // ProcessMessage handles a user message through the full AI pipeline:
@@ -70,8 +95,10 @@ type ChatContext struct {
 // 4. Call LLM with tools
 // 5. Handle tool calls or return text response
 func (s *Service) ProcessMessage(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext) (*ChatResponse, error) {
-	if !s.config.Enabled {
-		return nil, fmt.Errorf("AI assistant is not enabled")
+	provider, cfg := s.Snapshot()
+
+	if !cfg.Enabled {
+		return nil, fmt.Errorf("AI assistant is not enabled, enable it in Settings > AI Configuration")
 	}
 
 	// Build messages
@@ -112,11 +139,11 @@ func (s *Service) ProcessMessage(ctx context.Context, userID string, conversatio
 	req := ChatRequest{
 		Messages:    messages,
 		Tools:       allTools,
-		MaxTokens:   s.config.MaxTokens,
-		Temperature: s.config.Temperature,
+		MaxTokens:   cfg.MaxTokens,
+		Temperature: cfg.Temperature,
 	}
 
-	resp, err := s.provider.Chat(ctx, req)
+	resp, err := provider.Chat(ctx, req)
 	if err != nil {
 		return nil, fmt.Errorf("ai service: LLM call failed: %w", err)
 	}
@@ -163,20 +190,23 @@ func (s *Service) handleToolCalls(ctx context.Context, userID string, messages [
 	}
 
 	// Re-invoke LLM with tool results
+	provider, cfg := s.Snapshot()
 	req := ChatRequest{
 		Messages:    messages,
 		Tools:       allTools,
-		MaxTokens:   s.config.MaxTokens,
-		Temperature: s.config.Temperature,
+		MaxTokens:   cfg.MaxTokens,
+		Temperature: cfg.Temperature,
 	}
 
-	return s.provider.Chat(ctx, req)
+	return provider.Chat(ctx, req)
 }
 
 // ProcessMessageStream handles a user message with streaming response.
 func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext) (StreamReader, error) {
-	if !s.config.Enabled {
-		return nil, fmt.Errorf("AI assistant is not enabled")
+	provider, cfg := s.Snapshot()
+
+	if !cfg.Enabled {
+		return nil, fmt.Errorf("AI assistant is not enabled, enable it in Settings > AI Configuration")
 	}
 
 	messages := []Message{
@@ -201,12 +231,12 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 	req := ChatRequest{
 		Messages:    messages,
 		Tools:       tools.AllTools(),
-		MaxTokens:   s.config.MaxTokens,
-		Temperature: s.config.Temperature,
+		MaxTokens:   cfg.MaxTokens,
+		Temperature: cfg.Temperature,
 		Stream:      true,
 	}
 
-	return s.provider.ChatStream(ctx, req)
+	return provider.ChatStream(ctx, req)
 }
 
 // GetConfirmationManager returns the confirmation manager for WebSocket handlers.
@@ -292,13 +322,21 @@ func nilIfEmpty(s string) *string {
 }
 
 // ProviderEmbedder adapts an LLMProvider to the rag.Embedder interface.
+// It reads the current provider from the Service via snapshot() so that
+// hot-reloads are reflected in embedding calls.
 type ProviderEmbedder struct {
-	Provider LLMProvider
+	service *Service
+}
+
+// NewProviderEmbedder creates an embedder that tracks the Service's active provider.
+func NewProviderEmbedder(s *Service) *ProviderEmbedder {
+	return &ProviderEmbedder{service: s}
 }
 
 // EmbedTexts implements rag.Embedder.
 func (pe *ProviderEmbedder) EmbedTexts(ctx context.Context, input []string) ([][]float32, error) {
-	resp, err := pe.Provider.Embed(ctx, EmbedRequest{Input: input})
+	provider, _ := pe.service.Snapshot()
+	resp, err := provider.Embed(ctx, EmbedRequest{Input: input})
 	if err != nil {
 		return nil, err
 	}

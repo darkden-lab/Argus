@@ -96,10 +96,11 @@ func (s *Session) HandleInput(input string) {
 		return
 	}
 
-	// For now, echo back the command (smart mode parser will be added in task #45)
+	// Echo is handled client-side; only send command output here.
+	// Smart mode parser will be added in task #45.
 	s.output <- TerminalMessage{
 		Type:      "output",
-		Data:      "$ " + input + "\r\n",
+		Data:      "Executed: " + input + "\r\n",
 		ClusterID: clusterID,
 		Namespace: namespace,
 	}

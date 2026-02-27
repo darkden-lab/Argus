@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useDatabases } from "@/hooks/use-databases";
-import { useClusterSelection } from "@/hooks/use-cluster-selection";
-import { ClusterSelector } from "@/components/layout/cluster-selector";
+import { useClusterStore } from "@/stores/cluster";
 import { DatabaseCard } from "@/components/databases/database-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,12 +27,14 @@ const ENGINE_FILTERS = [
 
 export default function DatabasesPage() {
   const router = useRouter();
-  const {
-    clusters,
-    selectedClusterId,
-    setSelectedClusterId,
-    loading: clustersLoading,
-  } = useClusterSelection();
+  const clusters = useClusterStore((s) => s.clusters);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId) ?? "";
+  const clustersLoading = useClusterStore((s) => s.loading);
+  const fetchClusters = useClusterStore((s) => s.fetchClusters);
+
+  useEffect(() => {
+    if (clusters.length === 0) fetchClusters();
+  }, [clusters.length, fetchClusters]);
   const { databases, loading, error } = useDatabases(
     selectedClusterId || null
   );
@@ -70,12 +71,6 @@ export default function DatabasesPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <ClusterSelector
-            clusters={clusters}
-            selectedClusterId={selectedClusterId}
-            onClusterChange={setSelectedClusterId}
-            loading={clustersLoading}
-          />
           <Button size="sm" disabled>
             <Plus className="mr-1.5 h-4 w-4" />
             Create Database

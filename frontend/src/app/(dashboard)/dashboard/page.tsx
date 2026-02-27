@@ -91,9 +91,9 @@ export default function DashboardPage() {
       href: "/databases",
     },
     {
-      label: "Jobs",
-      value: stats.totalJobs,
-      subValue: `${stats.activeJobs} active`,
+      label: "CronJobs",
+      value: stats.totalCronJobs,
+      subValue: `${stats.activeCronJobs} active`,
       icon: Timer,
       color: "text-amber-500",
       bg: "bg-amber-500/10",
@@ -252,7 +252,7 @@ export default function DashboardPage() {
               <Card>
                 <CardHeader className="flex-row items-center justify-between">
                   <CardTitle className="text-sm font-medium">Plugins</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => router.push("/plugins")}>
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/settings/plugins")}>
                     Manage
                   </Button>
                 </CardHeader>

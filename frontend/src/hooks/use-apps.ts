@@ -8,6 +8,7 @@ import {
   type K8sDeployment,
   type K8sService,
   type K8sIngress,
+  type K8sHTTPRoute,
 } from "@/lib/abstractions";
 
 interface UseAppsResult {
@@ -32,7 +33,7 @@ export function useApps(clusterId: string | null): UseAppsResult {
     setError(null);
 
     try {
-      const [deploymentsRes, servicesRes, ingressesRes] =
+      const [deploymentsRes, servicesRes, ingressesRes, httproutesRes] =
         await Promise.allSettled([
           api.get<{ items: K8sDeployment[] }>(
             `/api/clusters/${clusterId}/resources/apps/v1/deployments`
@@ -42,6 +43,9 @@ export function useApps(clusterId: string | null): UseAppsResult {
           ),
           api.get<{ items: K8sIngress[] }>(
             `/api/clusters/${clusterId}/resources/networking.k8s.io/v1/ingresses`
+          ),
+          api.get<{ items: K8sHTTPRoute[] }>(
+            `/api/clusters/${clusterId}/resources/gateway.networking.k8s.io/v1/httproutes`
           ),
         ]);
 
@@ -57,8 +61,12 @@ export function useApps(clusterId: string | null): UseAppsResult {
         ingressesRes.status === "fulfilled"
           ? ingressesRes.value.items ?? []
           : [];
+      const httproutes =
+        httproutesRes.status === "fulfilled"
+          ? httproutesRes.value.items ?? []
+          : [];
 
-      const composed = compositeApps(deployments, services, ingresses);
+      const composed = compositeApps(deployments, services, ingresses, httproutes);
       setApps(composed);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to fetch apps");

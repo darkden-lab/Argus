@@ -29,12 +29,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useTerminal, type TerminalMode } from "@/hooks/use-terminal";
+import { useClusterStore } from "@/stores/cluster";
 import { api } from "@/lib/api";
-
-interface Cluster {
-  id: string;
-  name: string;
-}
 
 interface Namespace {
   name: string;
@@ -57,24 +53,43 @@ export function WebTerminal() {
   const xtermRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
-  const [clusters, setClusters] = useState<Cluster[]>([]);
+  const clusters = useClusterStore((s) => s.clusters);
+  const selectedCluster = useClusterStore((s) => s.selectedClusterId) ?? "";
+  const setSelectedClusterGlobal = useClusterStore((s) => s.setSelectedClusterId);
+  const fetchClusters = useClusterStore((s) => s.fetchClusters);
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
-  const [selectedCluster, setSelectedCluster] = useState("");
   const [selectedNamespace, setSelectedNamespace] = useState("default");
   const [mode, setMode] = useState<TerminalMode>("smart");
+  const modeRef = useRef<TerminalMode>("smart");
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Keep modeRef in sync with mode state
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
   const handleOutput = useCallback((data: string) => {
     xtermRef.current?.write(data);
+    // Show prompt after output in smart mode
+    if (modeRef.current === "smart") {
+      xtermRef.current?.write("$ ");
+    }
   }, []);
 
   const handleError = useCallback((error: string) => {
     xtermRef.current?.write(`\r\n\x1b[31mError: ${error}\x1b[0m\r\n`);
+    if (modeRef.current === "smart") {
+      xtermRef.current?.write("$ ");
+    }
   }, []);
 
   const handleConnected = useCallback(() => {
     xtermRef.current?.write(
       "\x1b[32mConnected to terminal session.\x1b[0m\r\n"
     );
+    if (modeRef.current === "smart") {
+      xtermRef.current?.write("$ ");
+    }
   }, []);
 
   const handleModeChanged = useCallback((newMode: TerminalMode) => {
@@ -86,7 +101,8 @@ export function WebTerminal() {
 
   const {
     isConnected,
-    sendInput,
+    handleInput,
+    resetLineBuffer,
     sendResize,
     sendModeChange,
     sendContextChange,
@@ -103,18 +119,8 @@ export function WebTerminal() {
 
   // Fetch clusters on mount
   useEffect(() => {
-    api
-      .get<Cluster[]>("/api/clusters")
-      .then((data) => {
-        setClusters(data);
-        if (data.length > 0 && !selectedCluster) {
-          setSelectedCluster(data[0].id);
-        }
-      })
-      .catch(() => {
-        // Will show empty state
-      });
-  }, [selectedCluster]);
+    if (clusters.length === 0) fetchClusters();
+  }, [clusters.length, fetchClusters]);
 
   // Fetch namespaces when cluster changes
   useEffect(() => {
@@ -181,9 +187,9 @@ export function WebTerminal() {
     );
     term.writeln("");
 
-    // Handle input
+    // Handle input — smart mode buffers locally, raw mode sends directly
     term.onData((data) => {
-      sendInput(data);
+      handleInput(data, (s) => term.write(s), modeRef.current);
     });
 
     // Handle resize
@@ -204,7 +210,7 @@ export function WebTerminal() {
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleClusterChange = (clusterId: string) => {
-    setSelectedCluster(clusterId);
+    setSelectedClusterGlobal(clusterId);
     setSelectedNamespace("default");
     sendContextChange(clusterId, "default");
     xtermRef.current?.clear();
@@ -219,6 +225,7 @@ export function WebTerminal() {
     const newMode = mode === "smart" ? "raw" : "smart";
     setMode(newMode);
     sendModeChange(newMode);
+    resetLineBuffer();
   };
 
   const handleCopy = () => {
@@ -230,8 +237,8 @@ export function WebTerminal() {
 
   const handlePaste = async () => {
     const text = await navigator.clipboard.readText();
-    if (text) {
-      sendInput(text);
+    if (text && xtermRef.current) {
+      handleInput(text, (s) => xtermRef.current?.write(s), modeRef.current);
     }
   };
 

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useClusterStore } from "@/stores/cluster";
 import { api } from "@/lib/api";
 import {
   Activity,
@@ -21,31 +22,30 @@ interface PluginInfo {
   enabled: boolean;
 }
 
-interface ClusterInfo {
-  id: string;
-  name: string;
-  status: string;
-}
-
 export default function MonitoringPage() {
   const [prometheusEnabled, setPrometheusEnabled] = useState(false);
-  const [clusters, setClusters] = useState<ClusterInfo[]>([]);
-  const [selectedCluster, setSelectedCluster] = useState<string>("");
+  const [enablingPrometheus, setEnablingPrometheus] = useState(false);
+  const clusters = useClusterStore((s) => s.clusters);
+  const selectedCluster = useClusterStore((s) => s.selectedClusterId) ?? "";
+  const setSelectedCluster = useClusterStore((s) => s.setSelectedClusterId);
+  const fetchClusters = useClusterStore((s) => s.fetchClusters);
+  const clustersLoading = useClusterStore((s) => s.loading);
   const [nodes, setNodes] = useState<Array<Record<string, unknown>>>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.allSettled([
-      api.get<PluginInfo[]>("/api/plugins/enabled").then((plugins) => {
+    const init = async () => {
+      await fetchClusters();
+      try {
+        const plugins = await api.get<PluginInfo[]>("/api/plugins/enabled");
         setPrometheusEnabled(plugins.some((p) => p.id === "prometheus"));
-      }),
-      api.get<ClusterInfo[]>("/api/clusters").then((data) => {
-        setClusters(data);
-        const connected = data.find((c) => c.status === "connected" || c.status === "healthy");
-        if (connected) setSelectedCluster(connected.id);
-      }),
-    ]).finally(() => setLoading(false));
-  }, []);
+      } catch {
+        // ignore
+      }
+      setLoading(false);
+    };
+    init();
+  }, [fetchClusters]);
 
   useEffect(() => {
     if (!selectedCluster) return;
@@ -57,7 +57,19 @@ export default function MonitoringPage() {
       .catch(() => setNodes([]));
   }, [selectedCluster]);
 
-  if (loading) {
+  async function handleEnablePrometheus() {
+    setEnablingPrometheus(true);
+    try {
+      await api.post("/api/plugins/prometheus/enable");
+      setPrometheusEnabled(true);
+    } catch {
+      // handled by api
+    } finally {
+      setEnablingPrometheus(false);
+    }
+  }
+
+  if (loading || clustersLoading) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
@@ -92,9 +104,22 @@ export default function MonitoringPage() {
                 Get detailed CPU, memory, and custom metrics with the Prometheus plugin.
               </p>
             </div>
-            <Button variant="outline" size="sm" onClick={() => window.location.href = "/plugins"}>
-              Enable Plugin
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleEnablePrometheus}
+                disabled={enablingPrometheus}
+              >
+                {enablingPrometheus ? (
+                  <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                ) : null}
+                Enable Prometheus
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => window.location.href = "/settings/plugins"}>
+                View Plugins
+              </Button>
+            </div>
           </CardContent>
         </Card>
       )}

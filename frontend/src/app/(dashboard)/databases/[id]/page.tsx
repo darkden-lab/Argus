@@ -5,10 +5,12 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import {
   compositeDatabases,
+  cnpgToDatabases,
   type Database,
   type K8sStatefulSet,
   type K8sPVC,
   type K8sService,
+  type CNPGCluster,
   getStatusDot,
   formatAge,
 } from "@/lib/abstractions";
@@ -26,6 +28,7 @@ import {
   Loader2,
   Network,
   RefreshCw,
+  Server,
 } from "lucide-react";
 
 export default function DatabaseDetailPage() {
@@ -38,6 +41,7 @@ export default function DatabaseDetailPage() {
   const namespace = searchParams.get("namespace") ?? "default";
 
   const [database, setDatabase] = useState<Database | null>(null);
+  const [cnpgCluster, setCnpgCluster] = useState<CNPGCluster | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -67,11 +71,47 @@ export default function DatabaseDetailPage() {
       const services =
         svcsRes.status === "fulfilled" ? svcsRes.value.items ?? [] : [];
 
-      const dbs = compositeDatabases(statefulSets, pvcs, services);
-      const found = dbs.find((d) => d.name === dbName);
+      const genericDbs = compositeDatabases(statefulSets, pvcs, services);
+
+      // Try to fetch CNPG clusters (prefer CNPG data when available, same as list page)
+      let cnpgDbs: Database[] = [];
+      let cnpgClusters: CNPGCluster[] = [];
+      try {
+        const cnpgRes = await api.get<{ items?: CNPGCluster[] }>(
+          `/api/plugins/cnpg/clusters?clusterID=${clusterId}`
+        );
+        if (cnpgRes.items && cnpgRes.items.length > 0) {
+          cnpgClusters = cnpgRes.items;
+          cnpgDbs = cnpgToDatabases(cnpgClusters);
+        }
+      } catch {
+        // CNPG plugin not enabled or not available — ignore
+      }
+
+      // Merge: prefer CNPG entries over generic ones (same dedup as list page)
+      const cnpgKeys = new Set(cnpgDbs.map((d) => `${d.namespace}/${d.name}`));
+      const filtered = genericDbs.filter(
+        (d) => !cnpgKeys.has(`${d.namespace}/${d.name}`)
+      );
+      const allDbs = [...filtered, ...cnpgDbs];
+
+      const found = allDbs.find(
+        (d) => d.name === dbName && d.namespace === namespace
+      );
 
       if (found) {
         setDatabase(found);
+        // Store raw CNPG cluster data for CNPG-specific detail display
+        if (found.isCNPG) {
+          const rawCluster = cnpgClusters.find(
+            (c) =>
+              c.metadata.name === found.name &&
+              (c.metadata.namespace ?? "default") === found.namespace
+          );
+          setCnpgCluster(rawCluster ?? null);
+        } else {
+          setCnpgCluster(null);
+        }
       } else {
         setError("Database not found");
       }
@@ -373,6 +413,109 @@ export default function DatabaseDetailPage() {
                     )}
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {cnpgCluster && (
+            <Card className="py-4">
+              <CardHeader className="pb-0">
+                <CardTitle className="text-sm flex items-center gap-2">
+                  <Server className="h-4 w-4" />
+                  CNPG Cluster
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-1 text-sm">
+                  <p>
+                    <span className="text-muted-foreground">Name:</span>{" "}
+                    {cnpgCluster.metadata.name}
+                  </p>
+                  <p>
+                    <span className="text-muted-foreground">Namespace:</span>{" "}
+                    {cnpgCluster.metadata.namespace ?? "default"}
+                  </p>
+                  {cnpgCluster.metadata.uid && (
+                    <p>
+                      <span className="text-muted-foreground">UID:</span>{" "}
+                      <span className="font-mono text-xs">
+                        {cnpgCluster.metadata.uid}
+                      </span>
+                    </p>
+                  )}
+                  <p>
+                    <span className="text-muted-foreground">Phase:</span>{" "}
+                    {cnpgCluster.status?.phase ?? "Unknown"}
+                  </p>
+                  {cnpgCluster.status?.currentPrimary && (
+                    <p>
+                      <span className="text-muted-foreground">Primary:</span>{" "}
+                      {cnpgCluster.status.currentPrimary}
+                    </p>
+                  )}
+                  {cnpgCluster.spec?.instances && (
+                    <p>
+                      <span className="text-muted-foreground">Instances:</span>{" "}
+                      {cnpgCluster.status?.readyInstances ?? 0} /{" "}
+                      {cnpgCluster.spec.instances} ready
+                    </p>
+                  )}
+                  {cnpgCluster.spec?.imageName && (
+                    <p>
+                      <span className="text-muted-foreground">Image:</span>{" "}
+                      <span className="font-mono text-xs">
+                        {cnpgCluster.spec.imageName}
+                      </span>
+                    </p>
+                  )}
+                  {cnpgCluster.spec?.storage?.size && (
+                    <p>
+                      <span className="text-muted-foreground">Storage:</span>{" "}
+                      {cnpgCluster.spec.storage.size}
+                      {cnpgCluster.spec.storage.storageClass &&
+                        ` (${cnpgCluster.spec.storage.storageClass})`}
+                    </p>
+                  )}
+                  {cnpgCluster.spec?.bootstrap?.initdb?.database && (
+                    <p>
+                      <span className="text-muted-foreground">Database:</span>{" "}
+                      {cnpgCluster.spec.bootstrap.initdb.database}
+                    </p>
+                  )}
+                  {cnpgCluster.spec?.bootstrap?.initdb?.owner && (
+                    <p>
+                      <span className="text-muted-foreground">Owner:</span>{" "}
+                      {cnpgCluster.spec.bootstrap.initdb.owner}
+                    </p>
+                  )}
+                  <p>
+                    <span className="text-muted-foreground">Created:</span>{" "}
+                    {cnpgCluster.metadata.creationTimestamp ?? "Unknown"}
+                  </p>
+                </div>
+                {cnpgCluster.status?.conditions &&
+                  cnpgCluster.status.conditions.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">
+                        Conditions
+                      </p>
+                      {cnpgCluster.status.conditions.map((cond, idx) => (
+                        <div
+                          key={idx}
+                          className="rounded-md border p-2 text-xs"
+                        >
+                          <span className="font-medium">{cond.type}</span>:{" "}
+                          {cond.status}
+                          {cond.message && (
+                            <span className="text-muted-foreground">
+                              {" "}
+                              - {cond.message}
+                            </span>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
               </CardContent>
             </Card>
           )}

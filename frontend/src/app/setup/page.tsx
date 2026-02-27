@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -353,6 +353,17 @@ export default function SetupPage() {
     confirmPassword: '',
     displayName: '',
   });
+
+  useEffect(() => {
+    fetch(`${API_URL}/api/setup/status`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && data.setup_required === false) {
+          router.push('/dashboard');
+        }
+      })
+      .catch(() => {});
+  }, [router]);
 
   const updateField = (field: keyof SetupForm, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));

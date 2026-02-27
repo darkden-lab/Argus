@@ -122,7 +122,10 @@ func main() {
 
 	// Plugin Engine
 	pluginEngine := plugin.NewEngine(pool)
-	registerPlugins(pluginEngine)
+	registerPlugins(pluginEngine, pool)
+	if err := pluginEngine.RestoreEnabled(ctx); err != nil {
+		log.Printf("WARNING: failed to restore plugin state: %v", err)
+	}
 
 	// WebSocket Hub
 	hub := ws.NewHub()
@@ -234,6 +237,14 @@ func main() {
 	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr)
 	convenienceHandlers.RegisterRoutes(protected)
 
+	// Pod logs endpoint (auth handled internally to support EventSource SSE)
+	logsHandler := core.NewLogsHandler(clusterMgr, jwtService)
+	logsHandler.RegisterRoutes(r)
+
+	// Network Policy simulator
+	netpolSimHandler := core.NewNetPolSimulatorHandler(clusterMgr)
+	netpolSimHandler.RegisterRoutes(protected)
+
 	// Audit log routes
 	auditHandlers.RegisterRoutes(protected)
 
@@ -253,8 +264,11 @@ func main() {
 	pluginHandlers := plugin.NewHandlers(pluginEngine, pluginsWriteGuard)
 	pluginHandlers.RegisterRoutes(protected)
 
-	// Plugin-registered routes
-	pluginEngine.RegisterAllRoutes(protected, clusterMgr)
+	// Plugin-registered routes (with gate middleware to block disabled plugins)
+	pluginRouter := protected.PathPrefix("").Subrouter()
+	pluginRouter.Use(pluginEngine.PluginGateMiddleware())
+	pluginEngine.SetDependencies(hub, clusterMgr, pluginRouter)
+	pluginEngine.RegisterAllRoutes(pluginRouter, clusterMgr)
 	pluginEngine.RegisterAllWatchers(hub, clusterMgr)
 
 	// K8s Reverse Proxy (protected)
@@ -270,32 +284,40 @@ func main() {
 
 	// AI Chat system
 	aiCfg := ai.LoadConfigFromEnv()
-	var aiProvider ai.LLMProvider
-	switch aiCfg.Provider {
-	case ai.ProviderClaude:
-		aiProvider = providers.NewClaude(aiCfg.APIKey, aiCfg.Model)
-	case ai.ProviderOpenAI:
-		aiProvider = providers.NewOpenAI(aiCfg.APIKey, aiCfg.Model, aiCfg.BaseURL)
-	case ai.ProviderOllama:
-		aiProvider = providers.NewOllama(aiCfg.BaseURL, aiCfg.Model)
-	default:
-		aiProvider = providers.NewClaude(aiCfg.APIKey, aiCfg.Model)
+
+	// Provider factory: creates an LLMProvider from config (reused for hot-reload)
+	aiProviderFactory := func(cfg ai.AIConfig) ai.LLMProvider {
+		switch cfg.Provider {
+		case ai.ProviderClaude:
+			return providers.NewClaude(cfg.APIKey, cfg.Model)
+		case ai.ProviderOpenAI:
+			return providers.NewOpenAI(cfg.APIKey, cfg.Model, cfg.BaseURL)
+		case ai.ProviderOllama:
+			return providers.NewOllama(cfg.BaseURL, cfg.Model)
+		default:
+			return providers.NewClaude(cfg.APIKey, cfg.Model)
+		}
 	}
 
-	var aiRetriever *rag.Retriever
+	aiProvider := aiProviderFactory(aiCfg)
+
+	// Create Service first so the embedder can track its active provider.
+	aiService := ai.NewService(aiProvider, nil, clusterMgr, pool, aiCfg)
+
 	var aiIndexer *rag.Indexer
 	if pool != nil {
 		ragStore := rag.NewStore(pool)
-		embedder := &ai.ProviderEmbedder{Provider: aiProvider}
-		aiRetriever = rag.NewRetriever(ragStore, embedder, 5)
+		embedder := ai.NewProviderEmbedder(aiService)
+		aiRetriever := rag.NewRetriever(ragStore, embedder, 5)
+		aiService.SetRetriever(aiRetriever)
 		aiIndexer = rag.NewIndexer(ragStore, embedder, clusterMgr)
+		aiIndexer.Start(ctx)
+		defer aiIndexer.Stop()
 	}
-
-	aiService := ai.NewService(aiProvider, aiRetriever, clusterMgr, pool, aiCfg)
-	aiChatHandler := ai.NewChatHandler(aiService, jwtService)
+	aiChatHandler := ai.NewChatHandler(aiService, jwtService, aiCfg)
 	aiChatHandler.RegisterRoutes(r)
 
-	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiWriteGuard)
+	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard, aiService, aiProviderFactory)
 	aiAdminHandlers.RegisterRoutes(protected)
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)
@@ -345,7 +367,7 @@ func main() {
 
 }
 
-func registerPlugins(engine *plugin.Engine) {
+func registerPlugins(engine *plugin.Engine, pool *pgxpool.Pool) {
 	// Simple constructors (no error)
 	if err := engine.Register(pluginPrometheus.New()); err != nil {
 		log.Printf("WARNING: failed to register prometheus plugin: %v", err)
@@ -357,8 +379,15 @@ func registerPlugins(engine *plugin.Engine) {
 		log.Printf("WARNING: failed to register helm plugin: %v", err)
 	}
 
+	// Istio plugin (needs pool for per-cluster config storage)
+	istioPlugin, err := pluginIstio.New(pool)
+	if err != nil {
+		log.Printf("WARNING: failed to create istio plugin: %v", err)
+	} else if err := engine.Register(istioPlugin); err != nil {
+		log.Printf("WARNING: failed to register istio plugin: %v", err)
+	}
+
 	// Constructors that return (plugin, error)
-	registerPluginWithError(engine, "istio", pluginIstio.New)
 	registerPluginWithError(engine, "cnpg", pluginCnpg.New)
 	registerPluginWithError(engine, "mariadb", pluginMariadb.New)
 	registerPluginWithError(engine, "keda", pluginKeda.New)

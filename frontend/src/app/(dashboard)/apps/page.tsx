@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useApps } from "@/hooks/use-apps";
-import { useClusterSelection } from "@/hooks/use-cluster-selection";
-import { ClusterSelector } from "@/components/layout/cluster-selector";
+import { useClusterStore } from "@/stores/cluster";
 import { AppCard } from "@/components/apps/app-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,12 +11,14 @@ import { Loader2, Plus, Rocket, Search } from "lucide-react";
 
 export default function AppsPage() {
   const router = useRouter();
-  const {
-    clusters,
-    selectedClusterId,
-    setSelectedClusterId,
-    loading: clustersLoading,
-  } = useClusterSelection();
+  const clusters = useClusterStore((s) => s.clusters);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId) ?? "";
+  const clustersLoading = useClusterStore((s) => s.loading);
+  const fetchClusters = useClusterStore((s) => s.fetchClusters);
+
+  useEffect(() => {
+    if (clusters.length === 0) fetchClusters();
+  }, [clusters.length, fetchClusters]);
   const { apps, loading, error } = useApps(selectedClusterId || null);
   const [search, setSearch] = useState("");
 
@@ -42,12 +43,6 @@ export default function AppsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <ClusterSelector
-            clusters={clusters}
-            selectedClusterId={selectedClusterId}
-            onClusterChange={setSelectedClusterId}
-            loading={clustersLoading}
-          />
           <Button size="sm" onClick={() => router.push("/apps/deploy")}>
             <Plus className="mr-1.5 h-4 w-4" />
             Deploy New App

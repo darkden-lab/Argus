@@ -277,7 +277,7 @@ func TestListAll_Empty(t *testing.T) {
 	}
 }
 
-func TestRegisterAllRoutes_OnlyEnabled(t *testing.T) {
+func TestRegisterAllRoutes_RegistersAll(t *testing.T) {
 	e := NewEngine(nil)
 	ctx := context.Background()
 	router := mux.NewRouter()
@@ -288,13 +288,14 @@ func TestRegisterAllRoutes_OnlyEnabled(t *testing.T) {
 	_ = e.Register(p2)
 	_ = e.Enable(ctx, "prometheus")
 
+	// All plugins register routes; gate middleware handles access control
 	e.RegisterAllRoutes(router, nil)
 
 	if !p1.routesCalled {
 		t.Error("expected RegisterRoutes called on enabled plugin")
 	}
-	if p2.routesCalled {
-		t.Error("expected RegisterRoutes NOT called on disabled plugin")
+	if !p2.routesCalled {
+		t.Error("expected RegisterRoutes called on disabled plugin (gate middleware controls access)")
 	}
 }
 

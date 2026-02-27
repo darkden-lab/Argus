@@ -33,12 +33,48 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+const setupStatusResponse = {
+  ok: true,
+  json: () => Promise.resolve({ setup_required: true }),
+};
+
+/** Create a fetch mock that handles /api/setup/status and delegates the rest to `initResponse`. */
+function mockFetchWith(initResponse: { ok: boolean; json: () => Promise<unknown> }) {
+  global.fetch = jest.fn().mockImplementation((url: string) => {
+    if (typeof url === 'string' && url.includes('/api/setup/status')) {
+      return Promise.resolve(setupStatusResponse);
+    }
+    return Promise.resolve(initResponse);
+  });
+}
+
+/** Create a fetch mock that handles /api/setup/status and rejects the rest. */
+function mockFetchReject(error: Error) {
+  global.fetch = jest.fn().mockImplementation((url: string) => {
+    if (typeof url === 'string' && url.includes('/api/setup/status')) {
+      return Promise.resolve(setupStatusResponse);
+    }
+    return Promise.reject(error);
+  });
+}
+
 describe('SetupPage', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockPush.mockClear();
-    // Reset global fetch mock
-    global.fetch = jest.fn();
+    // Reset global fetch mock — default: setup/status returns setup_required=true
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/setup/status')) {
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ setup_required: true }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({}),
+      });
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -220,7 +256,7 @@ describe('SetupPage', () => {
     };
 
     it('should call the setup API with correct payload on form submit', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: true,
         json: async () => ({
           access_token: 'test-access-token',
@@ -250,7 +286,7 @@ describe('SetupPage', () => {
     });
 
     it('should store access token in localStorage on success', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: true,
         json: async () => ({
           access_token: 'test-access-token',
@@ -268,7 +304,7 @@ describe('SetupPage', () => {
     });
 
     it('should store refresh token in localStorage on success when provided', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: true,
         json: async () => ({
           access_token: 'access',
@@ -286,7 +322,7 @@ describe('SetupPage', () => {
     });
 
     it('should NOT store refresh token when not included in response', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: true,
         json: async () => ({
           access_token: 'access',
@@ -305,7 +341,7 @@ describe('SetupPage', () => {
     });
 
     it('should navigate to OIDC step (step 2) on successful API call', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: true,
         json: async () => ({ access_token: 'tok' }),
       });
@@ -334,7 +370,7 @@ describe('SetupPage', () => {
     };
 
     it('should show API error message when setup fails with HTTP error', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: false,
         json: async () => ({ error: 'setup_already_completed' }),
       });
@@ -349,7 +385,7 @@ describe('SetupPage', () => {
     });
 
     it('should show fallback error message when API returns no error field', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: false,
         json: async () => ({}),
       });
@@ -365,7 +401,7 @@ describe('SetupPage', () => {
     });
 
     it('should show error when network request throws', async () => {
-      global.fetch = jest.fn().mockRejectedValueOnce(new Error('Network failure'));
+      mockFetchReject(new Error('Network failure'));
 
       const { user } = render(<SetupPage />);
       await fillValidForm(user);
@@ -377,7 +413,7 @@ describe('SetupPage', () => {
     });
 
     it('should clear error message when user starts typing after an error', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: false,
         json: async () => ({ error: 'Some API error' }),
       });
@@ -397,7 +433,7 @@ describe('SetupPage', () => {
     });
 
     it('should stay on Create Admin step after API error', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: false,
         json: async () => ({ error: 'Conflict' }),
       });
@@ -415,7 +451,7 @@ describe('SetupPage', () => {
     });
 
     it('should re-enable Create Account button after API error', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: false,
         json: async () => ({ error: 'Failed' }),
       });
@@ -440,7 +476,7 @@ describe('SetupPage', () => {
 
   describe('OIDC step', () => {
     it('should navigate to OIDC step when clicking Continue after creating admin', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: true,
         json: async () => ({ access_token: 'tok' }),
       });
@@ -459,7 +495,7 @@ describe('SetupPage', () => {
     });
 
     it('should navigate from OIDC step to Complete step', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: true,
         json: async () => ({ access_token: 'tok' }),
       });
@@ -485,7 +521,7 @@ describe('SetupPage', () => {
 
   describe('Complete step', () => {
     it('should redirect to /dashboard when "Go to Dashboard" is clicked', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: true,
         json: async () => ({ access_token: 'tok' }),
       });
@@ -518,7 +554,7 @@ describe('SetupPage', () => {
 
   describe('security', () => {
     it('should not render XSS payloads from error messages as HTML', async () => {
-      global.fetch = jest.fn().mockResolvedValueOnce({
+      mockFetchWith({
         ok: false,
         json: async () => ({ error: '<script>alert(1)</script>' }),
       });

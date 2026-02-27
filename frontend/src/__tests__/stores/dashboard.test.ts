@@ -15,6 +15,8 @@ const emptyStats = {
   runningDatabases: 0,
   totalJobs: 0,
   activeJobs: 0,
+  totalCronJobs: 0,
+  activeCronJobs: 0,
   totalClusters: 0,
   healthyClusters: 0,
 };
