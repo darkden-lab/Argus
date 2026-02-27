@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useDatabases } from "@/hooks/use-databases";
 import { useClusterStore } from "@/stores/cluster";
 import { DatabaseCard } from "@/components/databases/database-card";
+import { CreateDatabaseWizard } from "@/components/databases/create-database-wizard";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -35,11 +36,12 @@ export default function DatabasesPage() {
   useEffect(() => {
     if (clusters.length === 0) fetchClusters();
   }, [clusters.length, fetchClusters]);
-  const { databases, loading, error } = useDatabases(
+  const { databases, loading, error, refetch } = useDatabases(
     selectedClusterId || null
   );
   const [search, setSearch] = useState("");
   const [engineFilter, setEngineFilter] = useState("all");
+  const [showCreateDB, setShowCreateDB] = useState(false);
 
   const filtered = useMemo(() => {
     let result = databases;
@@ -71,7 +73,7 @@ export default function DatabasesPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <Button size="sm" disabled>
+          <Button size="sm" onClick={() => setShowCreateDB(true)} disabled={!selectedClusterId}>
             <Plus className="mr-1.5 h-4 w-4" />
             Create Database
           </Button>
@@ -144,6 +146,15 @@ export default function DatabasesPage() {
             ))}
           </div>
         </>
+      )}
+
+      {selectedClusterId && (
+        <CreateDatabaseWizard
+          open={showCreateDB}
+          onOpenChange={setShowCreateDB}
+          clusterId={selectedClusterId}
+          onCreated={refetch}
+        />
       )}
     </div>
   );
