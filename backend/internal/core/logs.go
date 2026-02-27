@@ -5,8 +5,10 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
+	"github.com/darkden-lab/argus/backend/internal/auth"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
 	"github.com/darkden-lab/argus/backend/internal/httputil"
 	corev1 "k8s.io/api/core/v1"
@@ -15,21 +17,50 @@ import (
 // LogsHandler provides endpoints for streaming pod logs.
 type LogsHandler struct {
 	clusterMgr *cluster.Manager
+	jwtService *auth.JWTService
 }
 
 // NewLogsHandler creates a new LogsHandler.
-func NewLogsHandler(cm *cluster.Manager) *LogsHandler {
-	return &LogsHandler{clusterMgr: cm}
+func NewLogsHandler(cm *cluster.Manager, jwtService *auth.JWTService) *LogsHandler {
+	return &LogsHandler{clusterMgr: cm, jwtService: jwtService}
 }
 
 // RegisterRoutes registers the pod logs endpoint.
+// The handler manages auth internally (via query param or header) to support
+// EventSource streaming which cannot send Authorization headers.
 func (h *LogsHandler) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/clusters/{clusterID}/namespaces/{namespace}/pods/{pod}/logs", h.GetPodLogs).Methods(http.MethodGet)
 }
 
 // GetPodLogs streams or returns logs for a pod.
-// Query params: container, tailLines (default 100), previous, follow.
+// Query params: container, tailLines (default 100), previous, follow, token.
 func (h *LogsHandler) GetPodLogs(w http.ResponseWriter, r *http.Request) {
+	// Authenticate via token query param or Authorization header
+	// (same pattern as terminal handler — needed for EventSource SSE)
+	token := r.URL.Query().Get("token")
+	if token == "" {
+		authHeader := r.Header.Get("Authorization")
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "bearer") {
+			token = parts[1]
+		}
+	}
+
+	if token == "" {
+		httputil.WriteError(w, http.StatusUnauthorized, "missing authorization")
+		return
+	}
+
+	claims, err := h.jwtService.ValidateToken(token)
+	if err != nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "invalid or expired token")
+		return
+	}
+
+	// Inject claims into context for downstream use
+	ctx := auth.ContextWithClaims(r.Context(), claims)
+	r = r.WithContext(ctx)
+
 	vars := mux.Vars(r)
 	clusterID := vars["clusterID"]
 	namespace := vars["namespace"]

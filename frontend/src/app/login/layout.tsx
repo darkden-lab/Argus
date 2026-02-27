@@ -1,8 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { DashboardShell } from "./dashboard-shell";
 
-export default async function DashboardLayout({
+export default async function LoginLayout({
   children,
 }: {
   children: React.ReactNode;
@@ -10,9 +9,9 @@ export default async function DashboardLayout({
   const cookieStore = await cookies();
   const token = cookieStore.get("access_token")?.value;
 
-  if (!token) {
-    redirect("/login");
+  if (token) {
+    redirect("/dashboard");
   }
 
-  return <DashboardShell>{children}</DashboardShell>;
+  return <>{children}</>;
 }

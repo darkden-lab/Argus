@@ -9,21 +9,28 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// ProviderFactory creates an LLMProvider from the given config.
+type ProviderFactory func(AIConfig) LLMProvider
+
 // AdminHandlers provides REST endpoints for AI configuration and management.
 type AdminHandlers struct {
-	pool           *pgxpool.Pool
-	indexer        *rag.Indexer
-	config         AIConfig
-	rbacWriteGuard mux.MiddlewareFunc
+	pool            *pgxpool.Pool
+	indexer         *rag.Indexer
+	config          AIConfig
+	rbacWriteGuard  mux.MiddlewareFunc
+	service         *Service
+	providerFactory ProviderFactory
 }
 
 // NewAdminHandlers creates admin API handlers for AI.
-func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, config AIConfig, rbacWriteGuard mux.MiddlewareFunc) *AdminHandlers {
+func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, config AIConfig, rbacWriteGuard mux.MiddlewareFunc, service *Service, factory ProviderFactory) *AdminHandlers {
 	return &AdminHandlers{
-		pool:           pool,
-		indexer:        indexer,
-		config:         config,
-		rbacWriteGuard: rbacWriteGuard,
+		pool:            pool,
+		indexer:         indexer,
+		config:          config,
+		rbacWriteGuard:  rbacWriteGuard,
+		service:         service,
+		providerFactory: factory,
 	}
 }
 
@@ -129,6 +136,17 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeAIJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update config"})
 		return
+	}
+
+	// Hot-reload the AI provider so changes take effect immediately.
+	// If the request omitted api_key, preserve the one from the running config.
+	if h.service != nil && h.providerFactory != nil {
+		if cfg.APIKey == "" {
+			_, current := h.service.Snapshot()
+			cfg.APIKey = current.APIKey
+		}
+		newProvider := h.providerFactory(cfg)
+		h.service.UpdateProvider(newProvider, cfg)
 	}
 
 	writeAIJSON(w, http.StatusOK, cfg)
