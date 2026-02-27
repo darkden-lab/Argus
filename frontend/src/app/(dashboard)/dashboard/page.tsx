@@ -91,9 +91,9 @@ export default function DashboardPage() {
       href: "/databases",
     },
     {
-      label: "Jobs",
-      value: stats.totalJobs,
-      subValue: `${stats.activeJobs} active`,
+      label: "CronJobs",
+      value: stats.totalCronJobs,
+      subValue: `${stats.activeCronJobs} active`,
       icon: Timer,
       color: "text-amber-500",
       bg: "bg-amber-500/10",

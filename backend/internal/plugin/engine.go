@@ -3,6 +3,8 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strings"
 	"sync"
 
 	"github.com/gorilla/mux"
@@ -16,6 +18,9 @@ type Engine struct {
 	enabled map[string]bool
 	pool    *pgxpool.Pool
 	mu      sync.RWMutex
+	hub     *ws.Hub
+	cm      *cluster.Manager
+	router  *mux.Router
 }
 
 func NewEngine(pool *pgxpool.Pool) *Engine {
@@ -23,6 +28,48 @@ func NewEngine(pool *pgxpool.Pool) *Engine {
 		plugins: make(map[string]Plugin),
 		enabled: make(map[string]bool),
 		pool:    pool,
+	}
+}
+
+// SetDependencies stores references needed for hot-reload (registering watchers
+// and routes when a plugin is enabled at runtime).
+func (e *Engine) SetDependencies(hub *ws.Hub, cm *cluster.Manager, router *mux.Router) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.hub = hub
+	e.cm = cm
+	e.router = router
+}
+
+// IsEnabled returns whether the plugin with the given ID is currently enabled.
+func (e *Engine) IsEnabled(id string) bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.enabled[id]
+}
+
+// PluginGateMiddleware returns an HTTP middleware that blocks requests to
+// disabled plugins. It extracts the plugin ID from the URL path pattern
+// /api/plugins/{pluginID}/... and returns 404 if the plugin is not enabled.
+func (e *Engine) PluginGateMiddleware() mux.MiddlewareFunc {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Extract plugin ID from URL: /api/plugins/{pluginID}/...
+			path := r.URL.Path
+			const prefix = "/api/plugins/"
+			if strings.HasPrefix(path, prefix) {
+				rest := path[len(prefix):]
+				pluginID := rest
+				if idx := strings.Index(rest, "/"); idx >= 0 {
+					pluginID = rest[:idx]
+				}
+				if pluginID != "" && !e.IsEnabled(pluginID) {
+					http.NotFound(w, r)
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
 	}
 }
 
@@ -69,6 +116,11 @@ func (e *Engine) Enable(ctx context.Context, pluginID string) error {
 		m := p.Manifest()
 		_ = store.SavePlugin(ctx, m)
 		_ = store.UpdatePluginStatus(ctx, pluginID, true)
+	}
+
+	// Hot-reload: register watchers for newly enabled plugin
+	if e.hub != nil && e.cm != nil {
+		p.RegisterWatchers(e.hub, e.cm)
 	}
 
 	return nil
@@ -147,10 +199,8 @@ func (e *Engine) RegisterAllRoutes(router *mux.Router, cm *cluster.Manager) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
 
-	for id, p := range e.plugins {
-		if e.enabled[id] {
-			p.RegisterRoutes(router, cm)
-		}
+	for _, p := range e.plugins {
+		p.RegisterRoutes(router, cm)
 	}
 }
 

@@ -4,14 +4,26 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { api } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { useClusterStore } from "@/stores/cluster";
+import { NetworkMap } from "@/components/networking/network-map";
 import {
   Globe,
   ArrowRightLeft,
   Shield,
   Loader2,
   ExternalLink,
+  Route,
+  DoorOpen,
+  Map,
 } from "lucide-react";
 
 interface K8sMeta {
@@ -54,24 +66,50 @@ interface NetworkPolicy {
   };
 }
 
+interface HTTPRoute {
+  metadata: K8sMeta;
+  spec?: {
+    hostnames?: string[];
+    parentRefs?: Array<{ name: string; namespace?: string; sectionName?: string }>;
+    rules?: Array<{
+      matches?: Array<{
+        path?: { type?: string; value?: string };
+        headers?: Array<{ name: string; value: string }>;
+        method?: string;
+      }>;
+      backendRefs?: Array<{ name: string; namespace?: string; port?: number; weight?: number }>;
+    }>;
+  };
+}
+
+interface Gateway {
+  metadata: K8sMeta;
+  spec?: {
+    gatewayClassName?: string;
+    listeners?: Array<{
+      name: string;
+      port: number;
+      protocol: string;
+      hostname?: string;
+    }>;
+    addresses?: Array<{ type?: string; value: string }>;
+  };
+  status?: {
+    conditions?: Array<{ type: string; status: string; message?: string }>;
+    addresses?: Array<{ type?: string; value: string }>;
+  };
+}
+
 export default function NetworkingPage() {
   const [services, setServices] = useState<Service[]>([]);
   const [ingresses, setIngresses] = useState<Ingress[]>([]);
   const [networkPolicies, setNetworkPolicies] = useState<NetworkPolicy[]>([]);
-  const [clusters, setClusters] = useState<Array<{ id: string; name: string; status: string }>>([]);
-  const [selectedCluster, setSelectedCluster] = useState<string>("");
+  const [httpRoutes, setHttpRoutes] = useState<HTTPRoute[]>([]);
+  const [gateways, setGateways] = useState<Gateway[]>([]);
+  const { clusters, selectedClusterId } = useClusterStore();
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    api
-      .get<Array<{ id: string; name: string; status: string }>>("/api/clusters")
-      .then((data) => {
-        setClusters(data);
-        const connected = data.find((c) => c.status === "connected" || c.status === "healthy");
-        if (connected) setSelectedCluster(connected.id);
-      })
-      .catch(() => setLoading(false));
-  }, []);
+  const selectedCluster = selectedClusterId || "";
 
   const fetchData = useCallback(async () => {
     if (!selectedCluster) {
@@ -79,15 +117,19 @@ export default function NetworkingPage() {
       return;
     }
     setLoading(true);
-    const [svcRes, ingRes, npRes] = await Promise.allSettled([
+    const [svcRes, ingRes, npRes, hrRes, gwRes] = await Promise.allSettled([
       api.get<{ items: Service[] }>(`/api/clusters/${selectedCluster}/resources/_/v1/services`),
       api.get<{ items: Ingress[] }>(`/api/clusters/${selectedCluster}/resources/networking.k8s.io/v1/ingresses`),
       api.get<{ items: NetworkPolicy[] }>(`/api/clusters/${selectedCluster}/resources/networking.k8s.io/v1/networkpolicies`),
+      api.get<{ items: HTTPRoute[] }>(`/api/clusters/${selectedCluster}/resources/gateway.networking.k8s.io/v1/httproutes`),
+      api.get<{ items: Gateway[] }>(`/api/clusters/${selectedCluster}/resources/gateway.networking.k8s.io/v1/gateways`),
     ]);
 
     setServices(svcRes.status === "fulfilled" ? svcRes.value.items ?? [] : []);
     setIngresses(ingRes.status === "fulfilled" ? ingRes.value.items ?? [] : []);
     setNetworkPolicies(npRes.status === "fulfilled" ? npRes.value.items ?? [] : []);
+    setHttpRoutes(hrRes.status === "fulfilled" ? hrRes.value.items ?? [] : []);
+    setGateways(gwRes.status === "fulfilled" ? gwRes.value.items ?? [] : []);
     setLoading(false);
   }, [selectedCluster]);
 
@@ -101,19 +143,13 @@ export default function NetworkingPage() {
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Networking</h1>
           <p className="text-sm text-muted-foreground">
-            Services, Ingresses, and Network Policies.
+            Services, Ingresses, Network Policies, HTTPRoutes, Gateways, and Network Map.
           </p>
         </div>
         {clusters.length > 1 && (
-          <select
-            value={selectedCluster}
-            onChange={(e) => setSelectedCluster(e.target.value)}
-            className="rounded-md border bg-background px-3 py-1.5 text-sm"
-          >
-            {clusters.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
-            ))}
-          </select>
+          <p className="text-xs text-muted-foreground">
+            Cluster: {clusters.find((c) => c.id === selectedCluster)?.name ?? selectedCluster}
+          </p>
         )}
       </div>
 
@@ -123,7 +159,7 @@ export default function NetworkingPage() {
         </div>
       ) : (
         <Tabs defaultValue="services">
-          <TabsList>
+          <TabsList className="flex-wrap">
             <TabsTrigger value="services" className="gap-1.5">
               <Globe className="h-3.5 w-3.5" /> Services ({services.length})
             </TabsTrigger>
@@ -132,6 +168,15 @@ export default function NetworkingPage() {
             </TabsTrigger>
             <TabsTrigger value="policies" className="gap-1.5">
               <Shield className="h-3.5 w-3.5" /> Policies ({networkPolicies.length})
+            </TabsTrigger>
+            <TabsTrigger value="httproutes" className="gap-1.5">
+              <Route className="h-3.5 w-3.5" /> HTTPRoutes ({httpRoutes.length})
+            </TabsTrigger>
+            <TabsTrigger value="gateways" className="gap-1.5">
+              <DoorOpen className="h-3.5 w-3.5" /> Gateways ({gateways.length})
+            </TabsTrigger>
+            <TabsTrigger value="network-map" className="gap-1.5">
+              <Map className="h-3.5 w-3.5" /> Network Map
             </TabsTrigger>
           </TabsList>
 
@@ -238,6 +283,162 @@ export default function NetworkingPage() {
                 <p className="col-span-full text-center text-sm text-muted-foreground py-8">No network policies found.</p>
               )}
             </div>
+          </TabsContent>
+
+          {/* HTTPRoutes tab */}
+          <TabsContent value="httproutes" className="mt-4">
+            {httpRoutes.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-8">No HTTPRoutes found.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Namespace</TableHead>
+                    <TableHead>Hostnames</TableHead>
+                    <TableHead>Parent Refs</TableHead>
+                    <TableHead>Rules</TableHead>
+                    <TableHead>Matches</TableHead>
+                    <TableHead>Backend Refs</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {httpRoutes.map((hr) => {
+                    const allMatches = (hr.spec?.rules ?? []).flatMap(
+                      (r) => r.matches ?? []
+                    );
+                    const allBackendRefs = (hr.spec?.rules ?? []).flatMap(
+                      (r) => r.backendRefs ?? []
+                    );
+                    return (
+                      <TableRow key={`${hr.metadata.namespace}/${hr.metadata.name}`}>
+                        <TableCell className="font-medium text-xs">
+                          {hr.metadata.name}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {hr.metadata.namespace}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono">
+                          {hr.spec?.hostnames?.join(", ") || "-"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {hr.spec?.parentRefs
+                            ?.map(
+                              (p) =>
+                                `${p.namespace ? p.namespace + "/" : ""}${p.name}${p.sectionName ? ":" + p.sectionName : ""}`
+                            )
+                            .join(", ") || "-"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {hr.spec?.rules?.length ?? 0}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {allMatches.length > 0
+                            ? allMatches
+                                .map(
+                                  (m) =>
+                                    `${m.method ?? ""}${m.path?.value ?? ""}`.trim() || "match"
+                                )
+                                .join(", ")
+                            : "-"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {allBackendRefs.length > 0
+                            ? allBackendRefs
+                                .map(
+                                  (b) =>
+                                    `${b.name}${b.port ? ":" + b.port : ""}${b.weight !== undefined ? " w:" + b.weight : ""}`
+                                )
+                                .join(", ")
+                            : "-"}
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
+
+          {/* Gateways tab */}
+          <TabsContent value="gateways" className="mt-4">
+            {gateways.length === 0 ? (
+              <p className="text-center text-sm text-muted-foreground py-8">No gateways found.</p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Namespace</TableHead>
+                    <TableHead>Gateway Class</TableHead>
+                    <TableHead>Listeners</TableHead>
+                    <TableHead>Addresses</TableHead>
+                    <TableHead>Conditions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {gateways.map((gw) => {
+                    const addresses =
+                      gw.status?.addresses ?? gw.spec?.addresses ?? [];
+                    const conditions = gw.status?.conditions ?? [];
+                    return (
+                      <TableRow key={`${gw.metadata.namespace}/${gw.metadata.name}`}>
+                        <TableCell className="font-medium text-xs">
+                          {gw.metadata.name}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground">
+                          {gw.metadata.namespace}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {gw.spec?.gatewayClassName ?? "-"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          {gw.spec?.listeners
+                            ?.map(
+                              (l) =>
+                                `${l.name} (${l.protocol}:${l.port}${l.hostname ? " " + l.hostname : ""})`
+                            )
+                            .join(", ") || "-"}
+                        </TableCell>
+                        <TableCell className="text-xs font-mono">
+                          {addresses.map((a) => a.value).join(", ") || "-"}
+                        </TableCell>
+                        <TableCell className="text-xs">
+                          <div className="flex gap-1 flex-wrap">
+                            {conditions.length > 0
+                              ? conditions.map((c, i) => (
+                                  <Badge
+                                    key={i}
+                                    variant={
+                                      c.status === "True"
+                                        ? "outline"
+                                        : "destructive"
+                                    }
+                                    className="text-[9px]"
+                                  >
+                                    {c.type}
+                                  </Badge>
+                                ))
+                              : "-"}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </TabsContent>
+
+          {/* Network Map tab */}
+          <TabsContent value="network-map" className="mt-4">
+            {selectedCluster ? (
+              <NetworkMap clusterID={selectedCluster} />
+            ) : (
+              <p className="text-center text-sm text-muted-foreground py-8">
+                Select a cluster to view the network map.
+              </p>
+            )}
           </TabsContent>
         </Tabs>
       )}

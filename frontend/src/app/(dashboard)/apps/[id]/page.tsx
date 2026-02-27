@@ -30,9 +30,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { LogViewer } from "@/components/resources/log-viewer";
 import {
   ArrowLeft,
   Box,
+  FileText,
   Globe,
   Lock,
   Loader2,
@@ -43,6 +45,17 @@ import {
   Scale,
   Shield,
 } from "lucide-react";
+
+interface K8sPod {
+  metadata: { name: string; namespace?: string; labels?: Record<string, string>; creationTimestamp?: string };
+  spec?: {
+    containers?: Array<{ name: string; image: string }>;
+  };
+  status?: {
+    phase?: string;
+    containerStatuses?: Array<{ name: string; ready: boolean; restartCount: number }>;
+  };
+}
 
 interface K8sEvent {
   type: string;
@@ -65,9 +78,13 @@ export default function AppDetailPage() {
   const namespace = searchParams.get("namespace") ?? "default";
 
   const [app, setApp] = useState<App | null>(null);
+  const [pods, setPods] = useState<K8sPod[]>([]);
   const [events, setEvents] = useState<K8sEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Log viewer
+  const [logPod, setLogPod] = useState<K8sPod | null>(null);
 
   // Scale dialog
   const [scaleOpen, setScaleOpen] = useState(false);
@@ -127,6 +144,25 @@ export default function AppDetailPage() {
     }
   }, [clusterId, namespace, appName]);
 
+  const fetchPods = useCallback(async () => {
+    if (!clusterId || !app) return;
+    try {
+      const res = await api.get<{ items: K8sPod[] }>(
+        `/api/clusters/${clusterId}/resources/_/v1/pods?namespace=${namespace}`
+      );
+      const appLabels = app.deployment.spec?.selector?.matchLabels;
+      const filtered = (res.items ?? []).filter((pod) => {
+        if (!appLabels || !pod.metadata.labels) return false;
+        return Object.entries(appLabels).every(
+          ([k, v]) => pod.metadata.labels?.[k] === v
+        );
+      });
+      setPods(filtered);
+    } catch {
+      // Pods are non-critical for this view
+    }
+  }, [clusterId, namespace, app]);
+
   const fetchEvents = useCallback(async () => {
     if (!clusterId) return;
     try {
@@ -148,6 +184,10 @@ export default function AppDetailPage() {
     fetchApp();
     fetchEvents();
   }, [fetchApp, fetchEvents]);
+
+  useEffect(() => {
+    if (app) fetchPods();
+  }, [app, fetchPods]);
 
   async function handleScale() {
     if (!clusterId || !app) return;
@@ -288,6 +328,7 @@ export default function AppDetailPage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="pods">Pods ({pods.length})</TabsTrigger>
           <TabsTrigger value="resources">Resources</TabsTrigger>
           <TabsTrigger value="events">Events</TabsTrigger>
         </TabsList>
@@ -401,6 +442,89 @@ export default function AppDetailPage() {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        {/* Pods tab */}
+        <TabsContent value="pods" className="space-y-4">
+          <Card className="py-4">
+            <CardHeader className="pb-0">
+              <CardTitle className="text-sm">Pods ({pods.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {pods.length === 0 ? (
+                <p className="text-sm text-muted-foreground">No pods found for this deployment.</p>
+              ) : (
+                <div className="space-y-2">
+                  {pods.map((pod) => {
+                    const phase = pod.status?.phase ?? "Unknown";
+                    const containers = pod.spec?.containers?.map((c) => c.name) ?? [];
+                    return (
+                      <div
+                        key={pod.metadata.name}
+                        className="flex items-center justify-between rounded-md border p-3 text-sm"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium">{pod.metadata.name}</p>
+                          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                            <Badge
+                              variant={
+                                phase === "Running" ? "outline" : phase === "Pending" ? "secondary" : "destructive"
+                              }
+                              className="text-[10px]"
+                            >
+                              {phase}
+                            </Badge>
+                            <span>
+                              {containers.length} container{containers.length !== 1 ? "s" : ""}
+                            </span>
+                            {pod.status?.containerStatuses?.some((cs) => cs.restartCount > 0) && (
+                              <span className="text-yellow-500">
+                                {pod.status.containerStatuses.reduce(
+                                  (sum, cs) => sum + cs.restartCount,
+                                  0
+                                )}{" "}
+                                restarts
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0"
+                          onClick={() => setLogPod(pod)}
+                        >
+                          <FileText className="mr-1 h-3.5 w-3.5" />
+                          Logs
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Log Viewer Dialog */}
+          {logPod && (
+            <Dialog open={!!logPod} onOpenChange={(open) => { if (!open) setLogPod(null); }}>
+              <DialogContent className="sm:max-w-3xl max-h-[80vh]">
+                <DialogHeader>
+                  <DialogTitle>Logs: {logPod.metadata.name}</DialogTitle>
+                  <DialogDescription>
+                    {logPod.metadata.namespace ?? namespace}
+                  </DialogDescription>
+                </DialogHeader>
+                <LogViewer
+                  clusterID={clusterId}
+                  namespace={logPod.metadata.namespace ?? namespace}
+                  podName={logPod.metadata.name}
+                  containers={logPod.spec?.containers?.map((c) => c.name)}
+                  onClose={() => setLogPod(null)}
+                />
+              </DialogContent>
+            </Dialog>
+          )}
         </TabsContent>
 
         {/* Resources tab */}

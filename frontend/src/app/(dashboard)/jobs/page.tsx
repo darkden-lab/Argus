@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/use-jobs";
-import { useClusterSelection } from "@/hooks/use-cluster-selection";
+import { useClusterStore } from "@/stores/cluster";
 import { ClusterSelector } from "@/components/layout/cluster-selector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -131,12 +131,15 @@ function JobCard({
 
 export default function JobsPage() {
   const router = useRouter();
-  const {
-    clusters,
-    selectedClusterId,
-    setSelectedClusterId,
-    loading: clustersLoading,
-  } = useClusterSelection();
+  const clusters = useClusterStore((s) => s.clusters);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId) ?? "";
+  const setSelectedClusterId = useClusterStore((s) => s.setSelectedClusterId);
+  const clustersLoading = useClusterStore((s) => s.loading);
+  const fetchClusters = useClusterStore((s) => s.fetchClusters);
+
+  useEffect(() => {
+    if (clusters.length === 0) fetchClusters();
+  }, [clusters.length, fetchClusters]);
   const { jobs, loading, error } = useJobs(selectedClusterId || null);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
