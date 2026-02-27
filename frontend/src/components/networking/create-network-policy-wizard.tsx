@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -23,11 +23,20 @@ import { ProgressSteps } from "@/components/ui/progress-steps";
 import {
   ArrowLeft,
   ArrowRight,
+  Info,
   Loader2,
   Plus,
   Trash2,
   Shield,
 } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import { Switch } from "@/components/ui/switch";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
 
@@ -72,10 +81,10 @@ interface PolicyForm {
 }
 
 const WIZARD_STEPS = [
-  { label: "Basics", description: "Name & selector" },
-  { label: "Ingress", description: "Inbound rules" },
-  { label: "Egress", description: "Outbound rules" },
-  { label: "Review", description: "YAML preview" },
+  { label: "Basics", description: "Policy identity & target" },
+  { label: "Ingress", description: "Allowed inbound traffic" },
+  { label: "Egress", description: "Allowed outbound traffic" },
+  { label: "Review", description: "Verify & create" },
 ];
 
 function emptyIngressRule(): IngressRule {
@@ -200,6 +209,21 @@ function buildManifest(form: PolicyForm) {
   };
 }
 
+function InfoTip({ text }: { text: string }) {
+  return (
+    <TooltipProvider>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Info className="h-3.5 w-3.5 text-muted-foreground inline-block ml-1 cursor-help" />
+        </TooltipTrigger>
+        <TooltipContent side="top" className="max-w-[280px]">
+          <p>{text}</p>
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
+  );
+}
+
 function LabelPairEditor({
   labels,
   onChange,
@@ -294,7 +318,7 @@ function RuleEditor({
 
       {/* Pod Selector */}
       <div className="space-y-2">
-        <Label className="text-xs">{dirLabel} Pod Selector Labels</Label>
+        <Label className="text-xs">{dirLabel} Pod Selector Labels <InfoTip text="Match pods by their labels. Traffic will be allowed from/to pods matching these labels." /></Label>
         {rule.podSelectorLabels.length === 0 ? (
           <Button
             variant="outline"
@@ -363,7 +387,7 @@ function RuleEditor({
 
       {/* Namespace Selector */}
       <div className="space-y-2">
-        <Label className="text-xs">{dirLabel} Namespace Selector Labels</Label>
+        <Label className="text-xs">{dirLabel} Namespace Selector Labels <InfoTip text="Match namespaces by their labels. Combined with pod selector for cross-namespace rules." /></Label>
         {rule.namespaceSelectorLabels.length === 0 ? (
           <Button
             variant="outline"
@@ -435,7 +459,7 @@ function RuleEditor({
 
       {/* IP Block */}
       <div className="space-y-2">
-        <Label className="text-xs">IP Block CIDR</Label>
+        <Label className="text-xs">IP Block CIDR <InfoTip text="CIDR notation (e.g. 10.0.0.0/24) to allow traffic from/to specific IP ranges." /></Label>
         <Input
           placeholder="10.0.0.0/24"
           value={rule.ipBlock}
@@ -446,7 +470,7 @@ function RuleEditor({
 
       {/* Ports */}
       <div className="space-y-2">
-        <Label className="text-xs">Ports</Label>
+        <Label className="text-xs">Ports <InfoTip text="Specific ports to allow. Leave empty to allow all ports." /></Label>
         {rule.ports.map((port, i) => (
           <div key={i} className="flex items-center gap-2">
             <Select
@@ -508,6 +532,27 @@ export function CreateNetworkPolicyWizard({
   const [form, setForm] = useState<PolicyForm>(defaultForm);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [namespaceOptions, setNamespaceOptions] = useState<ComboboxOption[]>([]);
+  const [namespacesLoading, setNamespacesLoading] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setNamespacesLoading(true);
+    api
+      .get<{ items: Array<{ metadata: { name: string } }> }>(
+        `/api/clusters/${clusterId}/resources/_/v1/namespaces`
+      )
+      .then((res) => {
+        setNamespaceOptions(
+          (res.items ?? []).map((ns) => ({
+            value: ns.metadata.name,
+            label: ns.metadata.name,
+          }))
+        );
+      })
+      .catch(() => {})
+      .finally(() => setNamespacesLoading(false));
+  }, [open, clusterId]);
 
   function reset() {
     setStep(0);
@@ -626,6 +671,9 @@ export function CreateNetworkPolicyWizard({
         {/* Step 0: Basics */}
         {step === 0 && (
           <div className="space-y-4 py-2">
+            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+              A NetworkPolicy controls traffic flow to/from pods. The pod selector determines which pods this policy applies to. Pods not matched by any policy accept all traffic.
+            </div>
             <div className="space-y-2">
               <Label htmlFor="np-name">Policy Name</Label>
               <Input
@@ -647,11 +695,14 @@ export function CreateNetworkPolicyWizard({
 
             <div className="space-y-2">
               <Label htmlFor="np-namespace">Namespace</Label>
-              <Input
-                id="np-namespace"
-                placeholder="default"
+              <Combobox
+                options={namespaceOptions}
                 value={form.namespace}
-                onChange={(e) => updateForm({ namespace: e.target.value })}
+                onValueChange={(v) => updateForm({ namespace: v })}
+                placeholder="Select namespace..."
+                searchPlaceholder="Search namespaces..."
+                loading={namespacesLoading}
+                allowCustomValue
               />
               {errors.namespace && (
                 <p className="text-xs text-destructive">{errors.namespace}</p>
@@ -659,10 +710,7 @@ export function CreateNetworkPolicyWizard({
             </div>
 
             <div className="space-y-2">
-              <Label>Pod Selector Labels</Label>
-              <p className="text-xs text-muted-foreground">
-                Select which pods this policy applies to. Leave empty to select all pods.
-              </p>
+              <Label>Pod Selector Labels <InfoTip text="Labels that identify which pods this policy applies to. An empty selector matches all pods in the namespace." /></Label>
               <LabelPairEditor
                 labels={form.podSelectorLabels}
                 onChange={updatePodSelectorLabel}
@@ -683,12 +731,48 @@ export function CreateNetworkPolicyWizard({
                 }
               />
             </div>
+
+            <div className="space-y-3">
+              <Label>Policy Types <InfoTip text="Select which traffic directions this policy controls. Enable without adding rules to create a default-deny policy." /></Label>
+              <div className="flex items-center gap-6">
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch
+                    checked={form.policyTypes.includes("Ingress")}
+                    onCheckedChange={(checked) => {
+                      const types = checked
+                        ? [...form.policyTypes.filter((t) => t !== "Ingress"), "Ingress"]
+                        : form.policyTypes.filter((t) => t !== "Ingress");
+                      updateForm({ policyTypes: types });
+                    }}
+                  />
+                  Ingress
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                  <Switch
+                    checked={form.policyTypes.includes("Egress")}
+                    onCheckedChange={(checked) => {
+                      const types = checked
+                        ? [...form.policyTypes.filter((t) => t !== "Egress"), "Egress"]
+                        : form.policyTypes.filter((t) => t !== "Egress");
+                      updateForm({ policyTypes: types });
+                    }}
+                  />
+                  Egress
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Enable a type without adding rules to create a default-deny policy for that direction.
+              </p>
+            </div>
           </div>
         )}
 
         {/* Step 1: Ingress Rules */}
         {step === 1 && (
           <div className="space-y-4 py-2">
+            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+              Ingress rules define which inbound traffic is allowed to reach the selected pods. If no rules are defined and Ingress type is set, all inbound traffic is denied (default deny).
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-medium">Ingress Rules</h3>
@@ -738,6 +822,9 @@ export function CreateNetworkPolicyWizard({
         {/* Step 2: Egress Rules */}
         {step === 2 && (
           <div className="space-y-4 py-2">
+            <div className="rounded-md bg-muted/50 p-3 text-xs text-muted-foreground">
+              Egress rules define which outbound traffic is allowed from the selected pods. Remember to allow DNS (port 53 UDP/TCP) if pods need name resolution.
+            </div>
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-sm font-medium">Egress Rules</h3>

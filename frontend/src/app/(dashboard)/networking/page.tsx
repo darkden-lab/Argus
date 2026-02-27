@@ -21,6 +21,8 @@ import { useClusterStore } from "@/stores/cluster";
 import { NetworkMap } from "@/components/networking/network-map";
 import { NetworkPolicyDetail, type NetworkPolicyFull } from "@/components/networking/network-policy-detail";
 import { CreateNetworkPolicyWizard } from "@/components/networking/create-network-policy-wizard";
+import { CreateGatewayWizard } from "@/components/networking/create-gateway-wizard";
+import { CreateHTTPRouteWizard } from "@/components/networking/create-httproute-wizard";
 import { PrometheusConfigDialog } from "@/components/networking/prometheus-config-dialog";
 import {
   Globe,
@@ -134,8 +136,10 @@ export default function NetworkingPage() {
   const [selectedPolicy, setSelectedPolicy] = useState<NetworkPolicyFull | null>(null);
   const [policyDetailOpen, setPolicyDetailOpen] = useState(false);
 
-  // Create network policy wizard
+  // Create wizards
   const [showCreatePolicy, setShowCreatePolicy] = useState(false);
+  const [showCreateGateway, setShowCreateGateway] = useState(false);
+  const [showCreateHTTPRoute, setShowCreateHTTPRoute] = useState(false);
 
   // Prometheus config dialog
   const [promConfigOpen, setPromConfigOpen] = useState(false);
@@ -223,10 +227,20 @@ export default function NetworkingPage() {
             </p>
           )}
           {selectedCluster && (
-            <Button size="sm" onClick={() => setShowCreatePolicy(true)}>
-              <Plus className="mr-1.5 h-3.5 w-3.5" />
-              Create Policy
-            </Button>
+            <>
+              <Button variant="outline" size="sm" onClick={() => setShowCreateGateway(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Create Gateway
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowCreateHTTPRoute(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Create HTTPRoute
+              </Button>
+              <Button size="sm" onClick={() => setShowCreatePolicy(true)}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Create Policy
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -664,6 +678,24 @@ export default function NetworkingPage() {
         <CreateNetworkPolicyWizard
           open={showCreatePolicy}
           onOpenChange={setShowCreatePolicy}
+          clusterId={selectedCluster}
+          onCreated={fetchData}
+        />
+      )}
+
+      {selectedCluster && (
+        <CreateGatewayWizard
+          open={showCreateGateway}
+          onOpenChange={setShowCreateGateway}
+          clusterId={selectedCluster}
+          onCreated={fetchData}
+        />
+      )}
+
+      {selectedCluster && (
+        <CreateHTTPRouteWizard
+          open={showCreateHTTPRoute}
+          onOpenChange={setShowCreateHTTPRoute}
           clusterId={selectedCluster}
           onCreated={fetchData}
         />
