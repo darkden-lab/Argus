@@ -9,6 +9,7 @@ import { CreateSecretWizard } from "@/components/resources/create-secret-wizard"
 import { CreatePVCWizard } from "@/components/resources/create-pvc-wizard";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Plus } from "lucide-react";
+import { useClusterStore } from "@/stores/cluster";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useK8sWebSocket } from "@/hooks/use-k8s-websocket";
 import type { WatchEvent } from "@/lib/ws";
@@ -76,6 +77,8 @@ export default function ResourceListPage() {
   const router = useRouter();
   const clusterId = params.id as string;
   const resourceType = params.resourceType as string;
+  const clusters = useClusterStore((s) => s.clusters);
+  const clusterName = clusters.find((c) => c.id === clusterId)?.name ?? clusterId;
   const [data, setData] = useState<K8sResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
@@ -156,7 +159,7 @@ export default function ResourceListPage() {
           <div>
             <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
             <p className="text-muted-foreground">
-              Cluster: {clusterId}
+              Cluster: {clusterName}
             </p>
           </div>
         </div>

@@ -11,6 +11,7 @@ import { ArrowLeft, Download, MessageSquare, Terminal, Copy, Check, Rocket, Data
 import { Separator } from "@/components/ui/separator";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useAiChatStore } from "@/stores/ai-chat";
+import { useClusterStore } from "@/stores/cluster";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useK8sWildcard } from "@/hooks/use-k8s-websocket";
 import { cn } from "@/lib/utils";
@@ -158,6 +159,8 @@ export default function ClusterDetailPage() {
   const params = useParams();
   const router = useRouter();
   const clusterId = params.id as string;
+  const clusters = useClusterStore((s) => s.clusters);
+  const clusterName = clusters.find((c) => c.id === clusterId)?.name ?? clusterId;
   const [activeTab, setActiveTab] = useState("overview");
   const [resources, setResources] = useState<Record<string, K8sResource[]>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
@@ -317,7 +320,7 @@ export default function ClusterDetailPage() {
           </Button>
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
-              Cluster: {clusterId}
+              Cluster: {clusterName}
             </h1>
             <p className="text-muted-foreground">
               {nodeCount} nodes, {namespaces.length} namespaces

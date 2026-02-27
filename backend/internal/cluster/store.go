@@ -2,10 +2,16 @@ package cluster
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+// ErrClusterNameExists is returned when a cluster with the same name already exists.
+var ErrClusterNameExists = errors.New("cluster name already exists")
 
 type Store struct {
 	pool *pgxpool.Pool
@@ -24,6 +30,10 @@ func (s *Store) CreateCluster(ctx context.Context, name, apiServerURL string, ku
 		name, apiServerURL, kubeconfigEnc,
 	).Scan(&c.ID, &c.Name, &c.APIServerURL, &c.Status, &c.ConnectionType, &c.AgentID, &c.CreatedAt)
 	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, "clusters_name_unique") {
+			return nil, ErrClusterNameExists
+		}
 		return nil, fmt.Errorf("failed to create cluster: %w", err)
 	}
 	return &c, nil
