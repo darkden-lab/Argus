@@ -27,12 +27,16 @@ class MockWebSocket {
 
 let mockWsInstance: MockWebSocket;
 
+function setMockWsInstance(instance: MockWebSocket) {
+  mockWsInstance = instance;
+}
+
 // Override global WebSocket
 beforeAll(() => {
   (global as Record<string, unknown>).WebSocket = class extends MockWebSocket {
     constructor() {
       super();
-      mockWsInstance = this;
+      setMockWsInstance(this);
       // Simulate connection in next tick
       setTimeout(() => this.onopen?.(), 0);
     }
