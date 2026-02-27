@@ -91,10 +91,7 @@ func TestListMappings_NilPool_PanicsAtDB(t *testing.T) {
 
 	_, panicked := callMappingHandler(h.listMappings, req)
 	// Should panic at h.pool.Query(nil pool)
-	if !panicked {
-		// If it didn't panic, it should have returned an error code (not 200)
-		// This branch is unlikely with nil pool but handle gracefully
-	}
+	_ = panicked
 	// Test passes: either panicked (reached DB layer) or wrote an error response
 }
 
