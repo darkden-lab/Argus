@@ -36,6 +36,7 @@ import { EmptyState } from "@/components/empty-state";
 interface AuditEntry {
   id: string;
   user_id: string | null;
+  username: string | null;
   cluster_id: string | null;
   action: string;
   resource: string;
@@ -83,10 +84,10 @@ function actionBadgeVariant(action: string): "default" | "secondary" | "destruct
 }
 
 function buildCsvContent(entries: AuditEntry[]): string {
-  const header = "Timestamp,User ID,Cluster ID,Action,Resource,Details\n";
+  const header = "Timestamp,User,User ID,Cluster ID,Action,Resource,Details\n";
   const rows = entries.map((e) => {
     const details = JSON.stringify(e.details).replace(/"/g, '""');
-    return `"${e.timestamp}","${e.user_id ?? ""}","${e.cluster_id ?? ""}","${e.action}","${e.resource}","${details}"`;
+    return `"${e.timestamp}","${e.username ?? ""}","${e.user_id ?? ""}","${e.cluster_id ?? ""}","${e.action}","${e.resource}","${details}"`;
   });
   return header + rows.join("\n");
 }
@@ -178,6 +179,7 @@ export default function AuditLogPage() {
         return (
           e.action.toLowerCase().includes(q) ||
           e.resource.toLowerCase().includes(q) ||
+          (e.username ?? "").toLowerCase().includes(q) ||
           (e.user_id ?? "").toLowerCase().includes(q) ||
           (e.cluster_id ?? "").toLowerCase().includes(q)
         );
@@ -320,7 +322,7 @@ export default function AuditLogPage() {
                           {formatTimestamp(entry.timestamp)}
                         </TableCell>
                         <TableCell className="text-sm">
-                          {entry.user_id ?? <span className="text-muted-foreground">-</span>}
+                          {entry.username ?? entry.user_id ?? <span className="text-muted-foreground">-</span>}
                         </TableCell>
                         <TableCell>
                           <Badge variant={actionBadgeVariant(entry.action)} className="text-[10px]">

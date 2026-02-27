@@ -237,9 +237,9 @@ func main() {
 	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr)
 	convenienceHandlers.RegisterRoutes(protected)
 
-	// Pod logs endpoint
-	logsHandler := core.NewLogsHandler(clusterMgr)
-	logsHandler.RegisterRoutes(protected)
+	// Pod logs endpoint (auth handled internally to support EventSource SSE)
+	logsHandler := core.NewLogsHandler(clusterMgr, jwtService)
+	logsHandler.RegisterRoutes(r)
 
 	// Network Policy simulator
 	netpolSimHandler := core.NewNetPolSimulatorHandler(clusterMgr)
@@ -284,34 +284,40 @@ func main() {
 
 	// AI Chat system
 	aiCfg := ai.LoadConfigFromEnv()
-	var aiProvider ai.LLMProvider
-	switch aiCfg.Provider {
-	case ai.ProviderClaude:
-		aiProvider = providers.NewClaude(aiCfg.APIKey, aiCfg.Model)
-	case ai.ProviderOpenAI:
-		aiProvider = providers.NewOpenAI(aiCfg.APIKey, aiCfg.Model, aiCfg.BaseURL)
-	case ai.ProviderOllama:
-		aiProvider = providers.NewOllama(aiCfg.BaseURL, aiCfg.Model)
-	default:
-		aiProvider = providers.NewClaude(aiCfg.APIKey, aiCfg.Model)
+
+	// Provider factory: creates an LLMProvider from config (reused for hot-reload)
+	aiProviderFactory := func(cfg ai.AIConfig) ai.LLMProvider {
+		switch cfg.Provider {
+		case ai.ProviderClaude:
+			return providers.NewClaude(cfg.APIKey, cfg.Model)
+		case ai.ProviderOpenAI:
+			return providers.NewOpenAI(cfg.APIKey, cfg.Model, cfg.BaseURL)
+		case ai.ProviderOllama:
+			return providers.NewOllama(cfg.BaseURL, cfg.Model)
+		default:
+			return providers.NewClaude(cfg.APIKey, cfg.Model)
+		}
 	}
 
-	var aiRetriever *rag.Retriever
+	aiProvider := aiProviderFactory(aiCfg)
+
+	// Create Service first so the embedder can track its active provider.
+	aiService := ai.NewService(aiProvider, nil, clusterMgr, pool, aiCfg)
+
 	var aiIndexer *rag.Indexer
 	if pool != nil {
 		ragStore := rag.NewStore(pool)
-		embedder := &ai.ProviderEmbedder{Provider: aiProvider}
-		aiRetriever = rag.NewRetriever(ragStore, embedder, 5)
+		embedder := ai.NewProviderEmbedder(aiService)
+		aiRetriever := rag.NewRetriever(ragStore, embedder, 5)
+		aiService.SetRetriever(aiRetriever)
 		aiIndexer = rag.NewIndexer(ragStore, embedder, clusterMgr)
 		aiIndexer.Start(ctx)
 		defer aiIndexer.Stop()
 	}
-
-	aiService := ai.NewService(aiProvider, aiRetriever, clusterMgr, pool, aiCfg)
 	aiChatHandler := ai.NewChatHandler(aiService, jwtService, aiCfg)
 	aiChatHandler.RegisterRoutes(r)
 
-	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard)
+	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard, aiService, aiProviderFactory)
 	aiAdminHandlers.RegisterRoutes(protected)
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)
