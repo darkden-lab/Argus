@@ -138,6 +138,17 @@ func (h *Handler) readPump(s *Session) {
 				ClusterID: tm.ClusterID,
 				Namespace: tm.Namespace,
 			})
+		case "mode":
+			newMode := Mode(tm.Mode)
+			if newMode != ModeSmart && newMode != ModeRaw {
+				h.sendToSession(s, TerminalMessage{Type: "error", Data: "invalid mode: " + tm.Mode})
+				break
+			}
+			s.mu.Lock()
+			s.Mode = newMode
+			s.mu.Unlock()
+			h.sendToSession(s, TerminalMessage{Type: "mode_changed", Mode: tm.Mode})
+			log.Printf("terminal: session %s mode changed to %s", s.ID, tm.Mode)
 		default:
 			h.sendToSession(s, TerminalMessage{Type: "error", Data: "unknown message type: " + tm.Type})
 		}

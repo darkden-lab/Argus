@@ -35,7 +35,8 @@ jest.mock('@xterm/addon-web-links', () => ({
 jest.mock('@xterm/xterm/css/xterm.css', () => ({}));
 
 // Mock the terminal hook
-const mockSendInput = jest.fn();
+const mockHandleInput = jest.fn();
+const mockResetLineBuffer = jest.fn();
 const mockSendResize = jest.fn();
 const mockSendModeChange = jest.fn();
 const mockSendContextChange = jest.fn();
@@ -43,7 +44,8 @@ const mockConnect = jest.fn();
 
 const mockUseTerminal = jest.fn(() => ({
   isConnected: false,
-  sendInput: mockSendInput,
+  handleInput: mockHandleInput,
+  resetLineBuffer: mockResetLineBuffer,
   sendResize: mockSendResize,
   sendModeChange: mockSendModeChange,
   sendContextChange: mockSendContextChange,
@@ -129,7 +131,8 @@ describe('WebTerminal - connected state', () => {
     // Override the hook mock to return connected state
     mockUseTerminal.mockReturnValue({
       isConnected: true,
-      sendInput: mockSendInput,
+      handleInput: mockHandleInput,
+      resetLineBuffer: mockResetLineBuffer,
       sendResize: mockSendResize,
       sendModeChange: mockSendModeChange,
       sendContextChange: mockSendContextChange,

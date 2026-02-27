@@ -60,19 +60,36 @@ export function WebTerminal() {
   const [namespaces, setNamespaces] = useState<Namespace[]>([]);
   const [selectedNamespace, setSelectedNamespace] = useState("default");
   const [mode, setMode] = useState<TerminalMode>("smart");
+  const modeRef = useRef<TerminalMode>("smart");
   const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Keep modeRef in sync with mode state
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
+
   const handleOutput = useCallback((data: string) => {
     xtermRef.current?.write(data);
+    // Show prompt after output in smart mode
+    if (modeRef.current === "smart") {
+      xtermRef.current?.write("$ ");
+    }
   }, []);
 
   const handleError = useCallback((error: string) => {
     xtermRef.current?.write(`\r\n\x1b[31mError: ${error}\x1b[0m\r\n`);
+    if (modeRef.current === "smart") {
+      xtermRef.current?.write("$ ");
+    }
   }, []);
 
   const handleConnected = useCallback(() => {
     xtermRef.current?.write(
       "\x1b[32mConnected to terminal session.\x1b[0m\r\n"
     );
+    if (modeRef.current === "smart") {
+      xtermRef.current?.write("$ ");
+    }
   }, []);
 
   const handleModeChanged = useCallback((newMode: TerminalMode) => {
@@ -84,7 +101,8 @@ export function WebTerminal() {
 
   const {
     isConnected,
-    sendInput,
+    handleInput,
+    resetLineBuffer,
     sendResize,
     sendModeChange,
     sendContextChange,
@@ -169,9 +187,9 @@ export function WebTerminal() {
     );
     term.writeln("");
 
-    // Handle input
+    // Handle input — smart mode buffers locally, raw mode sends directly
     term.onData((data) => {
-      sendInput(data);
+      handleInput(data, (s) => term.write(s), modeRef.current);
     });
 
     // Handle resize
@@ -207,6 +225,7 @@ export function WebTerminal() {
     const newMode = mode === "smart" ? "raw" : "smart";
     setMode(newMode);
     sendModeChange(newMode);
+    resetLineBuffer();
   };
 
   const handleCopy = () => {
@@ -218,8 +237,8 @@ export function WebTerminal() {
 
   const handlePaste = async () => {
     const text = await navigator.clipboard.readText();
-    if (text) {
-      sendInput(text);
+    if (text && xtermRef.current) {
+      handleInput(text, (s) => xtermRef.current?.write(s), modeRef.current);
     }
   };
 
