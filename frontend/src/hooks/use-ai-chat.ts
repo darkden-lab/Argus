@@ -180,15 +180,22 @@ export function useAiChat() {
             }
             break;
 
-          case "error":
+          case "error": {
             store.setIsStreaming(false);
+            const errorText = msg.error || msg.content || "Unknown error";
+            const isNotConfigured =
+              /not configured|no provider/i.test(errorText);
+            const friendlyError = isNotConfigured
+              ? "AI assistant is not configured. Please set up an AI provider in Settings."
+              : errorText;
             store.addMessage({
               id: crypto.randomUUID(),
               role: "assistant",
-              content: `Error: ${msg.error || "Unknown error"}`,
+              content: `Error: ${friendlyError}`,
               timestamp: new Date().toISOString(),
             });
             break;
+          }
         }
       } catch {
         // Ignore malformed messages

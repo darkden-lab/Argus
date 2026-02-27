@@ -515,6 +515,69 @@ export function compositeJobs(
   return result;
 }
 
+// ---------- CNPG (CloudNativePG) conversion ----------
+
+export interface CNPGCluster {
+  metadata: K8sMeta;
+  spec?: {
+    instances?: number;
+    postgresql?: { parameters?: Record<string, string> };
+    bootstrap?: {
+      initdb?: { database?: string; owner?: string };
+    };
+    storage?: {
+      size?: string;
+      storageClass?: string;
+    };
+    imageName?: string;
+  };
+  status?: {
+    instances?: number;
+    readyInstances?: number;
+    phase?: string;
+    currentPrimary?: string;
+    conditions?: Array<{ type: string; status: string; message?: string }>;
+  };
+}
+
+function deriveCNPGStatus(cluster: CNPGCluster): DatabaseStatus {
+  const phase = cluster.status?.phase?.toLowerCase();
+  if (phase === "cluster in healthy state" || phase === "healthy") return "running";
+  if (phase === "setting up primary" || phase === "creating replica") return "creating";
+  if (phase === "failing over" || phase === "upgrade failed") return "failing";
+  const ready = cluster.status?.readyInstances ?? 0;
+  const desired = cluster.spec?.instances ?? 0;
+  if (desired > 0 && ready === desired) return "running";
+  if (ready > 0 && ready < desired) return "creating";
+  if (desired > 0 && ready === 0) return "failing";
+  return "unknown";
+}
+
+export function cnpgToDatabases(clusters: CNPGCluster[]): Database[] {
+  return clusters.map((cluster) => {
+    const ns = cluster.metadata.namespace ?? "default";
+    const image = cluster.spec?.imageName ?? "postgresql";
+
+    return {
+      id: cluster.metadata.uid ?? cluster.metadata.name,
+      name: cluster.metadata.name,
+      namespace: ns,
+      status: deriveCNPGStatus(cluster),
+      engine: "postgresql",
+      image,
+      replicas: {
+        ready: cluster.status?.readyInstances ?? 0,
+        desired: cluster.spec?.instances ?? 0,
+      },
+      storage: cluster.spec?.storage?.size ?? "N/A",
+      createdAt: cluster.metadata.creationTimestamp ?? "",
+      pvcs: [],
+      services: [],
+      isCNPG: true,
+    };
+  });
+}
+
 // ---------- Utility functions ----------
 
 export function getStatusColor(status: AppStatus | DatabaseStatus | JobStatus): string {

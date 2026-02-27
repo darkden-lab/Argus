@@ -238,9 +238,7 @@ func (h *Handlers) ListChannels(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"channels": chs,
-	})
+	httputil.WriteJSON(w, http.StatusOK, chs)
 }
 
 // CreateChannel handles POST /api/notifications/channels

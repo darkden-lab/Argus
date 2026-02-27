@@ -55,7 +55,14 @@ func (h *ConvenienceHandlers) ListNamespaces(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, nsList)
+	type nsEntry struct {
+		Name string `json:"name"`
+	}
+	entries := make([]nsEntry, len(nsList.Items))
+	for i, ns := range nsList.Items {
+		entries[i] = nsEntry{Name: ns.Name}
+	}
+	httputil.WriteJSON(w, http.StatusOK, entries)
 }
 
 // ListNodes returns all nodes in the cluster.

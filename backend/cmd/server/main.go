@@ -234,6 +234,10 @@ func main() {
 	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr)
 	convenienceHandlers.RegisterRoutes(protected)
 
+	// Pod logs endpoint
+	logsHandler := core.NewLogsHandler(clusterMgr)
+	logsHandler.RegisterRoutes(protected)
+
 	// Audit log routes
 	auditHandlers.RegisterRoutes(protected)
 
@@ -253,8 +257,11 @@ func main() {
 	pluginHandlers := plugin.NewHandlers(pluginEngine, pluginsWriteGuard)
 	pluginHandlers.RegisterRoutes(protected)
 
-	// Plugin-registered routes
-	pluginEngine.RegisterAllRoutes(protected, clusterMgr)
+	// Plugin-registered routes (with gate middleware to block disabled plugins)
+	pluginRouter := protected.PathPrefix("").Subrouter()
+	pluginRouter.Use(pluginEngine.PluginGateMiddleware())
+	pluginEngine.SetDependencies(hub, clusterMgr, pluginRouter)
+	pluginEngine.RegisterAllRoutes(pluginRouter, clusterMgr)
 	pluginEngine.RegisterAllWatchers(hub, clusterMgr)
 
 	// K8s Reverse Proxy (protected)

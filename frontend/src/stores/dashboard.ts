@@ -34,6 +34,8 @@ interface DashboardStats {
   runningDatabases: number;
   totalJobs: number;
   activeJobs: number;
+  totalCronJobs: number;
+  activeCronJobs: number;
   totalClusters: number;
   healthyClusters: number;
 }
@@ -70,6 +72,8 @@ const emptyStats: DashboardStats = {
   runningDatabases: 0,
   totalJobs: 0,
   activeJobs: 0,
+  totalCronJobs: 0,
+  activeCronJobs: 0,
   totalClusters: 0,
   healthyClusters: 0,
 };
@@ -151,6 +155,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         }
       }
 
+      const cronJobs = allJobs.filter((j) => j.cronJob);
       const stats: DashboardStats = {
         totalApps: allApps.length,
         healthyApps: allApps.filter((a) => a.status === 'healthy').length,
@@ -158,6 +163,8 @@ export const useDashboardStore = create<DashboardState>((set, get) => ({
         runningDatabases: allDatabases.filter((d) => d.status === 'running').length,
         totalJobs: allJobs.length,
         activeJobs: allJobs.filter((j) => j.status === 'active').length,
+        totalCronJobs: cronJobs.length,
+        activeCronJobs: cronJobs.filter((j) => j.status === 'active').length,
         totalClusters: clusters.length,
         healthyClusters: clusters.filter(
           (c) => c.status === 'connected' || c.status === 'healthy'

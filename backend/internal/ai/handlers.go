@@ -51,6 +51,7 @@ type ChatWSMessage struct {
 type ChatWSResponse struct {
 	Type           string `json:"type"`            // "assistant_message", "stream_delta", "stream_end", "confirm_request", "error", "conversation_created"
 	Content        string `json:"content,omitempty"`
+	Error          string `json:"error,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	ConfirmationID string `json:"confirmation_id,omitempty"`
 	ToolName       string `json:"tool_name,omitempty"`
@@ -99,7 +100,7 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 
 		var wsMsg ChatWSMessage
 		if err := json.Unmarshal(msg, &wsMsg); err != nil {
-			writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "invalid message format"})
+			writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "invalid message format", Error: "invalid message format"})
 			continue
 		}
 
@@ -116,7 +117,7 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 				r.Context(), claims.UserID, currentConversation, wsMsg.Content, currentContext,
 			)
 			if err != nil {
-				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: err.Error()})
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: err.Error(), Error: err.Error()})
 				continue
 			}
 
@@ -155,7 +156,7 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 			writeWSJSON(conn, ChatWSResponse{Type: "conversation_created"})
 
 		default:
-			writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "unknown message type"})
+			writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "unknown message type", Error: "unknown message type"})
 		}
 	}
 }

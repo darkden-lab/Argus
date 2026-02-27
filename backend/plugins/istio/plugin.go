@@ -76,6 +76,10 @@ func (p *IstioPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 
 	r.HandleFunc("/api/plugins/istio/destinationrules", h.ListDestinationRules).Methods("GET")
 	r.HandleFunc("/api/plugins/istio/serviceentries", h.ListServiceEntries).Methods("GET")
+
+	// Topology endpoint
+	topo := newTopologyHandler(cm)
+	topo.RegisterRoutes(r)
 }
 
 // RegisterWatchers starts a background watch goroutine for each Istio CRD on

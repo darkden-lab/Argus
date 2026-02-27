@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useApps } from "@/hooks/use-apps";
-import { useClusterSelection } from "@/hooks/use-cluster-selection";
+import { useClusterStore } from "@/stores/cluster";
 import { ClusterSelector } from "@/components/layout/cluster-selector";
 import { AppCard } from "@/components/apps/app-card";
 import { Button } from "@/components/ui/button";
@@ -12,12 +12,15 @@ import { Loader2, Plus, Rocket, Search } from "lucide-react";
 
 export default function AppsPage() {
   const router = useRouter();
-  const {
-    clusters,
-    selectedClusterId,
-    setSelectedClusterId,
-    loading: clustersLoading,
-  } = useClusterSelection();
+  const clusters = useClusterStore((s) => s.clusters);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId) ?? "";
+  const setSelectedClusterId = useClusterStore((s) => s.setSelectedClusterId);
+  const clustersLoading = useClusterStore((s) => s.loading);
+  const fetchClusters = useClusterStore((s) => s.fetchClusters);
+
+  useEffect(() => {
+    if (clusters.length === 0) fetchClusters();
+  }, [clusters.length, fetchClusters]);
   const { apps, loading, error } = useApps(selectedClusterId || null);
   const [search, setSearch] = useState("");
 

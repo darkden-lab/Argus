@@ -29,6 +29,8 @@ jest.mock('@/stores/dashboard', () => ({
       runningDatabases: 0,
       totalJobs: 0,
       activeJobs: 0,
+      totalCronJobs: 0,
+      activeCronJobs: 0,
       totalClusters: 0,
       healthyClusters: 0,
     },
@@ -60,7 +62,7 @@ describe('DashboardPage', () => {
     await waitFor(() => {
       expect(screen.getByText('Apps')).toBeInTheDocument();
       expect(screen.getByText('Databases')).toBeInTheDocument();
-      expect(screen.getByText('Jobs')).toBeInTheDocument();
+      expect(screen.getByText('CronJobs')).toBeInTheDocument();
       // "Clusters" appears multiple times (stat card + section header)
       const clusterElements = screen.getAllByText('Clusters');
       expect(clusterElements.length).toBeGreaterThanOrEqual(1);

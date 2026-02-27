@@ -34,6 +34,7 @@ import { ProgressSteps } from "@/components/ui/progress-steps";
 import { FileDropzone } from "@/components/ui/file-dropzone";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api";
+import yaml from "js-yaml";
 
 interface AgentTokenResponse {
   token_id: string;
@@ -132,14 +133,48 @@ export function AddClusterWizard({
     setTimeout(reset, 300);
   }
 
+  const autoFillFromKubeconfig = useCallback((content: string) => {
+    try {
+      const doc = yaml.load(content) as Record<string, unknown> | null;
+      if (!doc) return;
+
+      const clusters = doc.clusters as Array<Record<string, unknown>> | undefined;
+      const contexts = doc.contexts as Array<Record<string, unknown>> | undefined;
+
+      setKubeconfigForm((f) => {
+        const updates: Partial<typeof f> = {};
+        // Auto-fill API server URL if empty
+        if (!f.api_server_url && clusters?.[0]) {
+          const cluster = clusters[0].cluster as Record<string, string> | undefined;
+          if (cluster?.server) {
+            updates.api_server_url = cluster.server;
+          }
+        }
+        // Auto-fill name if empty
+        if (!f.name) {
+          const name =
+            (clusters?.[0]?.name as string) ||
+            ((contexts?.[0]?.name as string) ?? "");
+          if (name) {
+            updates.name = name;
+          }
+        }
+        return Object.keys(updates).length > 0 ? { ...f, ...updates } : f;
+      });
+    } catch {
+      // Invalid YAML - silently ignore
+    }
+  }, []);
+
   const handleFileSelect = useCallback((file: File) => {
     const reader = new FileReader();
     reader.onload = (e) => {
       const content = e.target?.result as string;
       setKubeconfigForm((f) => ({ ...f, kubeconfig: content }));
+      autoFillFromKubeconfig(content);
     };
     reader.readAsText(file);
-  }, []);
+  }, [autoFillFromKubeconfig]);
 
   async function handleCopyCommand() {
     if (!agentToken) return;
@@ -341,9 +376,11 @@ export function AddClusterWizard({
                 placeholder="Paste kubeconfig YAML..."
                 className="min-h-[100px] font-mono text-xs"
                 value={kubeconfigForm.kubeconfig}
-                onChange={(e) =>
-                  setKubeconfigForm((f) => ({ ...f, kubeconfig: e.target.value }))
-                }
+                onChange={(e) => {
+                  const value = e.target.value;
+                  setKubeconfigForm((f) => ({ ...f, kubeconfig: value }));
+                  autoFillFromKubeconfig(value);
+                }}
               />
             </div>
 

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
-import { useClusterSelection } from "@/hooks/use-cluster-selection";
+import { useClusterStore } from "@/stores/cluster";
 import { ClusterSelector } from "@/components/layout/cluster-selector";
 import { ProgressSteps } from "@/components/ui/progress-steps";
 import { Card, CardContent, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -35,6 +36,7 @@ import {
   Settings2,
   Trash2,
 } from "lucide-react";
+import yaml from "js-yaml";
 
 interface EnvVar {
   key: string;
@@ -53,13 +55,38 @@ interface DeployConfig {
   ingressEnabled: boolean;
 }
 
-const STEPS = [
+interface HelmConfig {
+  releaseName: string;
+  chartRef: string;
+  repoURL: string;
+  namespace: string;
+  values: string;
+}
+
+type DeployMethod = "container" | "helm";
+
+const CONTAINER_STEPS = [
   { label: "Method" },
   { label: "Configure" },
   { label: "Networking" },
   { label: "Review" },
   { label: "Deploy" },
 ];
+
+const HELM_STEPS = [
+  { label: "Method" },
+  { label: "Configure" },
+  { label: "Review" },
+  { label: "Deploy" },
+];
+
+const defaultHelmConfig: HelmConfig = {
+  releaseName: "",
+  chartRef: "",
+  repoURL: "",
+  namespace: "default",
+  values: "",
+};
 
 const defaultConfig: DeployConfig = {
   name: "",
@@ -75,46 +102,136 @@ const defaultConfig: DeployConfig = {
 
 export default function DeployAppPage() {
   const router = useRouter();
-  const {
-    clusters,
-    selectedClusterId,
-    setSelectedClusterId,
-    loading: clustersLoading,
-  } = useClusterSelection();
+  const clusters = useClusterStore((s) => s.clusters);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId) ?? "";
+  const setSelectedClusterId = useClusterStore((s) => s.setSelectedClusterId);
+  const clustersLoading = useClusterStore((s) => s.loading);
+  const fetchClusters = useClusterStore((s) => s.fetchClusters);
 
+  useEffect(() => {
+    if (clusters.length === 0) fetchClusters();
+  }, [clusters.length, fetchClusters]);
+
+  const [method, setMethod] = useState<DeployMethod | null>(null);
   const [step, setStep] = useState(0);
   const [config, setConfig] = useState<DeployConfig>(defaultConfig);
+  const [helmConfig, setHelmConfig] = useState<HelmConfig>(defaultHelmConfig);
+  const [helmValuesError, setHelmValuesError] = useState<string | null>(null);
+  const [helmPluginEnabled, setHelmPluginEnabled] = useState<boolean | null>(null);
   const [deploying, setDeploying] = useState(false);
   const [deployResult, setDeployResult] = useState<"success" | "error" | null>(
     null
   );
 
+  const checkHelmPlugin = useCallback(async () => {
+    if (helmPluginEnabled !== null) return;
+    try {
+      await api.get("/api/plugins/helm/status");
+      setHelmPluginEnabled(true);
+    } catch {
+      setHelmPluginEnabled(false);
+    }
+  }, [helmPluginEnabled]);
+
   function updateConfig(patch: Partial<DeployConfig>) {
     setConfig((prev) => ({ ...prev, ...patch }));
   }
 
+  function updateHelmConfig(patch: Partial<HelmConfig>) {
+    setHelmConfig((prev) => ({ ...prev, ...patch }));
+  }
+
+  function validateHelmValues(val: string) {
+    if (!val.trim()) {
+      setHelmValuesError(null);
+      return;
+    }
+    try {
+      yaml.load(val);
+      setHelmValuesError(null);
+    } catch (err) {
+      setHelmValuesError(err instanceof Error ? err.message : "Invalid YAML");
+    }
+  }
+
+  const steps = method === "helm" ? HELM_STEPS : CONTAINER_STEPS;
+  const deployStepIdx = method === "helm" ? 3 : 4;
+  const reviewStepIdx = method === "helm" ? 2 : 3;
+
   function canProceed(): boolean {
+    if (method === "helm") {
+      switch (step) {
+        case 0: return true;
+        case 1: return helmConfig.releaseName.length > 0 && helmConfig.chartRef.length > 0 && !helmValuesError;
+        case 2: return true;
+        default: return false;
+      }
+    }
     switch (step) {
       case 0:
-        return true; // Method selection (only Container Image for now)
+        return true;
       case 1:
         return config.name.length > 0 && config.image.length > 0;
       case 2:
-        return true; // Networking is optional
+        return true;
       case 3:
-        return true; // Review
+        return true;
       default:
         return false;
     }
   }
 
   function handleNext() {
-    if (step < 4) setStep(step + 1);
-    if (step === 3) handleDeploy();
+    if (step < deployStepIdx) setStep(step + 1);
+    if (step === reviewStepIdx) {
+      if (method === "helm") {
+        handleHelmDeploy();
+      } else {
+        handleDeploy();
+      }
+    }
   }
 
   function handleBack() {
     if (step > 0) setStep(step - 1);
+    if (step === 1) setMethod(null);
+  }
+
+  async function handleHelmDeploy() {
+    if (!selectedClusterId) {
+      toast("No cluster selected", { variant: "error" });
+      return;
+    }
+    setDeploying(true);
+    setStep(3);
+
+    let parsedValues: Record<string, unknown> = {};
+    if (helmConfig.values.trim()) {
+      try {
+        parsedValues = yaml.load(helmConfig.values) as Record<string, unknown>;
+      } catch {
+        // Already validated
+      }
+    }
+
+    try {
+      await api.post(`/api/plugins/helm/${selectedClusterId}/releases`, {
+        releaseName: helmConfig.releaseName,
+        chartRef: helmConfig.chartRef,
+        repoURL: helmConfig.repoURL,
+        namespace: helmConfig.namespace || "default",
+        values: parsedValues,
+      });
+      setDeployResult("success");
+      toast("Helm release deployed", {
+        description: `${helmConfig.releaseName} deployed successfully`,
+        variant: "success",
+      });
+    } catch {
+      setDeployResult("error");
+    } finally {
+      setDeploying(false);
+    }
   }
 
   async function handleDeploy() {
@@ -258,7 +375,7 @@ export default function DeployAppPage() {
               Deploy New App
             </h1>
             <p className="text-muted-foreground">
-              Deploy a container image to your cluster.
+              Deploy a container image or Helm chart to your cluster.
             </p>
           </div>
         </div>
@@ -271,7 +388,7 @@ export default function DeployAppPage() {
       </div>
 
       {/* Progress Steps */}
-      <ProgressSteps steps={STEPS} currentStep={step} className="max-w-xl mx-auto" />
+      <ProgressSteps steps={steps} currentStep={step} className="max-w-xl mx-auto" />
 
       {/* Step Content */}
       <Card className="max-w-2xl mx-auto">
@@ -283,7 +400,7 @@ export default function DeployAppPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <button
                   className="flex flex-col items-center gap-3 rounded-lg border-2 border-primary bg-primary/5 p-6 text-center"
-                  onClick={() => setStep(1)}
+                  onClick={() => { setMethod("container"); setStep(1); }}
                 >
                   <Container className="h-8 w-8 text-primary" />
                   <div>
@@ -294,14 +411,14 @@ export default function DeployAppPage() {
                   </div>
                 </button>
                 <button
-                  className="flex flex-col items-center gap-3 rounded-lg border-2 border-muted p-6 text-center opacity-50 cursor-not-allowed"
-                  disabled
+                  className="flex flex-col items-center gap-3 rounded-lg border-2 border-muted p-6 text-center hover:border-primary/50 transition-colors"
+                  onClick={() => { checkHelmPlugin(); setMethod("helm"); setStep(1); }}
                 >
-                  <Box className="h-8 w-8 text-muted-foreground" />
+                  <Box className="h-8 w-8 text-primary" />
                   <div>
                     <p className="font-medium">Helm Chart</p>
                     <p className="text-xs text-muted-foreground">
-                      Coming soon
+                      Deploy from a Helm chart repository
                     </p>
                   </div>
                 </button>
@@ -309,8 +426,114 @@ export default function DeployAppPage() {
             </div>
           )}
 
-          {/* Step 1: Configure */}
-          {step === 1 && (
+          {/* Helm Step 1: Configure */}
+          {step === 1 && method === "helm" && (
+            <div className="space-y-4">
+              <CardTitle className="text-lg">Configure Helm Release</CardTitle>
+
+              {helmPluginEnabled === false && (
+                <div className="rounded-md bg-yellow-500/10 border border-yellow-500/30 p-3 text-sm text-yellow-600">
+                  Helm plugin may not be enabled. Deployment might fail.
+                </div>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="release-name">Release Name</Label>
+                <Input
+                  id="release-name"
+                  placeholder="my-release"
+                  value={helmConfig.releaseName}
+                  onChange={(e) =>
+                    updateHelmConfig({
+                      releaseName: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"),
+                    })
+                  }
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="chart-ref">Chart Reference</Label>
+                <Input
+                  id="chart-ref"
+                  placeholder="bitnami/nginx"
+                  value={helmConfig.chartRef}
+                  onChange={(e) => updateHelmConfig({ chartRef: e.target.value })}
+                />
+                <p className="text-xs text-muted-foreground">
+                  e.g. bitnami/nginx, oci://registry/chart
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="repo-url">Repository URL</Label>
+                <Input
+                  id="repo-url"
+                  placeholder="https://charts.bitnami.com/bitnami"
+                  value={helmConfig.repoURL}
+                  onChange={(e) => updateHelmConfig({ repoURL: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="helm-namespace">Namespace</Label>
+                <Input
+                  id="helm-namespace"
+                  placeholder="default"
+                  value={helmConfig.namespace}
+                  onChange={(e) => updateHelmConfig({ namespace: e.target.value })}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="helm-values">Values (YAML)</Label>
+                <Textarea
+                  id="helm-values"
+                  placeholder={`replicaCount: 2\nservice:\n  type: ClusterIP`}
+                  value={helmConfig.values}
+                  onChange={(e) => updateHelmConfig({ values: e.target.value })}
+                  onBlur={() => validateHelmValues(helmConfig.values)}
+                  className="font-mono text-xs min-h-[120px]"
+                />
+                {helmValuesError && (
+                  <p className="text-xs text-destructive">{helmValuesError}</p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Helm Step 2: Review */}
+          {step === 2 && method === "helm" && (
+            <div className="space-y-4">
+              <CardTitle className="text-lg">Review Helm Release</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                The following Helm release will be deployed to the cluster.
+              </p>
+
+              <div className="rounded-md border p-4 space-y-3 text-sm">
+                <div className="flex items-center gap-2">
+                  <Box className="h-4 w-4 text-primary" />
+                  <span className="font-medium">Helm Release</span>
+                  <Badge variant="outline">{helmConfig.releaseName}</Badge>
+                </div>
+                <div className="pl-6 space-y-1 text-muted-foreground">
+                  <p>Chart: {helmConfig.chartRef}</p>
+                  {helmConfig.repoURL && <p>Repository: {helmConfig.repoURL}</p>}
+                  <p>Namespace: {helmConfig.namespace || "default"}</p>
+                  {helmConfig.values.trim() && (
+                    <div>
+                      <p className="mb-1">Values:</p>
+                      <pre className="rounded bg-muted p-2 text-xs font-mono overflow-auto max-h-40">
+                        {helmConfig.values}
+                      </pre>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Container Step 1: Configure */}
+          {step === 1 && method !== "helm" && (
             <div className="space-y-4">
               <CardTitle className="text-lg">Configure Application</CardTitle>
 
@@ -478,8 +701,8 @@ export default function DeployAppPage() {
             </div>
           )}
 
-          {/* Step 2: Networking */}
-          {step === 2 && (
+          {/* Container Step 2: Networking */}
+          {step === 2 && method !== "helm" && (
             <div className="space-y-4">
               <CardTitle className="text-lg">Networking</CardTitle>
 
@@ -545,8 +768,8 @@ export default function DeployAppPage() {
             </div>
           )}
 
-          {/* Step 3: Review */}
-          {step === 3 && (
+          {/* Container Step 3: Review */}
+          {step === 3 && method !== "helm" && (
             <div className="space-y-4">
               <CardTitle className="text-lg">Review Deployment</CardTitle>
               <p className="text-sm text-muted-foreground">
@@ -616,15 +839,15 @@ export default function DeployAppPage() {
             </div>
           )}
 
-          {/* Step 4: Deploy result */}
-          {step === 4 && (
+          {/* Deploy result (for both methods) */}
+          {step === deployStepIdx && (
             <div className="flex flex-col items-center justify-center py-8 space-y-4">
               {deploying ? (
                 <>
                   <Loader2 className="h-10 w-10 animate-spin text-primary" />
                   <p className="text-lg font-medium">Deploying...</p>
                   <p className="text-sm text-muted-foreground">
-                    Creating resources in the cluster.
+                    {method === "helm" ? "Installing Helm release..." : "Creating resources in the cluster."}
                   </p>
                 </>
               ) : deployResult === "success" ? (
@@ -632,9 +855,13 @@ export default function DeployAppPage() {
                   <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/10">
                     <Check className="h-8 w-8 text-green-500" />
                   </div>
-                  <p className="text-lg font-medium">Deployment Created</p>
+                  <p className="text-lg font-medium">
+                    {method === "helm" ? "Helm Release Deployed" : "Deployment Created"}
+                  </p>
                   <p className="text-sm text-muted-foreground">
-                    {config.name} has been deployed successfully.
+                    {method === "helm"
+                      ? `${helmConfig.releaseName} has been deployed successfully.`
+                      : `${config.name} has been deployed successfully.`}
                   </p>
                   <Button onClick={() => router.push("/apps")}>
                     View Apps
@@ -650,10 +877,10 @@ export default function DeployAppPage() {
                     Something went wrong while creating resources.
                   </p>
                   <div className="flex gap-2">
-                    <Button variant="outline" onClick={() => setStep(3)}>
+                    <Button variant="outline" onClick={() => setStep(reviewStepIdx)}>
                       Back to Review
                     </Button>
-                    <Button onClick={handleDeploy}>Retry</Button>
+                    <Button onClick={method === "helm" ? handleHelmDeploy : handleDeploy}>Retry</Button>
                   </div>
                 </>
               )}
@@ -663,16 +890,14 @@ export default function DeployAppPage() {
       </Card>
 
       {/* Navigation buttons */}
-      {step < 4 && (
+      {step < deployStepIdx && step > 0 && (
         <div className="flex justify-center gap-3 max-w-2xl mx-auto">
-          {step > 0 && (
-            <Button variant="outline" onClick={handleBack}>
-              <ArrowLeft className="mr-1.5 h-4 w-4" />
-              Back
-            </Button>
-          )}
+          <Button variant="outline" onClick={handleBack}>
+            <ArrowLeft className="mr-1.5 h-4 w-4" />
+            Back
+          </Button>
           <Button onClick={handleNext} disabled={!canProceed()}>
-            {step === 3 ? (
+            {step === reviewStepIdx ? (
               <>
                 <Rocket className="mr-1.5 h-4 w-4" />
                 Deploy

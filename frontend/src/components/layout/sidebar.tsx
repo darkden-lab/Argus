@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -43,7 +43,7 @@ import { useUIStore } from "@/stores/ui";
 import { useAuthStore } from "@/stores/auth";
 import { usePluginStore } from "@/stores/plugins";
 import { useAiChatStore } from "@/stores/ai-chat";
-import { api } from "@/lib/api";
+import { useClusterStore } from "@/stores/cluster";
 import type { LucideIcon } from "lucide-react";
 
 // --- Types ---
@@ -57,13 +57,6 @@ interface NavItem {
 interface NavSection {
   title: string;
   items: NavItem[];
-}
-
-interface Cluster {
-  id: string;
-  name: string;
-  api_server_url: string;
-  status: string;
 }
 
 // --- Navigation definition ---
@@ -124,28 +117,15 @@ export function Sidebar() {
   const plugins = usePluginStore((s) => s.plugins);
   const fetchPlugins = usePluginStore((s) => s.fetchPlugins);
 
-  const [clusters, setClusters] = useState<Cluster[]>([]);
-  const [selectedClusterId, setSelectedClusterId] = useState<string>("");
+  const clusters = useClusterStore((s) => s.clusters);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId) ?? "";
+  const setSelectedClusterId = useClusterStore((s) => s.setSelectedClusterId);
+  const fetchClusters = useClusterStore((s) => s.fetchClusters);
 
   useEffect(() => {
     fetchPlugins();
-  }, [fetchPlugins]);
-
-  const loadClusters = useCallback(async () => {
-    try {
-      const data = await api.get<Cluster[]>("/api/clusters");
-      setClusters(data);
-      if (data.length > 0 && !selectedClusterId) {
-        setSelectedClusterId(data[0].id);
-      }
-    } catch {
-      // Silently fail
-    }
-  }, [selectedClusterId]);
-
-  useEffect(() => {
-    loadClusters();
-  }, [loadClusters]);
+    fetchClusters();
+  }, [fetchPlugins, fetchClusters]);
 
   const selectedCluster = clusters.find((c) => c.id === selectedClusterId);
   const initials = user?.display_name ? getInitials(user.display_name) : "?";
