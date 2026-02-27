@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"sync"
 	"time"
 
@@ -346,9 +347,9 @@ func (h *trafficHandler) buildTrafficGraph(ctx context.Context, promURL, namespa
 	for _, r := range errResult.Data.Result {
 		key := r.Metric["source_workload"] + "/" + r.Metric["source_workload_namespace"] + "->" + r.Metric["destination_service"] + "/" + r.Metric["destination_service_namespace"]
 		if val, ok := r.Value[1].(string); ok {
-			var f float64
-			fmt.Sscanf(val, "%f", &f)
-			errRates[key] = f
+			if f, err := strconv.ParseFloat(val, 64); err == nil {
+				errRates[key] = f
+			}
 		}
 	}
 
@@ -364,7 +365,7 @@ func (h *trafficHandler) buildTrafficGraph(ctx context.Context, promURL, namespa
 
 		var reqRate float64
 		if val, ok := r.Value[1].(string); ok {
-			fmt.Sscanf(val, "%f", &reqRate)
+			reqRate, _ = strconv.ParseFloat(val, 64)
 		}
 		if reqRate < 0.001 {
 			continue
