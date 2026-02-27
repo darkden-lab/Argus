@@ -92,12 +92,12 @@ func (h *LogsHandler) GetPodLogs(w http.ResponseWriter, r *http.Request) {
 		for {
 			n, err := stream.Read(buf)
 			if n > 0 {
-				fmt.Fprintf(w, "data: %s\n\n", buf[:n])
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", buf[:n])
 				flusher.Flush()
 			}
 			if err != nil {
 				if err != io.EOF {
-					fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
+					_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
 					flusher.Flush()
 				}
 				return
