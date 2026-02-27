@@ -26,6 +26,7 @@ var (
 	gvrGateways         = schema.GroupVersionResource{Group: "networking.istio.io", Version: "v1", Resource: "gateways"}
 	gvrDestinationRules = schema.GroupVersionResource{Group: "networking.istio.io", Version: "v1", Resource: "destinationrules"}
 	gvrServiceEntries   = schema.GroupVersionResource{Group: "networking.istio.io", Version: "v1", Resource: "serviceentries"}
+	gvrServices         = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}
 
 	// allWatchedGVRs is the list iterated by RegisterWatchers.
 	allWatchedGVRs = []schema.GroupVersionResource{
@@ -39,16 +40,17 @@ var (
 // IstioPlugin implements plugin.Plugin for Istio service-mesh CRD management.
 type IstioPlugin struct {
 	manifest plugin.Manifest
+	pool     *pgxpool.Pool
 }
 
 // New creates an IstioPlugin by loading the manifest.json embedded next to
-// this source file.
-func New() (*IstioPlugin, error) {
+// this source file. The pool parameter is used for per-cluster plugin config storage.
+func New(pool *pgxpool.Pool) (*IstioPlugin, error) {
 	m, err := loadManifest()
 	if err != nil {
 		return nil, err
 	}
-	return &IstioPlugin{manifest: m}, nil
+	return &IstioPlugin{manifest: m, pool: pool}, nil
 }
 
 // ID satisfies plugin.Plugin.
@@ -80,6 +82,10 @@ func (p *IstioPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 	// Topology endpoint
 	topo := newTopologyHandler(cm)
 	topo.RegisterRoutes(r)
+
+	// Traffic topology endpoint (with Prometheus integration)
+	traffic := newTrafficHandler(cm, p.pool)
+	traffic.RegisterTrafficRoutes(r)
 }
 
 // RegisterWatchers starts a background watch goroutine for each Istio CRD on

@@ -87,6 +87,28 @@ export interface K8sIngress {
   };
 }
 
+export interface K8sHTTPRoute {
+  metadata: K8sMeta;
+  spec?: {
+    hostnames?: string[];
+    parentRefs?: Array<{ name: string; namespace?: string; sectionName?: string }>;
+    rules?: Array<{
+      matches?: Array<{
+        path?: { type?: string; value?: string };
+        headers?: Array<{ name: string; value: string }>;
+        method?: string;
+      }>;
+      backendRefs?: Array<{ name: string; namespace?: string; port?: number; weight?: number }>;
+    }>;
+  };
+}
+
+export interface HostSource {
+  hostname: string;
+  source: "ingress" | "httproute";
+  resourceName: string;
+}
+
 export interface K8sStatefulSet {
   metadata: K8sMeta;
   spec?: {
@@ -188,6 +210,7 @@ export interface App {
   ports: Array<{ port: number; protocol: string }>;
   endpoints: string[];
   hosts: string[];
+  hostSources: HostSource[];
   hasTLS: boolean;
   serviceType: string;
   createdAt: string;
@@ -195,6 +218,7 @@ export interface App {
   deployment: K8sDeployment;
   services: K8sService[];
   ingresses: K8sIngress[];
+  httproutes: K8sHTTPRoute[];
 }
 
 export interface Database {
@@ -286,7 +310,8 @@ function isLikelyDatabase(sts: K8sStatefulSet): boolean {
 export function compositeApps(
   deployments: K8sDeployment[],
   services: K8sService[],
-  ingresses: K8sIngress[]
+  ingresses: K8sIngress[],
+  httproutes: K8sHTTPRoute[] = []
 ): App[] {
   return deployments.map((dep) => {
     const depLabels = dep.spec?.selector?.matchLabels;
@@ -310,6 +335,16 @@ export function compositeApps(
       );
     });
 
+    // Find matching HTTPRoutes (via backendRefs service name references)
+    const matchedHTTPRoutes = httproutes.filter((hr) => {
+      if (hr.metadata.namespace !== ns) return false;
+      return hr.spec?.rules?.some((rule) =>
+        rule.backendRefs?.some(
+          (ref) => serviceNames.has(ref.name) && (!ref.namespace || ref.namespace === ns)
+        )
+      );
+    });
+
     // Extract endpoints
     const endpoints: string[] = [];
     for (const svc of matchedServices) {
@@ -324,14 +359,30 @@ export function compositeApps(
       }
     }
 
-    // Extract hosts
-    const hosts: string[] = [];
+    // Extract hosts via HostSource
+    const hostSources: HostSource[] = [];
     const hasTLS = matchedIngresses.some((ing) => (ing.spec?.tls?.length ?? 0) > 0);
     for (const ing of matchedIngresses) {
       for (const rule of ing.spec?.rules ?? []) {
-        if (rule.host) hosts.push(rule.host);
+        if (rule.host) {
+          hostSources.push({
+            hostname: rule.host,
+            source: "ingress",
+            resourceName: ing.metadata.name,
+          });
+        }
       }
     }
+    for (const hr of matchedHTTPRoutes) {
+      for (const hostname of hr.spec?.hostnames ?? []) {
+        hostSources.push({
+          hostname,
+          source: "httproute",
+          resourceName: hr.metadata.name,
+        });
+      }
+    }
+    const hosts = [...new Set(hostSources.map((hs) => hs.hostname))];
 
     const container = dep.spec?.template?.spec?.containers?.[0];
 
@@ -351,12 +402,14 @@ export function compositeApps(
       })),
       endpoints,
       hosts,
+      hostSources,
       hasTLS,
       serviceType: matchedServices[0]?.spec?.type ?? "None",
       createdAt: dep.metadata.creationTimestamp ?? "",
       deployment: dep,
       services: matchedServices,
       ingresses: matchedIngresses,
+      httproutes: matchedHTTPRoutes,
     };
   });
 }

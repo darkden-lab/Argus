@@ -122,7 +122,7 @@ func main() {
 
 	// Plugin Engine
 	pluginEngine := plugin.NewEngine(pool)
-	registerPlugins(pluginEngine)
+	registerPlugins(pluginEngine, pool)
 	if err := pluginEngine.RestoreEnabled(ctx); err != nil {
 		log.Printf("WARNING: failed to restore plugin state: %v", err)
 	}
@@ -367,7 +367,7 @@ func main() {
 
 }
 
-func registerPlugins(engine *plugin.Engine) {
+func registerPlugins(engine *plugin.Engine, pool *pgxpool.Pool) {
 	// Simple constructors (no error)
 	if err := engine.Register(pluginPrometheus.New()); err != nil {
 		log.Printf("WARNING: failed to register prometheus plugin: %v", err)
@@ -379,8 +379,15 @@ func registerPlugins(engine *plugin.Engine) {
 		log.Printf("WARNING: failed to register helm plugin: %v", err)
 	}
 
+	// Istio plugin (needs pool for per-cluster config storage)
+	istioPlugin, err := pluginIstio.New(pool)
+	if err != nil {
+		log.Printf("WARNING: failed to create istio plugin: %v", err)
+	} else if err := engine.Register(istioPlugin); err != nil {
+		log.Printf("WARNING: failed to register istio plugin: %v", err)
+	}
+
 	// Constructors that return (plugin, error)
-	registerPluginWithError(engine, "istio", pluginIstio.New)
 	registerPluginWithError(engine, "cnpg", pluginCnpg.New)
 	registerPluginWithError(engine, "mariadb", pluginMariadb.New)
 	registerPluginWithError(engine, "keda", pluginKeda.New)

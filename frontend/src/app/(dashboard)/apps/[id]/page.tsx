@@ -10,6 +10,7 @@ import {
   type K8sDeployment,
   type K8sService,
   type K8sIngress,
+  type K8sHTTPRoute,
   truncateImage,
   getStatusDot,
   formatAge,
@@ -42,6 +43,7 @@ import {
   Network,
   RefreshCw,
   RotateCcw,
+  Route,
   Scale,
   Shield,
 } from "lucide-react";
@@ -102,7 +104,7 @@ export default function AppDetailPage() {
     setError(null);
 
     try {
-      const [deploymentsRes, servicesRes, ingressesRes] =
+      const [deploymentsRes, servicesRes, ingressesRes, httproutesRes] =
         await Promise.allSettled([
           api.get<{ items: K8sDeployment[] }>(
             `/api/clusters/${clusterId}/resources/apps/v1/deployments?namespace=${namespace}`
@@ -112,6 +114,9 @@ export default function AppDetailPage() {
           ),
           api.get<{ items: K8sIngress[] }>(
             `/api/clusters/${clusterId}/resources/networking.k8s.io/v1/ingresses?namespace=${namespace}`
+          ),
+          api.get<{ items: K8sHTTPRoute[] }>(
+            `/api/clusters/${clusterId}/resources/gateway.networking.k8s.io/v1/httproutes?namespace=${namespace}`
           ),
         ]);
 
@@ -127,8 +132,12 @@ export default function AppDetailPage() {
         ingressesRes.status === "fulfilled"
           ? ingressesRes.value.items ?? []
           : [];
+      const httproutes =
+        httproutesRes.status === "fulfilled"
+          ? httproutesRes.value.items ?? []
+          : [];
 
-      const apps = compositeApps(deployments, services, ingresses);
+      const apps = compositeApps(deployments, services, ingresses, httproutes);
       const found = apps.find((a) => a.name === appName);
 
       if (found) {
@@ -414,19 +423,24 @@ export default function AppDetailPage() {
 
             <Card className="py-4">
               <CardHeader className="pb-0">
-                <CardTitle className="text-sm">Ingress</CardTitle>
+                <CardTitle className="text-sm">Routing</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
-                {app.hosts.length > 0 ? (
+                {app.hostSources && app.hostSources.length > 0 ? (
                   <>
-                    {app.hosts.map((host) => (
-                      <div key={host} className="flex items-center gap-2 text-sm">
-                        {app.hasTLS ? (
+                    {app.hostSources.map((hs) => (
+                      <div key={`${hs.source}-${hs.hostname}`} className="flex items-center gap-2 text-sm">
+                        {hs.source === "httproute" ? (
+                          <Route className="h-4 w-4 text-blue-500" />
+                        ) : app.hasTLS ? (
                           <Lock className="h-4 w-4 text-green-500" />
                         ) : (
                           <Globe className="h-4 w-4 text-muted-foreground" />
                         )}
-                        <span className="font-mono">{host}</span>
+                        <span className="font-mono">{hs.hostname}</span>
+                        <Badge variant="outline" className="text-[10px]">
+                          {hs.source === "httproute" ? "HTTPRoute" : "Ingress"}
+                        </Badge>
                       </div>
                     ))}
                     <div className="flex items-center gap-2 text-sm">
@@ -436,7 +450,7 @@ export default function AppDetailPage() {
                   </>
                 ) : (
                   <p className="text-sm text-muted-foreground">
-                    No ingress configured
+                    No routing configured
                   </p>
                 )}
               </CardContent>
@@ -618,6 +632,53 @@ export default function AppDetailPage() {
                         TLS: {ing.spec.tls.map((t) => t.secretName).join(", ")}
                       </p>
                     )}
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {app.httproutes.length > 0 && (
+            <Card className="py-4">
+              <CardHeader className="pb-0">
+                <CardTitle className="text-sm">
+                  HTTPRoutes ({app.httproutes.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {app.httproutes.map((hr) => (
+                  <div
+                    key={hr.metadata.uid ?? hr.metadata.name}
+                    className="rounded-md border p-3 space-y-1 text-sm"
+                  >
+                    <p className="font-medium">{hr.metadata.name}</p>
+                    {hr.spec?.parentRefs && hr.spec.parentRefs.length > 0 && (
+                      <p className="text-muted-foreground">
+                        Gateway:{" "}
+                        {hr.spec.parentRefs
+                          .map(
+                            (p) =>
+                              `${p.namespace ? p.namespace + "/" : ""}${p.name}${p.sectionName ? ":" + p.sectionName : ""}`
+                          )
+                          .join(", ")}
+                      </p>
+                    )}
+                    {hr.spec?.hostnames && hr.spec.hostnames.length > 0 && (
+                      <p className="text-muted-foreground">
+                        Hostnames: {hr.spec.hostnames.join(", ")}
+                      </p>
+                    )}
+                    {hr.spec?.rules?.map((rule, i) => (
+                      <p key={i} className="text-muted-foreground">
+                        Backends:{" "}
+                        {rule.backendRefs
+                          ?.map(
+                            (b) =>
+                              `${b.name}${b.port ? ":" + b.port : ""}${b.weight !== undefined ? " (w:" + b.weight + ")" : ""}`
+                          )
+                          .join(", ") ?? "-"}
+                      </p>
+                    ))}
                   </div>
                 ))}
               </CardContent>

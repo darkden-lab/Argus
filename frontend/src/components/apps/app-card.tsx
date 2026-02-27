@@ -5,7 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { StatusDot } from "@/components/ui/status-dot";
 import { getStatusDot, truncateImage, type App } from "@/lib/abstractions";
 import { cn } from "@/lib/utils";
-import { Globe, Lock, Network, Box } from "lucide-react";
+import { Globe, Lock, Network, Box, Route } from "lucide-react";
+import type { HostSource } from "@/lib/abstractions";
 
 interface AppCardProps {
   app: App;
@@ -82,20 +83,32 @@ export function AppCard({ app, onClick }: AppCardProps) {
         </div>
 
         {/* Endpoints / Hosts */}
-        {(app.hosts.length > 0 || app.endpoints.length > 0) && (
-          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-            {app.hasTLS ? (
-              <Lock className="h-3.5 w-3.5 text-green-500" />
-            ) : (
-              <Globe className="h-3.5 w-3.5" />
+        {app.hostSources && app.hostSources.length > 0 ? (
+          <div className="space-y-1">
+            {app.hostSources.slice(0, 3).map((hs: HostSource) => (
+              <div key={`${hs.source}-${hs.hostname}`} className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                {hs.source === "httproute" ? (
+                  <Route className="h-3.5 w-3.5 text-blue-500" />
+                ) : app.hasTLS ? (
+                  <Lock className="h-3.5 w-3.5 text-green-500" />
+                ) : (
+                  <Globe className="h-3.5 w-3.5" />
+                )}
+                <span className="truncate">{hs.hostname}</span>
+              </div>
+            ))}
+            {app.hostSources.length > 3 && (
+              <div className="text-xs text-muted-foreground pl-5">
+                +{app.hostSources.length - 3} more
+              </div>
             )}
-            <span className="truncate">
-              {app.hosts.length > 0
-                ? app.hosts.join(", ")
-                : app.endpoints.join(", ")}
-            </span>
           </div>
-        )}
+        ) : app.endpoints.length > 0 ? (
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Globe className="h-3.5 w-3.5" />
+            <span className="truncate">{app.endpoints.join(", ")}</span>
+          </div>
+        ) : null}
 
         {/* Service type badge */}
         {app.serviceType !== "None" && (
