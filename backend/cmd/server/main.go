@@ -123,6 +123,9 @@ func main() {
 	// Plugin Engine
 	pluginEngine := plugin.NewEngine(pool)
 	registerPlugins(pluginEngine)
+	if err := pluginEngine.RestoreEnabled(ctx); err != nil {
+		log.Printf("WARNING: failed to restore plugin state: %v", err)
+	}
 
 	// WebSocket Hub
 	hub := ws.NewHub()
@@ -238,6 +241,10 @@ func main() {
 	logsHandler := core.NewLogsHandler(clusterMgr)
 	logsHandler.RegisterRoutes(protected)
 
+	// Network Policy simulator
+	netpolSimHandler := core.NewNetPolSimulatorHandler(clusterMgr)
+	netpolSimHandler.RegisterRoutes(protected)
+
 	// Audit log routes
 	auditHandlers.RegisterRoutes(protected)
 
@@ -296,13 +303,15 @@ func main() {
 		embedder := &ai.ProviderEmbedder{Provider: aiProvider}
 		aiRetriever = rag.NewRetriever(ragStore, embedder, 5)
 		aiIndexer = rag.NewIndexer(ragStore, embedder, clusterMgr)
+		aiIndexer.Start(ctx)
+		defer aiIndexer.Stop()
 	}
 
 	aiService := ai.NewService(aiProvider, aiRetriever, clusterMgr, pool, aiCfg)
-	aiChatHandler := ai.NewChatHandler(aiService, jwtService)
+	aiChatHandler := ai.NewChatHandler(aiService, jwtService, aiCfg)
 	aiChatHandler.RegisterRoutes(r)
 
-	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiWriteGuard)
+	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard)
 	aiAdminHandlers.RegisterRoutes(protected)
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)

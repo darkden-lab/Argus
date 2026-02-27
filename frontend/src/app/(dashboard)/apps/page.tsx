@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useApps } from "@/hooks/use-apps";
 import { useClusterStore } from "@/stores/cluster";
-import { ClusterSelector } from "@/components/layout/cluster-selector";
 import { AppCard } from "@/components/apps/app-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,7 +13,6 @@ export default function AppsPage() {
   const router = useRouter();
   const clusters = useClusterStore((s) => s.clusters);
   const selectedClusterId = useClusterStore((s) => s.selectedClusterId) ?? "";
-  const setSelectedClusterId = useClusterStore((s) => s.setSelectedClusterId);
   const clustersLoading = useClusterStore((s) => s.loading);
   const fetchClusters = useClusterStore((s) => s.fetchClusters);
 
@@ -45,12 +43,6 @@ export default function AppsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <ClusterSelector
-            clusters={clusters}
-            selectedClusterId={selectedClusterId}
-            onClusterChange={setSelectedClusterId}
-            loading={clustersLoading}
-          />
           <Button size="sm" onClick={() => router.push("/apps/deploy")}>
             <Plus className="mr-1.5 h-4 w-4" />
             Deploy New App

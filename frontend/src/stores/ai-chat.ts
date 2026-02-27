@@ -35,12 +35,32 @@ export interface PageContext {
   resourceName?: string;
 }
 
+export interface AiStatus {
+  enabled: boolean;
+  configured: boolean;
+  provider: string;
+  model: string;
+  message: string;
+}
+
+export type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
+
 interface AiChatState {
   // Panel state
   isOpen: boolean;
   open: () => void;
   close: () => void;
   toggle: () => void;
+
+  // AI status
+  aiStatus: AiStatus | null;
+  setAiStatus: (status: AiStatus | null) => void;
+
+  // Connection state
+  connectionState: ConnectionState;
+  setConnectionState: (state: ConnectionState) => void;
+  connectionError: string | null;
+  setConnectionError: (error: string | null) => void;
 
   // Conversations
   conversations: Conversation[];
@@ -79,6 +99,16 @@ export const useAiChatStore = create<AiChatState>((set) => ({
   open: () => set({ isOpen: true }),
   close: () => set({ isOpen: false }),
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
+
+  // AI status
+  aiStatus: null,
+  setAiStatus: (status) => set({ aiStatus: status }),
+
+  // Connection state
+  connectionState: "disconnected",
+  setConnectionState: (state) => set({ connectionState: state }),
+  connectionError: null,
+  setConnectionError: (error) => set({ connectionError: error }),
 
   // Conversations
   conversations: [],

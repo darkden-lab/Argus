@@ -85,6 +85,14 @@ func (h *Handler) ServeTerminal(w http.ResponseWriter, r *http.Request) {
 	session := NewSession(claims.UserID, conn, h.clusterMgr)
 	h.addSession(session)
 
+	// Extract cluster and namespace from query parameters (frontend sends these)
+	clusterID := r.URL.Query().Get("cluster")
+	namespace := r.URL.Query().Get("namespace")
+	if clusterID != "" {
+		session.SetContext(clusterID, namespace)
+		log.Printf("terminal: session %s initial context cluster=%s namespace=%s", session.ID, clusterID, namespace)
+	}
+
 	// Send connected confirmation
 	h.sendMessage(conn, TerminalMessage{
 		Type: "connected",

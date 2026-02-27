@@ -136,7 +136,7 @@ export function Sidebar() {
   const pluginItems: NavItem[] = plugins.flatMap((p) =>
     (p.frontend?.navigation || []).map((nav) => ({
       label: nav.label,
-      href: `/plugins/${p.id}${nav.path}`,
+      href: nav.path,
       icon: Puzzle,
     }))
   );

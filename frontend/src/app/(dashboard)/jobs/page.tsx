@@ -4,7 +4,6 @@ import { useState, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/use-jobs";
 import { useClusterStore } from "@/stores/cluster";
-import { ClusterSelector } from "@/components/layout/cluster-selector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -133,7 +132,6 @@ export default function JobsPage() {
   const router = useRouter();
   const clusters = useClusterStore((s) => s.clusters);
   const selectedClusterId = useClusterStore((s) => s.selectedClusterId) ?? "";
-  const setSelectedClusterId = useClusterStore((s) => s.setSelectedClusterId);
   const clustersLoading = useClusterStore((s) => s.loading);
   const fetchClusters = useClusterStore((s) => s.fetchClusters);
 
@@ -173,12 +171,6 @@ export default function JobsPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <ClusterSelector
-            clusters={clusters}
-            selectedClusterId={selectedClusterId}
-            onClusterChange={setSelectedClusterId}
-            loading={clustersLoading}
-          />
           <Button size="sm" disabled>
             <Plus className="mr-1.5 h-4 w-4" />
             Create Job

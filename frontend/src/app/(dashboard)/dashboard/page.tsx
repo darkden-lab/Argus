@@ -252,7 +252,7 @@ export default function DashboardPage() {
               <Card>
                 <CardHeader className="flex-row items-center justify-between">
                   <CardTitle className="text-sm font-medium">Plugins</CardTitle>
-                  <Button variant="ghost" size="sm" onClick={() => router.push("/plugins")}>
+                  <Button variant="ghost" size="sm" onClick={() => router.push("/settings/plugins")}>
                     Manage
                   </Button>
                 </CardHeader>

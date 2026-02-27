@@ -22,13 +22,15 @@ var wsUpgrader = websocket.Upgrader{
 type ChatHandler struct {
 	service    *Service
 	jwtService *auth.JWTService
+	config     AIConfig
 }
 
 // NewChatHandler creates a new AI chat WebSocket handler.
-func NewChatHandler(service *Service, jwtService *auth.JWTService) *ChatHandler {
+func NewChatHandler(service *Service, jwtService *auth.JWTService, config AIConfig) *ChatHandler {
 	return &ChatHandler{
 		service:    service,
 		jwtService: jwtService,
+		config:     config,
 	}
 }
 
@@ -85,6 +87,27 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer conn.Close()
+
+	// Send an immediate status message so the frontend knows whether AI is usable
+	if !h.config.Enabled {
+		writeWSJSON(conn, ChatWSResponse{
+			Type:    "error",
+			Content: "AI assistant is not enabled. Please enable it in Settings > AI Configuration.",
+			Error:   "not configured",
+		})
+		// Keep connection open so client can receive the error, then close gracefully
+		conn.Close()
+		return
+	}
+	if validErr := h.config.Validate(); validErr != nil {
+		writeWSJSON(conn, ChatWSResponse{
+			Type:    "error",
+			Content: "AI provider is not fully configured: " + validErr.Error() + ". Update the configuration in Settings > AI Configuration.",
+			Error:   "not configured",
+		})
+		conn.Close()
+		return
+	}
 
 	var currentConversation string
 	var currentContext ChatContext

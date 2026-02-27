@@ -71,7 +71,7 @@ type ChatContext struct {
 // 5. Handle tool calls or return text response
 func (s *Service) ProcessMessage(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext) (*ChatResponse, error) {
 	if !s.config.Enabled {
-		return nil, fmt.Errorf("AI assistant is not enabled")
+		return nil, fmt.Errorf("AI assistant is not enabled, enable it in Settings > AI Configuration")
 	}
 
 	// Build messages
@@ -176,7 +176,7 @@ func (s *Service) handleToolCalls(ctx context.Context, userID string, messages [
 // ProcessMessageStream handles a user message with streaming response.
 func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext) (StreamReader, error) {
 	if !s.config.Enabled {
-		return nil, fmt.Errorf("AI assistant is not enabled")
+		return nil, fmt.Errorf("AI assistant is not enabled, enable it in Settings > AI Configuration")
 	}
 
 	messages := []Message{

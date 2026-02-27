@@ -30,31 +30,51 @@ export interface PluginManifest {
   };
 }
 
+export interface PluginEntry {
+  manifest: PluginManifest;
+  enabled: boolean;
+}
+
 interface PluginState {
+  /** Only enabled plugins with frontend navigation (used by sidebar) */
   plugins: PluginManifest[];
+  /** All plugins regardless of enabled state (used by settings page) */
+  allPlugins: PluginEntry[];
   isLoading: boolean;
+  error: string | null;
   fetchPlugins: () => Promise<void>;
   getPlugin: (id: string) => PluginManifest | undefined;
 }
 
 export const usePluginStore = create<PluginState>((set, get) => ({
   plugins: [],
+  allPlugins: [],
   isLoading: false,
+  error: null,
 
   fetchPlugins: async () => {
-    set({ isLoading: true });
+    set({ isLoading: true, error: null });
     try {
       // Backend returns array of PluginInfo: { manifest, enabled }
-      const data = await api.get<{ manifest: PluginManifest; enabled: boolean }[]>(
-        "/api/plugins"
-      );
-      const enabled = data
+      const data = await api.get<PluginEntry[]>("/api/plugins");
+
+      // Store all plugins for the settings page
+      const allPlugins = data ?? [];
+
+      // Filter only enabled plugins that have frontend navigation items
+      const enabled = allPlugins
         .filter((p) => p.enabled)
         .map((p) => p.manifest)
-        .filter((m) => m.frontend);
-      set({ plugins: enabled });
+        .filter(
+          (m) =>
+            m.frontend &&
+            m.frontend.navigation &&
+            m.frontend.navigation.length > 0
+        );
+
+      set({ plugins: enabled, allPlugins });
     } catch {
-      // silently fail - plugins are optional
+      set({ error: "Failed to load plugins" });
     } finally {
       set({ isLoading: false });
     }

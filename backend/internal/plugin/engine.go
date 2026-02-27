@@ -3,6 +3,7 @@ package plugin
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 	"sync"
@@ -193,6 +194,46 @@ func (e *Engine) ListAll() []PluginInfo {
 type PluginInfo struct {
 	Manifest Manifest `json:"manifest"`
 	Enabled  bool     `json:"enabled"`
+}
+
+// RestoreEnabled loads the enabled state of plugins from the database.
+// This should be called after all plugins have been registered so that
+// previously-enabled plugins survive server restarts.
+func (e *Engine) RestoreEnabled(ctx context.Context) error {
+	if e.pool == nil {
+		return nil
+	}
+
+	store := NewStore(e.pool)
+	records, err := store.ListPlugins(ctx)
+	if err != nil {
+		return fmt.Errorf("plugin engine: failed to load plugin state: %w", err)
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	restored := 0
+	for _, rec := range records {
+		if !rec.Enabled {
+			continue
+		}
+		p, ok := e.plugins[rec.ID]
+		if !ok {
+			continue // plugin was in DB but not registered in code
+		}
+		if err := p.OnEnable(ctx, e.pool); err != nil {
+			log.Printf("plugin engine: failed to re-enable %q: %v", rec.ID, err)
+			continue
+		}
+		e.enabled[rec.ID] = true
+		restored++
+	}
+
+	if restored > 0 {
+		log.Printf("plugin engine: restored %d previously-enabled plugins", restored)
+	}
+	return nil
 }
 
 func (e *Engine) RegisterAllRoutes(router *mux.Router, cm *cluster.Manager) {

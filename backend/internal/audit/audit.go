@@ -12,6 +12,7 @@ import (
 type Entry struct {
 	ID        string          `json:"id"`
 	UserID    *string         `json:"user_id"`
+	Username  *string         `json:"username"`
 	ClusterID *string         `json:"cluster_id"`
 	Action    string          `json:"action"`
 	Resource  string          `json:"resource"`
@@ -59,38 +60,38 @@ func (s *Store) List(ctx context.Context, params ListParams) ([]Entry, int, erro
 	}
 
 	// Build dynamic query
-	query := `SELECT id, user_id, cluster_id, action, resource, details, timestamp FROM audit_log WHERE 1=1`
-	countQuery := `SELECT COUNT(*) FROM audit_log WHERE 1=1`
+	query := `SELECT a.id, a.user_id, u.display_name, a.cluster_id, a.action, a.resource, a.details, a.timestamp FROM audit_log a LEFT JOIN users u ON a.user_id = u.id WHERE 1=1`
+	countQuery := `SELECT COUNT(*) FROM audit_log a WHERE 1=1`
 	args := []interface{}{}
 	argIdx := 1
 
 	if params.UserID != "" {
-		query += ` AND user_id = $` + itoa(argIdx)
-		countQuery += ` AND user_id = $` + itoa(argIdx)
+		query += ` AND a.user_id = $` + itoa(argIdx)
+		countQuery += ` AND a.user_id = $` + itoa(argIdx)
 		args = append(args, params.UserID)
 		argIdx++
 	}
 	if params.ClusterID != "" {
-		query += ` AND cluster_id = $` + itoa(argIdx)
-		countQuery += ` AND cluster_id = $` + itoa(argIdx)
+		query += ` AND a.cluster_id = $` + itoa(argIdx)
+		countQuery += ` AND a.cluster_id = $` + itoa(argIdx)
 		args = append(args, params.ClusterID)
 		argIdx++
 	}
 	if params.Action != "" {
-		query += ` AND action = $` + itoa(argIdx)
-		countQuery += ` AND action = $` + itoa(argIdx)
+		query += ` AND a.action = $` + itoa(argIdx)
+		countQuery += ` AND a.action = $` + itoa(argIdx)
 		args = append(args, params.Action)
 		argIdx++
 	}
 	if params.FromDate != "" {
-		query += ` AND timestamp >= $` + itoa(argIdx)
-		countQuery += ` AND timestamp >= $` + itoa(argIdx)
+		query += ` AND a.timestamp >= $` + itoa(argIdx)
+		countQuery += ` AND a.timestamp >= $` + itoa(argIdx)
 		args = append(args, params.FromDate)
 		argIdx++
 	}
 	if params.ToDate != "" {
-		query += ` AND timestamp <= $` + itoa(argIdx)
-		countQuery += ` AND timestamp <= $` + itoa(argIdx)
+		query += ` AND a.timestamp <= $` + itoa(argIdx)
+		countQuery += ` AND a.timestamp <= $` + itoa(argIdx)
 		args = append(args, params.ToDate)
 		argIdx++
 	}
@@ -103,7 +104,7 @@ func (s *Store) List(ctx context.Context, params ListParams) ([]Entry, int, erro
 	}
 
 	// Fetch page
-	query += ` ORDER BY timestamp DESC LIMIT $` + itoa(argIdx)
+	query += ` ORDER BY a.timestamp DESC LIMIT $` + itoa(argIdx)
 	args = append(args, params.Limit)
 	argIdx++
 	query += ` OFFSET $` + itoa(argIdx)
@@ -118,7 +119,7 @@ func (s *Store) List(ctx context.Context, params ListParams) ([]Entry, int, erro
 	var entries []Entry
 	for rows.Next() {
 		var e Entry
-		if err := rows.Scan(&e.ID, &e.UserID, &e.ClusterID, &e.Action, &e.Resource, &e.Details, &e.Timestamp); err != nil {
+		if err := rows.Scan(&e.ID, &e.UserID, &e.Username, &e.ClusterID, &e.Action, &e.Resource, &e.Details, &e.Timestamp); err != nil {
 			return nil, 0, err
 		}
 		entries = append(entries, e)
