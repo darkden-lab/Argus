@@ -19,6 +19,9 @@ jest.mock('@/hooks/use-ai-chat', () => ({
     confirmAction: mockConfirmAction,
     startNewConversation: mockStartNewConversation,
     loadConversation: mockLoadConversation,
+    aiStatus: { enabled: true, configured: true, provider: 'test', model: 'test', message: '' },
+    connectionState: 'connected' as const,
+    connectionError: null,
   }),
 }));
 
@@ -36,6 +39,9 @@ describe('ChatPanel', () => {
       conversations: [],
       activeConversationId: null,
       showSidebar: false,
+      aiStatus: { enabled: true, configured: true, provider: 'test', model: 'test', message: '' },
+      connectionState: 'connected' as const,
+      connectionError: null,
     });
   });
 

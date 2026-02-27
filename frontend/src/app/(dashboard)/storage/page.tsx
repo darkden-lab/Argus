@@ -4,9 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { HardDrive, Database, Loader2, FolderOpen } from "lucide-react";
+import { HardDrive, Database, Loader2, FolderOpen, Plus } from "lucide-react";
+import { CreatePVCWizard } from "@/components/resources/create-pvc-wizard";
 
 interface K8sMeta {
   name: string;
@@ -60,6 +62,7 @@ export default function StoragePage() {
   const [clusters, setClusters] = useState<Array<{ id: string; name: string; status: string }>>([]);
   const [selectedCluster, setSelectedCluster] = useState<string>("");
   const [loading, setLoading] = useState(true);
+  const [showCreatePVC, setShowCreatePVC] = useState(false);
 
   useEffect(() => {
     api
@@ -95,12 +98,20 @@ export default function StoragePage() {
           <h1 className="text-2xl font-bold tracking-tight">Storage</h1>
           <p className="text-sm text-muted-foreground">Persistent Volumes, PVCs, and Storage Classes.</p>
         </div>
-        {clusters.length > 1 && (
-          <select value={selectedCluster} onChange={(e) => setSelectedCluster(e.target.value)}
-            className="rounded-md border bg-background px-3 py-1.5 text-sm">
-            {clusters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        )}
+        <div className="flex items-center gap-2">
+          {clusters.length > 1 && (
+            <select value={selectedCluster} onChange={(e) => setSelectedCluster(e.target.value)}
+              className="rounded-md border bg-background px-3 py-1.5 text-sm">
+              {clusters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          {selectedCluster && (
+            <Button size="sm" onClick={() => setShowCreatePVC(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              Create PVC
+            </Button>
+          )}
+        </div>
       </div>
 
       {loading ? (
@@ -223,6 +234,15 @@ export default function StoragePage() {
             </div>
           </TabsContent>
         </Tabs>
+      )}
+
+      {selectedCluster && (
+        <CreatePVCWizard
+          open={showCreatePVC}
+          onOpenChange={setShowCreatePVC}
+          clusterId={selectedCluster}
+          onCreated={fetchData}
+        />
       )}
     </div>
   );

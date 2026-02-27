@@ -114,6 +114,21 @@ export function NetworkMap({ clusterID }: NetworkMapProps) {
 
     const g = svg.append("g");
 
+    // Arrowhead marker definition
+    const defs = svg.append("defs");
+    defs
+      .append("marker")
+      .attr("id", "arrowhead")
+      .attr("viewBox", "0 0 10 10")
+      .attr("refX", 24) // offset past node circle radius (14) + stroke (2) + arrow size
+      .attr("refY", 5)
+      .attr("markerWidth", 8)
+      .attr("markerHeight", 8)
+      .attr("orient", "auto-start-reverse")
+      .append("path")
+      .attr("d", "M 0 0 L 10 5 L 0 10 z")
+      .attr("fill", "#4b5563");
+
     // Zoom/pan
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
@@ -152,7 +167,8 @@ export function NetworkMap({ clusterID }: NetworkMapProps) {
       .join("line")
       .attr("stroke", "#4b5563")
       .attr("stroke-width", (d) => Math.max(1, Math.min(d.weight, 4)))
-      .attr("stroke-opacity", 0.6);
+      .attr("stroke-opacity", 0.6)
+      .attr("marker-end", "url(#arrowhead)");
 
     // Link labels
     const linkLabel = g

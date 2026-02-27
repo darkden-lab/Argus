@@ -13,14 +13,16 @@ import (
 type AdminHandlers struct {
 	pool           *pgxpool.Pool
 	indexer        *rag.Indexer
+	config         AIConfig
 	rbacWriteGuard mux.MiddlewareFunc
 }
 
 // NewAdminHandlers creates admin API handlers for AI.
-func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, rbacWriteGuard mux.MiddlewareFunc) *AdminHandlers {
+func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, config AIConfig, rbacWriteGuard mux.MiddlewareFunc) *AdminHandlers {
 	return &AdminHandlers{
 		pool:           pool,
 		indexer:        indexer,
+		config:         config,
 		rbacWriteGuard: rbacWriteGuard,
 	}
 }
@@ -29,6 +31,7 @@ func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, rbacWriteGuard m
 func (h *AdminHandlers) RegisterRoutes(r *mux.Router) {
 	ai := r.PathPrefix("/api/ai").Subrouter()
 	ai.HandleFunc("/config", h.getConfig).Methods(http.MethodGet)
+	ai.HandleFunc("/status", h.getStatus).Methods(http.MethodGet)
 	ai.HandleFunc("/rag/status", h.ragStatus).Methods(http.MethodGet)
 
 	// Write endpoints require ai:write RBAC
@@ -39,6 +42,50 @@ func (h *AdminHandlers) RegisterRoutes(r *mux.Router) {
 	writeAI.HandleFunc("/config", h.updateConfig).Methods(http.MethodPut)
 	writeAI.HandleFunc("/config/test", h.testConnection).Methods(http.MethodPost)
 	writeAI.HandleFunc("/rag/reindex", h.triggerReindex).Methods(http.MethodPost)
+}
+
+// AIStatus is the response for the /api/ai/status endpoint.
+type AIStatus struct {
+	Enabled    bool   `json:"enabled"`
+	Configured bool   `json:"configured"`
+	Provider   string `json:"provider"`
+	Model      string `json:"model"`
+	Message    string `json:"message,omitempty"`
+}
+
+func (h *AdminHandlers) getStatus(w http.ResponseWriter, r *http.Request) {
+	cfg := h.config
+
+	// Try to load from DB if available (may have been updated at runtime)
+	if h.pool != nil {
+		var dbCfg AIConfig
+		err := h.pool.QueryRow(r.Context(),
+			`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled
+			 FROM ai_config LIMIT 1`,
+		).Scan(&dbCfg.Provider, &dbCfg.Model, &dbCfg.EmbedModel, &dbCfg.BaseURL, &dbCfg.MaxTokens, &dbCfg.Temperature, &dbCfg.Enabled)
+		if err == nil {
+			cfg = dbCfg
+		}
+	}
+
+	status := AIStatus{
+		Enabled:  cfg.Enabled,
+		Provider: string(cfg.Provider),
+		Model:    cfg.Model,
+	}
+
+	if !cfg.Enabled {
+		status.Configured = false
+		status.Message = "AI assistant is disabled. Enable it in Settings > AI Configuration."
+	} else if err := cfg.Validate(); err != nil {
+		status.Configured = false
+		status.Message = "AI provider is not fully configured. " + err.Error()
+	} else {
+		status.Configured = true
+		status.Message = "AI assistant is ready."
+	}
+
+	writeAIJSON(w, http.StatusOK, status)
 }
 
 func (h *AdminHandlers) getConfig(w http.ResponseWriter, r *http.Request) {

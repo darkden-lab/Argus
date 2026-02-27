@@ -4,8 +4,11 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api";
 import { ResourceTable, StatusBadge, type Column } from "@/components/resources/resource-table";
+import { CreateConfigMapWizard } from "@/components/resources/create-configmap-wizard";
+import { CreateSecretWizard } from "@/components/resources/create-secret-wizard";
+import { CreatePVCWizard } from "@/components/resources/create-pvc-wizard";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Plus } from "lucide-react";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useK8sWebSocket } from "@/hooks/use-k8s-websocket";
 import type { WatchEvent } from "@/lib/ws";
@@ -66,6 +69,8 @@ const columns: Column<K8sResource>[] = [
   },
 ];
 
+const CREATABLE_TYPES = new Set(["configmaps", "secrets", "persistentvolumeclaims"]);
+
 export default function ResourceListPage() {
   const params = useParams();
   const router = useRouter();
@@ -73,6 +78,7 @@ export default function ResourceListPage() {
   const resourceType = params.resourceType as string;
   const [data, setData] = useState<K8sResource[]>([]);
   const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
 
   const gvr = resourceTypeToGVR[resourceType] ?? `_/v1/${resourceType}`;
   const title = resourceType.charAt(0).toUpperCase() + resourceType.slice(1);
@@ -109,7 +115,8 @@ export default function ResourceListPage() {
     onEvent: handleWsEvent,
   });
 
-  useEffect(() => {
+  const fetchData = useCallback(() => {
+    setLoading(true);
     api
       .get<ResourceListResponse>(
         `/api/clusters/${clusterId}/resources/${gvr}`
@@ -118,6 +125,21 @@ export default function ResourceListPage() {
       .catch(() => setData([]))
       .finally(() => setLoading(false));
   }, [clusterId, gvr]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const canCreate = CREATABLE_TYPES.has(resourceType);
+
+  const createButtonLabel =
+    resourceType === "configmaps"
+      ? "Create ConfigMap"
+      : resourceType === "secrets"
+        ? "Create Secret"
+        : resourceType === "persistentvolumeclaims"
+          ? "Create PVC"
+          : "";
 
   return (
     <div className="space-y-6">
@@ -138,7 +160,15 @@ export default function ResourceListPage() {
             </p>
           </div>
         </div>
-        <LiveIndicator isConnected={isConnected} lastUpdated={lastUpdated} />
+        <div className="flex items-center gap-2">
+          <LiveIndicator isConnected={isConnected} lastUpdated={lastUpdated} />
+          {canCreate && (
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Plus className="mr-1.5 h-3.5 w-3.5" />
+              {createButtonLabel}
+            </Button>
+          )}
+        </div>
       </div>
 
       <ResourceTable
@@ -151,6 +181,33 @@ export default function ResourceListPage() {
           )
         }
       />
+
+      {resourceType === "configmaps" && (
+        <CreateConfigMapWizard
+          open={showCreate}
+          onOpenChange={setShowCreate}
+          clusterId={clusterId}
+          onCreated={fetchData}
+        />
+      )}
+
+      {resourceType === "secrets" && (
+        <CreateSecretWizard
+          open={showCreate}
+          onOpenChange={setShowCreate}
+          clusterId={clusterId}
+          onCreated={fetchData}
+        />
+      )}
+
+      {resourceType === "persistentvolumeclaims" && (
+        <CreatePVCWizard
+          open={showCreate}
+          onOpenChange={setShowCreate}
+          clusterId={clusterId}
+          onCreated={fetchData}
+        />
+      )}
     </div>
   );
 }
