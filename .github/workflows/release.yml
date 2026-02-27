@@ -129,7 +129,7 @@ jobs:
             ./cmd/argus/
 
       - name: Upload CLI binary
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.binary }}
           path: cli/${{ matrix.binary }}
@@ -174,7 +174,7 @@ jobs:
             ./cmd/agent/
 
       - name: Upload agent binary
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.binary }}
           path: agent/${{ matrix.binary }}
@@ -215,7 +215,7 @@ jobs:
           packager: ${{ matrix.format }}
           target: packaging/dist/
 
-      - uses: actions/upload-artifact@v6
+      - uses: actions/upload-artifact@v7
         with:
           name: argus-${{ matrix.format }}-${{ matrix.arch }}
           path: packaging/dist/*.${{ matrix.format }}
@@ -243,7 +243,7 @@ jobs:
             --destination ./helm-out
 
       - name: Upload Helm chart artifacts
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: helm-charts
           path: helm-out/*.tgz
