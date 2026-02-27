@@ -24,6 +24,7 @@
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cmdk": "^1.1.1",
     "d3": "^7.9.0",
     "js-yaml": "^4.1.1",
     "lucide-react": "^0.575.0",

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
 import { ResourceDetail } from "@/components/resources/resource-detail";
@@ -24,7 +24,7 @@ const resourceTypeToGVR: Record<string, string> = {
   networkpolicies: "networking.k8s.io/v1/networkpolicies",
 };
 
-function resourceToOverview(resource: Record<string, unknown>): Array<{ key: string; value: string }> {
+function resourceToOverview(resource: Record<string, unknown>, resourceType: string): Array<{ key: string; value: string }> {
   const meta = resource.metadata as Record<string, unknown> | undefined;
   if (!meta) return [];
 
@@ -58,6 +58,174 @@ function resourceToOverview(resource: Record<string, unknown>): Array<{ key: str
   const status = resource.status as Record<string, unknown> | undefined;
   if (status?.phase) {
     entries.push({ key: "Status", value: String(status.phase) });
+  }
+
+  // Generic metadata fields
+  if (meta.resourceVersion != null) {
+    entries.push({ key: "Resource Version", value: String(meta.resourceVersion) });
+  }
+  if (meta.generation != null) {
+    entries.push({ key: "Generation", value: String(meta.generation) });
+  }
+
+  const ownerReferences = meta.ownerReferences as Array<Record<string, unknown>> | undefined;
+  if (ownerReferences?.length) {
+    entries.push({
+      key: "Owner References",
+      value: ownerReferences.map((ref) => `${ref.kind}/${ref.name}`).join(", "),
+    });
+  }
+
+  const finalizers = meta.finalizers as string[] | undefined;
+  if (finalizers?.length) {
+    entries.push({ key: "Finalizers", value: finalizers.join(", ") });
+  }
+
+  // Extract the kind from the last segment of the resourceType (GVR format like "apps/v1/deployments")
+  const kindSegment = resourceType.split("/").pop()?.toLowerCase() ?? "";
+
+  const spec = resource.spec as Record<string, unknown> | undefined;
+
+  // Type-specific fields
+  switch (kindSegment) {
+    case "pods": {
+      if (status?.podIP != null) {
+        entries.push({ key: "Pod IP", value: String(status.podIP) });
+      }
+      if (status?.hostIP != null) {
+        entries.push({ key: "Host IP", value: String(status.hostIP) });
+      }
+      if (spec?.nodeName != null) {
+        entries.push({ key: "Node Name", value: String(spec.nodeName) });
+      }
+      if (spec?.restartPolicy != null) {
+        entries.push({ key: "Restart Policy", value: String(spec.restartPolicy) });
+      }
+      const containers = spec?.containers as unknown[] | undefined;
+      if (containers?.length != null) {
+        entries.push({ key: "Containers", value: String(containers.length) });
+      }
+      const containerStatuses = status?.containerStatuses as Array<Record<string, unknown>> | undefined;
+      if (containerStatuses?.length) {
+        const totalRestarts = containerStatuses.reduce(
+          (sum, cs) => sum + (Number(cs.restartCount) || 0),
+          0
+        );
+        entries.push({ key: "Total Restarts", value: String(totalRestarts) });
+      }
+      break;
+    }
+
+    case "deployments": {
+      if (spec?.replicas != null) {
+        entries.push({ key: "Replicas", value: String(spec.replicas) });
+      }
+      if (status?.readyReplicas != null) {
+        entries.push({ key: "Ready Replicas", value: String(status.readyReplicas) });
+      }
+      if (status?.availableReplicas != null) {
+        entries.push({ key: "Available Replicas", value: String(status.availableReplicas) });
+      }
+      const strategy = spec?.strategy as Record<string, unknown> | undefined;
+      if (strategy?.type != null) {
+        entries.push({ key: "Strategy", value: String(strategy.type) });
+      }
+      break;
+    }
+
+    case "services": {
+      if (spec?.type != null) {
+        entries.push({ key: "Type", value: String(spec.type) });
+      }
+      if (spec?.clusterIP != null) {
+        entries.push({ key: "Cluster IP", value: String(spec.clusterIP) });
+      }
+      const ports = spec?.ports as Array<Record<string, unknown>> | undefined;
+      if (ports?.length) {
+        entries.push({
+          key: "Ports",
+          value: ports.map((p) => `${p.port}/${p.protocol ?? "TCP"}`).join(", "),
+        });
+      }
+      const selector = spec?.selector as Record<string, string> | undefined;
+      if (selector && Object.keys(selector).length) {
+        entries.push({
+          key: "Selector",
+          value: Object.entries(selector)
+            .map(([k, v]) => `${k}=${v}`)
+            .join(", "),
+        });
+      }
+      break;
+    }
+
+    case "ingresses": {
+      const rules = spec?.rules as Array<Record<string, unknown>> | undefined;
+      if (rules?.length) {
+        const hosts = rules
+          .map((r) => r.host as string | undefined)
+          .filter(Boolean)
+          .join(", ");
+        if (hosts) {
+          entries.push({ key: "Hosts", value: hosts });
+        }
+      }
+      const tls = spec?.tls as Array<Record<string, unknown>> | undefined;
+      if (tls?.length) {
+        const tlsHosts = tls
+          .flatMap((t) => (t.hosts as string[] | undefined) ?? [])
+          .join(", ");
+        if (tlsHosts) {
+          entries.push({ key: "TLS Hosts", value: tlsHosts });
+        }
+      }
+      break;
+    }
+
+    case "configmaps": {
+      const data = resource.data as Record<string, unknown> | undefined;
+      if (data) {
+        entries.push({ key: "Data Keys", value: String(Object.keys(data).length) });
+      }
+      break;
+    }
+
+    case "secrets": {
+      const data = resource.data as Record<string, unknown> | undefined;
+      if (data) {
+        entries.push({ key: "Data Keys", value: String(Object.keys(data).length) });
+      }
+      if (resource.type != null) {
+        entries.push({ key: "Type", value: String(resource.type) });
+      }
+      break;
+    }
+
+    case "statefulsets": {
+      if (spec?.replicas != null) {
+        entries.push({ key: "Replicas", value: String(spec.replicas) });
+      }
+      if (status?.readyReplicas != null) {
+        entries.push({ key: "Ready Replicas", value: String(status.readyReplicas) });
+      }
+      if (spec?.serviceName != null) {
+        entries.push({ key: "Service Name", value: String(spec.serviceName) });
+      }
+      break;
+    }
+
+    case "daemonsets": {
+      if (status?.desiredNumberScheduled != null) {
+        entries.push({ key: "Desired", value: String(status.desiredNumberScheduled) });
+      }
+      if (status?.currentNumberScheduled != null) {
+        entries.push({ key: "Current", value: String(status.currentNumberScheduled) });
+      }
+      if (status?.numberReady != null) {
+        entries.push({ key: "Ready", value: String(status.numberReady) });
+      }
+      break;
+    }
   }
 
   return entries;
@@ -168,9 +336,11 @@ function toYaml(obj: unknown, indent = 0): string {
 export default function ResourceDetailPage() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const clusterId = params.id as string;
   const resourceType = params.resourceType as string;
   const resourceName = params.name as string;
+  const namespace = searchParams.get("namespace");
   const [resource, setResource] = useState<Record<string, unknown> | null>(null);
   const [events, setEvents] = useState<Array<{ type: string; reason: string; message: string; timestamp: string }>>([]);
   const [loading, setLoading] = useState(true);
@@ -183,11 +353,11 @@ export default function ResourceDetailPage() {
   const fetchResource = useCallback(() => {
     return api
       .get<Record<string, unknown>>(
-        `/api/clusters/${clusterId}/resources/${gvr}/${resourceName}`
+        `/api/clusters/${clusterId}/resources/${gvr}/${resourceName}${namespace ? `?namespace=${encodeURIComponent(namespace)}` : ""}`
       )
       .then(setResource)
       .catch(() => setResource(null));
-  }, [clusterId, gvr, resourceName]);
+  }, [clusterId, gvr, resourceName, namespace]);
 
   useEffect(() => {
     fetchResource().finally(() => setLoading(false));
@@ -289,7 +459,7 @@ export default function ResourceDetailPage() {
         name={resourceName}
         kind={kind}
         namespace={meta?.namespace as string | undefined}
-        overview={resourceToOverview(resource)}
+        overview={resourceToOverview(resource, resourceType)}
         yaml={toYaml(resource)}
         events={events}
         onDelete={canDelete ? handleDelete : undefined}
