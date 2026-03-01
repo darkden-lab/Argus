@@ -261,6 +261,11 @@ func (s *Service) buildSystemPrompt(pageCtx ChatContext) string {
 	return prompt
 }
 
+// LoadHistory returns the conversation history for the given conversation ID.
+func (s *Service) LoadHistory(ctx context.Context, conversationID string) ([]Message, error) {
+	return s.loadHistory(ctx, conversationID)
+}
+
 func (s *Service) loadHistory(ctx context.Context, conversationID string) ([]Message, error) {
 	if s.pool == nil || conversationID == "" {
 		return nil, nil

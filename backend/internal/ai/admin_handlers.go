@@ -1,8 +1,10 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/darkden-lab/argus/backend/internal/ai/rag"
@@ -164,7 +166,27 @@ func (h *AdminHandlers) testConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeAIJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Configuration is valid"})
+	if h.providerFactory == nil {
+		writeAIJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Configuration is valid (no provider factory to test)"})
+		return
+	}
+
+	provider := h.providerFactory(cfg)
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := provider.Chat(ctx, ChatRequest{
+		Messages:    []Message{{Role: RoleUser, Content: "Hello"}},
+		MaxTokens:   16,
+		Temperature: 0,
+	})
+	if err != nil {
+		writeAIJSON(w, http.StatusBadRequest, map[string]string{"error": "Connection failed: " + err.Error()})
+		return
+	}
+
+	writeAIJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Connection successful"})
 }
 
 func (h *AdminHandlers) ragStatus(w http.ResponseWriter, r *http.Request) {

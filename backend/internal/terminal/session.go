@@ -1,6 +1,8 @@
 package terminal
 
 import (
+	"bytes"
+	"context"
 	"log"
 	"sync"
 
@@ -19,17 +21,18 @@ const (
 
 // Session represents an active terminal session for a user.
 type Session struct {
-	ID         string
-	UserID     string
-	ClusterID  string
-	Namespace  string
-	Mode       Mode
-	History    []string
-	conn       *websocket.Conn
-	clusterMgr *cluster.Manager
-	output     chan TerminalMessage
-	done       chan struct{}
-	closeOnce  sync.Once
+	ID          string
+	UserID      string
+	ClusterID   string
+	Namespace   string
+	Mode        Mode
+	History     []string
+	conn        *websocket.Conn
+	clusterMgr  *cluster.Manager
+	smartParser *SmartParser
+	output      chan TerminalMessage
+	done        chan struct{}
+	closeOnce   sync.Once
 
 	// Terminal dimensions
 	cols int
@@ -40,16 +43,17 @@ type Session struct {
 // NewSession creates a terminal session.
 func NewSession(userID string, conn *websocket.Conn, clusterMgr *cluster.Manager) *Session {
 	return &Session{
-		ID:         uuid.New().String(),
-		UserID:     userID,
-		Mode:       ModeSmart,
-		History:    make([]string, 0, 100),
-		conn:       conn,
-		clusterMgr: clusterMgr,
-		output:     make(chan TerminalMessage, 256),
-		done:       make(chan struct{}),
-		cols:       80,
-		rows:       24,
+		ID:          uuid.New().String(),
+		UserID:      userID,
+		Mode:        ModeSmart,
+		History:     make([]string, 0, 100),
+		conn:        conn,
+		clusterMgr:  clusterMgr,
+		smartParser: NewSmartParser(clusterMgr),
+		output:      make(chan TerminalMessage, 256),
+		done:        make(chan struct{}),
+		cols:        80,
+		rows:        24,
 	}
 }
 
@@ -96,17 +100,73 @@ func (s *Session) HandleInput(input string) {
 		return
 	}
 
-	// Echo is handled client-side; only send command output here.
-	// Smart mode parser will be added in task #45.
-	s.output <- TerminalMessage{
-		Type:      "output",
-		Data:      "Executed: " + input + "\r\n",
-		ClusterID: clusterID,
-		Namespace: namespace,
-	}
+	log.Printf("terminal: session %s user %s command: %s (cluster=%s ns=%s mode=%s)",
+		s.ID, s.UserID, input, clusterID, namespace, s.Mode)
 
-	log.Printf("terminal: session %s user %s command: %s (cluster=%s ns=%s)",
-		s.ID, s.UserID, input, clusterID, namespace)
+	ctx := context.Background()
+
+	s.mu.RLock()
+	mode := s.Mode
+	s.mu.RUnlock()
+
+	switch mode {
+	case ModeSmart:
+		cmd, err := s.smartParser.Parse(input)
+		if err != nil {
+			s.output <- TerminalMessage{
+				Type: "error",
+				Data: "Parse error: " + err.Error() + "\r\n",
+			}
+			return
+		}
+		if cmd.Namespace == "" {
+			cmd.Namespace = namespace
+		}
+		result, err := s.smartParser.Execute(ctx, clusterID, cmd)
+		if err != nil {
+			s.output <- TerminalMessage{
+				Type: "error",
+				Data: "Error: " + err.Error() + "\r\n",
+			}
+			return
+		}
+		s.output <- TerminalMessage{
+			Type:      "output",
+			Data:      result + "\r\n",
+			ClusterID: clusterID,
+			Namespace: namespace,
+		}
+
+	case ModeRaw:
+		exec := NewExecSession(s.clusterMgr, clusterID, namespace)
+		_, err := exec.FindOrCreateToolsPod(ctx)
+		if err != nil {
+			s.output <- TerminalMessage{
+				Type: "error",
+				Data: "Error: " + err.Error() + "\r\n",
+			}
+			return
+		}
+		var stdout, stderr bytes.Buffer
+		err = exec.Exec(ctx, []string{"sh", "-c", input}, nil, &stdout, &stderr)
+		if err != nil {
+			s.output <- TerminalMessage{
+				Type: "error",
+				Data: "Exec error: " + err.Error() + "\r\n",
+			}
+			return
+		}
+		output := stdout.String()
+		if errOut := stderr.String(); errOut != "" {
+			output += errOut
+		}
+		s.output <- TerminalMessage{
+			Type:      "output",
+			Data:      output + "\r\n",
+			ClusterID: clusterID,
+			Namespace: namespace,
+		}
+	}
 }
 
 // HandleResize updates the terminal dimensions.

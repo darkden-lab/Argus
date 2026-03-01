@@ -51,8 +51,9 @@ type ChatWSMessage struct {
 
 // ChatWSResponse is sent from server to client.
 type ChatWSResponse struct {
-	Type           string `json:"type"`            // "assistant_message", "stream_delta", "stream_end", "confirm_request", "error", "conversation_created"
+	Type           string `json:"type"`            // "assistant_message", "stream_delta", "stream_end", "confirm_request", "error", "conversation_created", "history_message", "history_end"
 	Content        string `json:"content,omitempty"`
+	Role           string `json:"role,omitempty"`
 	Error          string `json:"error,omitempty"`
 	ConversationID string `json:"conversation_id,omitempty"`
 	ConfirmationID string `json:"confirmation_id,omitempty"`
@@ -173,6 +174,31 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 
 		case "context_update":
 			currentContext = wsMsg.Context
+
+		case "load_history":
+			convID := wsMsg.ConversationID
+			if convID == "" {
+				convID = currentConversation
+			}
+			if convID == "" {
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "no conversation_id provided", Error: "no conversation_id"})
+				break
+			}
+			history, err := h.service.LoadHistory(r.Context(), convID)
+			if err != nil {
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "failed to load history: " + err.Error(), Error: err.Error()})
+				break
+			}
+			for _, msg := range history {
+				writeWSJSON(conn, ChatWSResponse{
+					Type:           "history_message",
+					Content:        msg.Content,
+					Role:           string(msg.Role),
+					ConversationID: convID,
+				})
+			}
+			writeWSJSON(conn, ChatWSResponse{Type: "history_end", ConversationID: convID})
+			currentConversation = convID
 
 		case "new_conversation":
 			currentConversation = ""

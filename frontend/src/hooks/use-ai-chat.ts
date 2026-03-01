@@ -29,8 +29,11 @@ interface ChatServerMessage {
     | "confirm_request"
     | "conversation_created"
     | "history"
+    | "history_message"
+    | "history_end"
     | "error";
   content?: string;
+  role?: string;
   conversation_id?: string;
   confirmation_id?: string;
   tool_name?: string;
@@ -211,6 +214,19 @@ export function useAiChat() {
             }
             break;
 
+          case "history_message":
+            store.addMessage({
+              id: crypto.randomUUID(),
+              role: (msg.role === "user" ? "user" : "assistant") as "user" | "assistant",
+              content: msg.content || "",
+              timestamp: new Date().toISOString(),
+            });
+            break;
+
+          case "history_end":
+            // History loading complete — no action needed
+            break;
+
           case "error": {
             store.setIsStreaming(false);
             const errorText = msg.error || msg.content || "Unknown error";
@@ -341,6 +357,7 @@ export function useAiChat() {
     if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
 
     storeRef.current.setActiveConversation(conversationId);
+    storeRef.current.setMessages([]);
 
     const msg: ChatWsMessage = {
       type: "load_history",
