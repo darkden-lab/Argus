@@ -2,9 +2,11 @@ package cluster
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/gorilla/mux"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/darkden-lab/argus/backend/internal/httputil"
 )
@@ -71,19 +73,23 @@ func (h *Handlers) handleList(w http.ResponseWriter, r *http.Request) {
 		clusters = []*Cluster{}
 	}
 
+	h.populateNodeCounts(r, clusters)
+
 	httputil.WriteJSON(w, http.StatusOK, clusters)
 }
 
 func (h *Handlers) handleGet(w http.ResponseWriter, r *http.Request) {
 	id := mux.Vars(r)["id"]
 
-	cluster, err := h.manager.store.GetCluster(r.Context(), id)
+	cl, err := h.manager.store.GetCluster(r.Context(), id)
 	if err != nil {
 		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, cluster)
+	h.populateNodeCounts(r, []*Cluster{cl})
+
+	httputil.WriteJSON(w, http.StatusOK, cl)
 }
 
 func (h *Handlers) handleDelete(w http.ResponseWriter, r *http.Request) {
@@ -95,6 +101,25 @@ func (h *Handlers) handleDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Handlers) populateNodeCounts(r *http.Request, clusters []*Cluster) {
+	for _, cl := range clusters {
+		if cl.Status != "connected" {
+			continue
+		}
+		client, err := h.manager.GetClient(cl.ID)
+		if err != nil {
+			continue
+		}
+		nodes, err := client.Clientset.CoreV1().Nodes().List(r.Context(), metav1.ListOptions{})
+		if err != nil {
+			log.Printf("cluster: failed to list nodes for %s: %v", cl.ID, err)
+			continue
+		}
+		count := len(nodes.Items)
+		cl.NodeCount = &count
+	}
 }
 
 func (h *Handlers) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
