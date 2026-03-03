@@ -14,13 +14,14 @@ import (
 
 // Ollama implements ai.LLMProvider using the Ollama HTTP API for local models.
 type Ollama struct {
-	baseURL string
-	model   string
-	client  *http.Client
+	baseURL       string
+	model         string
+	customHeaders map[string]string
+	client        *http.Client
 }
 
 // NewOllama creates a new Ollama provider.
-func NewOllama(baseURL, model string) *Ollama {
+func NewOllama(baseURL, model string, customHeaders map[string]string) *Ollama {
 	if baseURL == "" {
 		baseURL = "http://localhost:11434"
 	}
@@ -28,13 +29,21 @@ func NewOllama(baseURL, model string) *Ollama {
 		model = "llama3.1"
 	}
 	return &Ollama{
-		baseURL: strings.TrimRight(baseURL, "/"),
-		model:   model,
-		client:  &http.Client{},
+		baseURL:       strings.TrimRight(baseURL, "/"),
+		model:         model,
+		customHeaders: customHeaders,
+		client:        &http.Client{},
 	}
 }
 
 func (o *Ollama) Name() string { return "ollama" }
+
+func (o *Ollama) setHeaders(req *http.Request) {
+	req.Header.Set("Content-Type", "application/json")
+	for k, v := range o.customHeaders {
+		req.Header.Set(k, v)
+	}
+}
 
 type ollamaRequest struct {
 	Model    string       `json:"model"`
@@ -96,7 +105,7 @@ func (o *Ollama) Chat(ctx context.Context, req ai.ChatRequest) (*ai.ChatResponse
 	if err != nil {
 		return nil, fmt.Errorf("ollama: create request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	o.setHeaders(httpReq)
 
 	resp, err := o.client.Do(httpReq)
 	if err != nil {
@@ -154,7 +163,7 @@ func (o *Ollama) ChatStream(ctx context.Context, req ai.ChatRequest) (ai.StreamR
 	if err != nil {
 		return nil, fmt.Errorf("ollama: create request: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	o.setHeaders(httpReq)
 
 	resp, err := o.client.Do(httpReq)
 	if err != nil {
@@ -193,7 +202,7 @@ func (o *Ollama) Embed(ctx context.Context, req ai.EmbedRequest) (*ai.EmbedRespo
 		if err != nil {
 			return nil, fmt.Errorf("ollama: create embed request: %w", err)
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
+		o.setHeaders(httpReq)
 
 		resp, err := o.client.Do(httpReq)
 		if err != nil {

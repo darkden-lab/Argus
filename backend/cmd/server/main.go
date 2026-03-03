@@ -282,20 +282,21 @@ func main() {
 	terminalHandler := terminal.NewHandler(jwtService, clusterMgr)
 	terminalHandler.RegisterRoutes(r)
 
-	// AI Chat system
+	// AI Chat system — load from env vars first, then override with DB values
 	aiCfg := ai.LoadConfigFromEnv()
+	aiCfg = ai.LoadConfigFromDB(ctx, pool, aiCfg, cfg.EncryptionKey)
 
 	// Provider factory: creates an LLMProvider from config (reused for hot-reload)
 	aiProviderFactory := func(cfg ai.AIConfig) ai.LLMProvider {
 		switch cfg.Provider {
 		case ai.ProviderClaude:
-			return providers.NewClaude(cfg.APIKey, cfg.Model)
+			return providers.NewClaude(cfg.APIKey, cfg.Model, cfg.BaseURL, cfg.CustomHeaders)
 		case ai.ProviderOpenAI:
-			return providers.NewOpenAI(cfg.APIKey, cfg.Model, cfg.BaseURL)
+			return providers.NewOpenAI(cfg.APIKey, cfg.Model, cfg.BaseURL, cfg.CustomHeaders)
 		case ai.ProviderOllama:
-			return providers.NewOllama(cfg.BaseURL, cfg.Model)
+			return providers.NewOllama(cfg.BaseURL, cfg.Model, cfg.CustomHeaders)
 		default:
-			return providers.NewClaude(cfg.APIKey, cfg.Model)
+			return providers.NewClaude(cfg.APIKey, cfg.Model, cfg.BaseURL, cfg.CustomHeaders)
 		}
 	}
 
@@ -317,7 +318,7 @@ func main() {
 	aiChatHandler := ai.NewChatHandler(aiService, jwtService, aiCfg)
 	aiChatHandler.RegisterRoutes(r)
 
-	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard, aiService, aiProviderFactory)
+	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard, aiService, aiProviderFactory, cfg.EncryptionKey)
 	aiAdminHandlers.RegisterRoutes(protected)
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)

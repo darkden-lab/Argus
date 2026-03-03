@@ -16,14 +16,15 @@ const openaiAPIURL = "https://api.openai.com/v1"
 
 // OpenAI implements ai.LLMProvider using the OpenAI Chat Completions API.
 type OpenAI struct {
-	apiKey  string
-	model   string
-	baseURL string
-	client  *http.Client
+	apiKey        string
+	model         string
+	baseURL       string
+	customHeaders map[string]string
+	client        *http.Client
 }
 
 // NewOpenAI creates a new OpenAI provider.
-func NewOpenAI(apiKey, model, baseURL string) *OpenAI {
+func NewOpenAI(apiKey, model, baseURL string, customHeaders map[string]string) *OpenAI {
 	if model == "" {
 		model = "gpt-4o"
 	}
@@ -31,10 +32,11 @@ func NewOpenAI(apiKey, model, baseURL string) *OpenAI {
 		baseURL = openaiAPIURL
 	}
 	return &OpenAI{
-		apiKey:  apiKey,
-		model:   model,
-		baseURL: strings.TrimRight(baseURL, "/"),
-		client:  &http.Client{},
+		apiKey:        apiKey,
+		model:         model,
+		baseURL:       strings.TrimRight(baseURL, "/"),
+		customHeaders: customHeaders,
+		client:        &http.Client{},
 	}
 }
 
@@ -247,7 +249,12 @@ func (o *OpenAI) Embed(ctx context.Context, req ai.EmbedRequest) (*ai.EmbedRespo
 
 func (o *OpenAI) setHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	if o.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+o.apiKey)
+	}
+	for k, v := range o.customHeaders {
+		req.Header.Set(k, v)
+	}
 }
 
 func (o *OpenAI) buildRequest(req ai.ChatRequest) openaiRequest {

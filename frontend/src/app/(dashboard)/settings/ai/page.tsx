@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Bot, RefreshCw, CheckCircle2, XCircle, Loader2 } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Bot, RefreshCw, CheckCircle2, XCircle, Loader2, Plus, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
@@ -33,6 +34,7 @@ interface AiConfig {
   base_url: string;
   tools_enabled: boolean;
   max_tokens: number;
+  custom_headers: Record<string, string>;
 }
 
 interface RagStatus {
@@ -41,17 +43,56 @@ interface RagStatus {
   is_indexing: boolean;
 }
 
-const providers = [
+interface HeaderEntry {
+  key: string;
+  value: string;
+}
+
+const providerOptions = [
   { value: "claude", label: "Claude (Anthropic)" },
   { value: "openai", label: "OpenAI" },
   { value: "ollama", label: "Ollama (Local)" },
 ];
 
-const modelsByProvider: Record<string, string[]> = {
-  claude: ["claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
-  openai: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo"],
-  ollama: ["llama3", "mistral", "codellama", "mixtral"],
+const modelsByProvider: Record<string, ComboboxOption[]> = {
+  claude: [
+    { value: "claude-opus-4-6", label: "claude-opus-4-6" },
+    { value: "claude-sonnet-4-6", label: "claude-sonnet-4-6" },
+    { value: "claude-haiku-4-5-20251001", label: "claude-haiku-4-5-20251001" },
+  ],
+  openai: [
+    { value: "gpt-4o", label: "gpt-4o" },
+    { value: "gpt-4o-mini", label: "gpt-4o-mini" },
+    { value: "gpt-4-turbo", label: "gpt-4-turbo" },
+  ],
+  ollama: [
+    { value: "llama3", label: "llama3" },
+    { value: "mistral", label: "mistral" },
+    { value: "codellama", label: "codellama" },
+    { value: "mixtral", label: "mixtral" },
+  ],
 };
+
+const baseUrlPlaceholders: Record<string, string> = {
+  claude: "https://api.anthropic.com/v1/messages",
+  openai: "https://api.openai.com/v1",
+  ollama: "http://localhost:11434",
+};
+
+function headersToEntries(headers: Record<string, string>): HeaderEntry[] {
+  const entries = Object.entries(headers).map(([key, value]) => ({ key, value }));
+  return entries.length > 0 ? entries : [];
+}
+
+function entriesToHeaders(entries: HeaderEntry[]): Record<string, string> {
+  const result: Record<string, string> = {};
+  for (const { key, value } of entries) {
+    if (key.trim()) {
+      result[key.trim()] = value;
+    }
+  }
+  return result;
+}
 
 export default function AiSettingsPage() {
   const [config, setConfig] = useState<AiConfig>({
@@ -61,7 +102,9 @@ export default function AiSettingsPage() {
     base_url: "",
     tools_enabled: true,
     max_tokens: 4096,
+    custom_headers: {},
   });
+  const [headerEntries, setHeaderEntries] = useState<HeaderEntry[]>([]);
   const [ragStatus, setRagStatus] = useState<RagStatus | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
@@ -73,7 +116,10 @@ export default function AiSettingsPage() {
   useEffect(() => {
     api
       .get<AiConfig>("/api/ai/config")
-      .then(setConfig)
+      .then((data) => {
+        setConfig(data);
+        setHeaderEntries(headersToEntries(data.custom_headers || {}));
+      })
       .catch(() => {
         // Use defaults
       });
@@ -86,10 +132,29 @@ export default function AiSettingsPage() {
       });
   }, []);
 
+  const updateHeaderEntry = useCallback((index: number, field: "key" | "value", val: string) => {
+    setHeaderEntries((prev) => {
+      const next = [...prev];
+      next[index] = { ...next[index], [field]: val };
+      return next;
+    });
+  }, []);
+
+  const addHeaderEntry = useCallback(() => {
+    setHeaderEntries((prev) => [...prev, { key: "", value: "" }]);
+  }, []);
+
+  const removeHeaderEntry = useCallback((index: number) => {
+    setHeaderEntries((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await api.put("/api/ai/config", config);
+      await api.put("/api/ai/config", {
+        ...config,
+        custom_headers: entriesToHeaders(headerEntries),
+      });
       toast("Settings saved", { variant: "success" });
     } catch {
       // api.put already shows toast on error
@@ -107,6 +172,7 @@ export default function AiSettingsPage() {
         model: config.model,
         api_key: config.api_key,
         base_url: config.base_url,
+        custom_headers: entriesToHeaders(headerEntries),
       });
       setTestResult("success");
     } catch {
@@ -159,7 +225,7 @@ export default function AiSettingsPage() {
                   setConfig({
                     ...config,
                     provider: value,
-                    model: modelsByProvider[value]?.[0] || "",
+                    model: modelsByProvider[value]?.[0]?.value || "",
                   })
                 }
               >
@@ -167,7 +233,7 @@ export default function AiSettingsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {providers.map((p) => (
+                  {providerOptions.map((p) => (
                     <SelectItem key={p.value} value={p.value}>
                       {p.label}
                     </SelectItem>
@@ -178,23 +244,17 @@ export default function AiSettingsPage() {
 
             <div className="space-y-2">
               <Label>Model</Label>
-              <Select
+              <Combobox
+                options={availableModels}
                 value={config.model}
                 onValueChange={(value) =>
                   setConfig({ ...config, model: value })
                 }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableModels.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select or type a model..."
+                searchPlaceholder="Search or type custom model..."
+                emptyMessage="No matching models."
+                allowCustomValue
+              />
             </div>
           </div>
 
@@ -214,18 +274,19 @@ export default function AiSettingsPage() {
             />
           </div>
 
-          {config.provider === "ollama" && (
-            <div className="space-y-2">
-              <Label>Base URL</Label>
-              <Input
-                value={config.base_url}
-                onChange={(e) =>
-                  setConfig({ ...config, base_url: e.target.value })
-                }
-                placeholder="http://localhost:11434"
-              />
-            </div>
-          )}
+          <div className="space-y-2">
+            <Label>Base URL</Label>
+            <Input
+              value={config.base_url}
+              onChange={(e) =>
+                setConfig({ ...config, base_url: e.target.value })
+              }
+              placeholder={baseUrlPlaceholders[config.provider] || ""}
+            />
+            <p className="text-xs text-muted-foreground">
+              Leave empty for default. For Azure AI Foundry, enter your deployment URL.
+            </p>
+          </div>
 
           <div className="space-y-2">
             <Label>Max Tokens</Label>
@@ -241,6 +302,49 @@ export default function AiSettingsPage() {
               min={256}
               max={128000}
             />
+          </div>
+
+          <Separator />
+
+          {/* Custom Headers */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <Label>Custom Headers</Label>
+                <p className="text-xs text-muted-foreground">
+                  Add custom HTTP headers for authentication (e.g. api-key, Ocp-Apim-Subscription-Key).
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={addHeaderEntry}>
+                <Plus className="mr-1.5 h-3.5 w-3.5" />
+                Add Header
+              </Button>
+            </div>
+            {headerEntries.map((entry, index) => (
+              <div key={index} className="flex items-center gap-2">
+                <Input
+                  className="flex-1"
+                  placeholder="Header name"
+                  value={entry.key}
+                  onChange={(e) => updateHeaderEntry(index, "key", e.target.value)}
+                />
+                <Input
+                  className="flex-1"
+                  type="password"
+                  placeholder="Header value"
+                  value={entry.value}
+                  onChange={(e) => updateHeaderEntry(index, "value", e.target.value)}
+                />
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeHeaderEntry(index)}
+                  className="shrink-0"
+                >
+                  <Trash2 className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </div>
+            ))}
           </div>
 
           <Separator />
@@ -344,4 +448,3 @@ export default function AiSettingsPage() {
     </div>
   );
 }
-
