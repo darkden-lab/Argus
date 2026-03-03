@@ -11,7 +11,7 @@ import (
 )
 
 func TestDiscoverInstances_ByLabel(t *testing.T) {
-	cs := fake.NewSimpleClientset(
+	cs := fake.NewClientset(
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "prometheus-server",
@@ -49,7 +49,7 @@ func TestDiscoverInstances_ByLabel(t *testing.T) {
 }
 
 func TestDiscoverInstances_ByWellKnownName(t *testing.T) {
-	cs := fake.NewSimpleClientset(
+	cs := fake.NewClientset(
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "prometheus-operated",
@@ -76,7 +76,7 @@ func TestDiscoverInstances_ByWellKnownName(t *testing.T) {
 }
 
 func TestDiscoverInstances_NoInstances(t *testing.T) {
-	cs := fake.NewSimpleClientset()
+	cs := fake.NewClientset()
 
 	instances, err := DiscoverInstances(context.Background(), cs)
 	if err != nil {
@@ -89,7 +89,7 @@ func TestDiscoverInstances_NoInstances(t *testing.T) {
 
 func TestDiscoverInstances_Deduplicated(t *testing.T) {
 	// A service that matches both label search and well-known name
-	cs := fake.NewSimpleClientset(
+	cs := fake.NewClientset(
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "prometheus",
@@ -114,7 +114,7 @@ func TestDiscoverInstances_Deduplicated(t *testing.T) {
 }
 
 func TestDiscoverInstances_MultipleInstances(t *testing.T) {
-	cs := fake.NewSimpleClientset(
+	cs := fake.NewClientset(
 		&corev1.Service{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "prometheus-main",
