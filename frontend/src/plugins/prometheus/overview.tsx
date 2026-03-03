@@ -17,10 +17,10 @@ export function PrometheusOverview() {
 
     Promise.allSettled([
       api.get<{ items: unknown[] }>(
-        `/api/plugins/prometheus/servicemonitors?clusterID=${clusterID}`
+        `/api/plugins/prometheus/${clusterID}/servicemonitors`
       ),
       api.get<{ items: unknown[] }>(
-        `/api/plugins/prometheus/prometheusrules?clusterID=${clusterID}`
+        `/api/plugins/prometheus/${clusterID}/prometheusrules`
       ),
     ]).then(([sm, pr]) => {
       setStats({

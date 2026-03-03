@@ -6,7 +6,7 @@ import (
 )
 
 func TestPrometheusPluginID(t *testing.T) {
-	p := New()
+	p := New(nil)
 	if p.ID() != "prometheus" {
 		t.Errorf("expected ID 'prometheus', got '%s'", p.ID())
 	}
@@ -107,7 +107,7 @@ func TestGenerateServiceMonitorDefaults(t *testing.T) {
 }
 
 func TestManifest(t *testing.T) {
-	p := New()
+	p := New(nil)
 	m := p.Manifest()
 
 	if m.ID != "prometheus" {
@@ -122,8 +122,8 @@ func TestManifest(t *testing.T) {
 	if len(m.Backend.Watchers) != 4 {
 		t.Errorf("expected 4 watchers, got %d", len(m.Backend.Watchers))
 	}
-	if len(m.Frontend.Navigation) != 1 {
-		t.Errorf("expected 1 nav item, got %d", len(m.Frontend.Navigation))
+	if len(m.Frontend.Navigation) != 0 {
+		t.Errorf("expected 0 nav items (removed from sidebar), got %d", len(m.Frontend.Navigation))
 	}
 	if len(m.Frontend.Routes) != 5 {
 		t.Errorf("expected 5 frontend routes, got %d", len(m.Frontend.Routes))

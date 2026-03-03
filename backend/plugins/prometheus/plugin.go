@@ -26,9 +26,7 @@ var manifest = plugin.Manifest{
 		},
 	},
 	Frontend: plugin.FrontendManifest{
-		Navigation: []plugin.NavItem{
-			{Label: "Prometheus", Icon: "prometheus", Path: "/plugins/prometheus"},
-		},
+		Navigation: []plugin.NavItem{},
 		Routes: []plugin.FrontendRoute{
 			{Path: "/plugins/prometheus", Component: "PrometheusOverview"},
 			{Path: "/plugins/prometheus/servicemonitors", Component: "ServiceMonitorList"},
@@ -43,10 +41,12 @@ var manifest = plugin.Manifest{
 	},
 }
 
-type PrometheusPlugin struct{}
+type PrometheusPlugin struct {
+	pool *pgxpool.Pool
+}
 
-func New() *PrometheusPlugin {
-	return &PrometheusPlugin{}
+func New(pool *pgxpool.Pool) *PrometheusPlugin {
+	return &PrometheusPlugin{pool: pool}
 }
 
 func (p *PrometheusPlugin) ID() string {
@@ -58,9 +58,19 @@ func (p *PrometheusPlugin) Manifest() plugin.Manifest {
 }
 
 func (p *PrometheusPlugin) RegisterRoutes(router *mux.Router, cm *cluster.Manager) {
-	h := NewHandlers(cm)
+	h := NewHandlers(cm, p.pool)
 	sub := router.PathPrefix("/api/plugins/prometheus").Subrouter()
 
+	// Prometheus proxy endpoints
+	sub.HandleFunc("/{cluster}/discover", h.DiscoverPrometheus).Methods("GET")
+	sub.HandleFunc("/{cluster}/config", h.GetConfig).Methods("GET")
+	sub.HandleFunc("/{cluster}/config", h.SaveConfig).Methods("PUT")
+	sub.HandleFunc("/{cluster}/query", h.ProxyQuery).Methods("GET")
+	sub.HandleFunc("/{cluster}/alerts", h.GetAlerts).Methods("GET")
+	sub.HandleFunc("/{cluster}/targets", h.GetTargets).Methods("GET")
+	sub.HandleFunc("/{cluster}/metrics/overview", h.GetMetricsOverview).Methods("GET")
+
+	// CRD resource endpoints
 	sub.HandleFunc("/{cluster}/servicemonitors", h.ListResources("servicemonitors")).Methods("GET")
 	sub.HandleFunc("/{cluster}/servicemonitors", h.CreateResource("servicemonitors")).Methods("POST")
 	sub.HandleFunc("/{cluster}/servicemonitors/{namespace}/{name}", h.GetResource("servicemonitors")).Methods("GET")

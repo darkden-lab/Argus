@@ -370,7 +370,7 @@ func main() {
 
 func registerPlugins(engine *plugin.Engine, pool *pgxpool.Pool) {
 	// Simple constructors (no error)
-	if err := engine.Register(pluginPrometheus.New()); err != nil {
+	if err := engine.Register(pluginPrometheus.New(pool)); err != nil {
 		log.Printf("WARNING: failed to register prometheus plugin: %v", err)
 	}
 	if err := engine.Register(pluginCalico.New()); err != nil {

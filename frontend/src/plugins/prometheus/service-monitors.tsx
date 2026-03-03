@@ -18,7 +18,7 @@ export function ServiceMonitorList() {
 
     api
       .get<{ items: ServiceMonitor[] }>(
-        `/api/plugins/prometheus/servicemonitors?clusterID=${clusterID}`
+        `/api/plugins/prometheus/${clusterID}/servicemonitors`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))

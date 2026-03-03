@@ -26,9 +26,7 @@
     ]
   },
   "frontend": {
-    "navigation": [
-      {"label": "Istio", "icon": "network", "path": "/plugins/istio"}
-    ],
+    "navigation": [],
     "routes": [
       {"path": "/plugins/istio",              "component": "IstioOverview"},
       {"path": "/plugins/istio/virtualservices", "component": "VirtualServiceList"},
