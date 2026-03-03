@@ -16,7 +16,7 @@ import {
   KeyRound,
 } from 'lucide-react';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 const STEPS = ['Welcome', 'Create Admin', 'OIDC', 'Complete'] as const;
 

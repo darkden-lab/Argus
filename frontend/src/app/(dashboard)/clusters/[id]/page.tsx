@@ -268,7 +268,7 @@ export default function ClusterDetailPage() {
     try {
       const token = localStorage.getItem("access_token");
       const res = await fetch(
-        `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080"}/api/proxy/kubeconfig?cluster_id=${clusterId}`,
+        `${process.env.NEXT_PUBLIC_API_URL || ""}/api/proxy/kubeconfig?cluster_id=${clusterId}`,
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (!res.ok) throw new Error("Download failed");

@@ -1,6 +1,8 @@
+imagePullSecrets: []
+
 backend:
   image:
-    repository: argus/backend
+    repository: ghcr.io/darkden-lab/argus-backend
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 2
@@ -25,7 +27,7 @@ backend:
 
 frontend:
   image:
-    repository: argus/frontend
+    repository: ghcr.io/darkden-lab/argus-frontend
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 2

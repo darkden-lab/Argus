@@ -1,7 +1,9 @@
 image:
-  repository: argus/agent
+  repository: ghcr.io/darkden-lab/argus-agent
   tag: latest
   pullPolicy: IfNotPresent
+
+imagePullSecrets: []
 
 replicas: 1
 
