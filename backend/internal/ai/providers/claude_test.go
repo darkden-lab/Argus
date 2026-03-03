@@ -7,21 +7,21 @@ import (
 )
 
 func TestClaudeName(t *testing.T) {
-	c := NewClaude("test-key", "")
+	c := NewClaude("test-key", "", "", nil)
 	if c.Name() != "claude" {
 		t.Errorf("expected name 'claude', got %q", c.Name())
 	}
 }
 
 func TestClaudeDefaultModel(t *testing.T) {
-	c := NewClaude("test-key", "")
+	c := NewClaude("test-key", "", "", nil)
 	if c.model != "claude-sonnet-4-20250514" {
 		t.Errorf("expected default model, got %q", c.model)
 	}
 }
 
 func TestClaudeBuildRequest(t *testing.T) {
-	c := NewClaude("test-key", "claude-sonnet-4-20250514")
+	c := NewClaude("test-key", "claude-sonnet-4-20250514", "", nil)
 
 	req := ai.ChatRequest{
 		Messages: []ai.Message{
@@ -68,7 +68,7 @@ func TestClaudeBuildRequest(t *testing.T) {
 }
 
 func TestClaudeToResponse(t *testing.T) {
-	c := NewClaude("test-key", "")
+	c := NewClaude("test-key", "", "", nil)
 
 	resp := claudeResponse{
 		Content: []claudeContentBlock{
@@ -94,7 +94,7 @@ func TestClaudeToResponse(t *testing.T) {
 }
 
 func TestClaudeToResponseWithToolUse(t *testing.T) {
-	c := NewClaude("test-key", "")
+	c := NewClaude("test-key", "", "", nil)
 
 	resp := claudeResponse{
 		Content: []claudeContentBlock{

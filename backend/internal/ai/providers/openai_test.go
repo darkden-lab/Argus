@@ -7,21 +7,21 @@ import (
 )
 
 func TestOpenAIName(t *testing.T) {
-	o := NewOpenAI("test-key", "", "")
+	o := NewOpenAI("test-key", "", "", nil)
 	if o.Name() != "openai" {
 		t.Errorf("expected name 'openai', got %q", o.Name())
 	}
 }
 
 func TestOpenAIDefaultModel(t *testing.T) {
-	o := NewOpenAI("test-key", "", "")
+	o := NewOpenAI("test-key", "", "", nil)
 	if o.model != "gpt-4o" {
 		t.Errorf("expected default model 'gpt-4o', got %q", o.model)
 	}
 }
 
 func TestOpenAIBuildRequest(t *testing.T) {
-	o := NewOpenAI("test-key", "gpt-4o", "")
+	o := NewOpenAI("test-key", "gpt-4o", "", nil)
 
 	req := ai.ChatRequest{
 		Messages: []ai.Message{
@@ -47,14 +47,14 @@ func TestOpenAIBuildRequest(t *testing.T) {
 }
 
 func TestOllamaName(t *testing.T) {
-	o := NewOllama("", "")
+	o := NewOllama("", "", nil)
 	if o.Name() != "ollama" {
 		t.Errorf("expected name 'ollama', got %q", o.Name())
 	}
 }
 
 func TestOllamaDefaultValues(t *testing.T) {
-	o := NewOllama("", "")
+	o := NewOllama("", "", nil)
 	if o.baseURL != "http://localhost:11434" {
 		t.Errorf("expected default base URL, got %q", o.baseURL)
 	}

@@ -19,20 +19,27 @@ const (
 
 // Claude implements ai.LLMProvider using the Anthropic Messages API.
 type Claude struct {
-	apiKey string
-	model  string
-	client *http.Client
+	apiKey        string
+	model         string
+	baseURL       string
+	customHeaders map[string]string
+	client        *http.Client
 }
 
 // NewClaude creates a new Claude provider.
-func NewClaude(apiKey, model string) *Claude {
+func NewClaude(apiKey, model, baseURL string, customHeaders map[string]string) *Claude {
 	if model == "" {
 		model = "claude-sonnet-4-20250514"
 	}
+	if baseURL == "" {
+		baseURL = claudeAPIURL
+	}
 	return &Claude{
-		apiKey: apiKey,
-		model:  model,
-		client: &http.Client{},
+		apiKey:        apiKey,
+		model:         model,
+		baseURL:       strings.TrimRight(baseURL, "/"),
+		customHeaders: customHeaders,
+		client:        &http.Client{},
 	}
 }
 
@@ -96,7 +103,7 @@ func (c *Claude) Chat(ctx context.Context, req ai.ChatRequest) (*ai.ChatResponse
 		return nil, fmt.Errorf("claude: marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, claudeAPIURL, bytes.NewReader(data))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("claude: create request: %w", err)
 	}
@@ -133,7 +140,7 @@ func (c *Claude) ChatStream(ctx context.Context, req ai.ChatRequest) (ai.StreamR
 		return nil, fmt.Errorf("claude: marshal request: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, claudeAPIURL, bytes.NewReader(data))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("claude: create request: %w", err)
 	}
@@ -159,8 +166,13 @@ func (c *Claude) Embed(_ context.Context, _ ai.EmbedRequest) (*ai.EmbedResponse,
 
 func (c *Claude) setHeaders(req *http.Request) {
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("x-api-key", c.apiKey)
+	if c.apiKey != "" {
+		req.Header.Set("x-api-key", c.apiKey)
+	}
 	req.Header.Set("anthropic-version", claudeAPIVersion)
+	for k, v := range c.customHeaders {
+		req.Header.Set(k, v)
+	}
 }
 
 func (c *Claude) buildRequest(req ai.ChatRequest) (*claudeRequest, error) {

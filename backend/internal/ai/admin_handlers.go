@@ -3,11 +3,13 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/darkden-lab/argus/backend/internal/ai/rag"
+	"github.com/darkden-lab/argus/backend/internal/crypto"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -22,10 +24,11 @@ type AdminHandlers struct {
 	rbacWriteGuard  mux.MiddlewareFunc
 	service         *Service
 	providerFactory ProviderFactory
+	encryptionKey   string
 }
 
 // NewAdminHandlers creates admin API handlers for AI.
-func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, config AIConfig, rbacWriteGuard mux.MiddlewareFunc, service *Service, factory ProviderFactory) *AdminHandlers {
+func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, config AIConfig, rbacWriteGuard mux.MiddlewareFunc, service *Service, factory ProviderFactory, encryptionKey string) *AdminHandlers {
 	return &AdminHandlers{
 		pool:            pool,
 		indexer:         indexer,
@@ -33,6 +36,7 @@ func NewAdminHandlers(pool *pgxpool.Pool, indexer *rag.Indexer, config AIConfig,
 		rbacWriteGuard:  rbacWriteGuard,
 		service:         service,
 		providerFactory: factory,
+		encryptionKey:   encryptionKey,
 	}
 }
 
@@ -68,11 +72,21 @@ func (h *AdminHandlers) getStatus(w http.ResponseWriter, r *http.Request) {
 	// Try to load from DB if available (may have been updated at runtime)
 	if h.pool != nil {
 		var dbCfg AIConfig
+		var headersJSON []byte
+		var encAPIKey []byte
 		err := h.pool.QueryRow(r.Context(),
-			`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled
+			`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled, COALESCE(custom_headers, '{}'), encrypted_api_key
 			 FROM ai_config LIMIT 1`,
-		).Scan(&dbCfg.Provider, &dbCfg.Model, &dbCfg.EmbedModel, &dbCfg.BaseURL, &dbCfg.MaxTokens, &dbCfg.Temperature, &dbCfg.Enabled)
+		).Scan(&dbCfg.Provider, &dbCfg.Model, &dbCfg.EmbedModel, &dbCfg.BaseURL, &dbCfg.MaxTokens, &dbCfg.Temperature, &dbCfg.Enabled, &headersJSON, &encAPIKey)
 		if err == nil {
+			if len(headersJSON) > 0 {
+				_ = json.Unmarshal(headersJSON, &dbCfg.CustomHeaders)
+			}
+			if len(encAPIKey) > 0 {
+				if plain, err := crypto.Decrypt(encAPIKey, h.encryptionKey); err == nil {
+					dbCfg.APIKey = string(plain)
+				}
+			}
 			cfg = dbCfg
 		}
 	}
@@ -104,13 +118,22 @@ func (h *AdminHandlers) getConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var cfg AIConfig
+	var headersJSON []byte
+	var encAPIKey []byte
 	err := h.pool.QueryRow(r.Context(),
-		`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled
+		`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled, COALESCE(custom_headers, '{}'), encrypted_api_key
 		 FROM ai_config LIMIT 1`,
-	).Scan(&cfg.Provider, &cfg.Model, &cfg.EmbedModel, &cfg.BaseURL, &cfg.MaxTokens, &cfg.Temperature, &cfg.Enabled)
+	).Scan(&cfg.Provider, &cfg.Model, &cfg.EmbedModel, &cfg.BaseURL, &cfg.MaxTokens, &cfg.Temperature, &cfg.Enabled, &headersJSON, &encAPIKey)
 	if err != nil {
 		writeAIJSON(w, http.StatusOK, DefaultConfig())
 		return
+	}
+	if len(headersJSON) > 0 {
+		_ = json.Unmarshal(headersJSON, &cfg.CustomHeaders)
+	}
+	// Signal the frontend that an API key is stored without exposing it
+	if len(encAPIKey) > 0 {
+		cfg.APIKey = "••••••••"
 	}
 
 	writeAIJSON(w, http.StatusOK, cfg)
@@ -128,29 +151,66 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err := h.pool.Exec(r.Context(),
-		`UPDATE ai_config SET
-			provider = $1, model = $2, embed_model = $3, base_url = NULLIF($4, ''),
-			max_tokens = $5, temperature = $6, enabled = $7, updated_at = NOW()
-		 WHERE true`,
-		cfg.Provider, cfg.Model, cfg.EmbedModel, cfg.BaseURL, cfg.MaxTokens, cfg.Temperature, cfg.Enabled,
-	)
+	headersJSON, err := json.Marshal(cfg.CustomHeaders)
 	if err != nil {
+		headersJSON = []byte("{}")
+	}
+
+	// Determine if we need to update the encrypted API key.
+	// The masked placeholder "••••••••" means "keep existing", empty means clear it.
+	var encAPIKey []byte
+	apiKeyChanged := cfg.APIKey != "••••••••"
+	if apiKeyChanged && cfg.APIKey != "" {
+		encAPIKey, err = crypto.Encrypt([]byte(cfg.APIKey), h.encryptionKey)
+		if err != nil {
+			log.Printf("ai: failed to encrypt api key: %v", err)
+			writeAIJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to encrypt API key"})
+			return
+		}
+	}
+
+	if apiKeyChanged {
+		// Update everything including the API key
+		_, err = h.pool.Exec(r.Context(),
+			`UPDATE ai_config SET
+				provider = $1, model = $2, embed_model = $3, base_url = NULLIF($4, ''),
+				max_tokens = $5, temperature = $6, enabled = $7, custom_headers = $8, encrypted_api_key = $9, updated_at = NOW()
+			 WHERE true`,
+			cfg.Provider, cfg.Model, cfg.EmbedModel, cfg.BaseURL, cfg.MaxTokens, cfg.Temperature, cfg.Enabled, headersJSON, encAPIKey,
+		)
+	} else {
+		// Keep existing API key untouched
+		_, err = h.pool.Exec(r.Context(),
+			`UPDATE ai_config SET
+				provider = $1, model = $2, embed_model = $3, base_url = NULLIF($4, ''),
+				max_tokens = $5, temperature = $6, enabled = $7, custom_headers = $8, updated_at = NOW()
+			 WHERE true`,
+			cfg.Provider, cfg.Model, cfg.EmbedModel, cfg.BaseURL, cfg.MaxTokens, cfg.Temperature, cfg.Enabled, headersJSON,
+		)
+	}
+	if err != nil {
+		log.Printf("ai: failed to update config: %v", err)
 		writeAIJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update config"})
 		return
 	}
 
 	// Hot-reload the AI provider so changes take effect immediately.
-	// If the request omitted api_key, preserve the one from the running config.
 	if h.service != nil && h.providerFactory != nil {
-		if cfg.APIKey == "" {
-			_, current := h.service.Snapshot()
+		_, current := h.service.Snapshot()
+		if !apiKeyChanged || cfg.APIKey == "••••••••" {
 			cfg.APIKey = current.APIKey
+		}
+		if cfg.CustomHeaders == nil {
+			cfg.CustomHeaders = current.CustomHeaders
 		}
 		newProvider := h.providerFactory(cfg)
 		h.service.UpdateProvider(newProvider, cfg)
 	}
 
+	// Don't leak the actual key back to the frontend
+	if cfg.APIKey != "" {
+		cfg.APIKey = "••••••••"
+	}
 	writeAIJSON(w, http.StatusOK, cfg)
 }
 
