@@ -114,7 +114,6 @@ export function Sidebar() {
   const openAiChat = useAiChatStore((s) => s.open);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const plugins = usePluginStore((s) => s.plugins);
   const fetchPlugins = usePluginStore((s) => s.fetchPlugins);
 
   const clusters = useClusterStore((s) => s.clusters);
@@ -131,15 +130,6 @@ export function Sidebar() {
   const initials = user?.display_name ? getInitials(user.display_name) : "?";
   const displayName = user?.display_name || "User";
   const email = user?.email || "";
-
-  // Build plugin nav items
-  const pluginItems: NavItem[] = plugins.flatMap((p) =>
-    (p.frontend?.navigation || []).map((nav) => ({
-      label: nav.label,
-      href: nav.path,
-      icon: Puzzle,
-    }))
-  );
 
   return (
     <TooltipProvider delayDuration={100}>
@@ -276,23 +266,6 @@ export function Sidebar() {
                 collapsed={collapsed}
               />
             ))}
-
-            {/* Plugin nav items */}
-            {pluginItems.length > 0 && (
-              <>
-                {pluginItems.map((item) => (
-                  <SidebarItem
-                    key={item.href}
-                    item={item}
-                    isActive={
-                      pathname === item.href ||
-                      pathname.startsWith(item.href + "/")
-                    }
-                    collapsed={collapsed}
-                  />
-                ))}
-              </>
-            )}
 
             {/* Plugins link (always visible) */}
             <SidebarItem

@@ -18,7 +18,7 @@ export function RulesList() {
 
     api
       .get<{ items: PrometheusRule[] }>(
-        `/api/plugins/prometheus/prometheusrules?clusterID=${clusterID}`
+        `/api/plugins/prometheus/${clusterID}/prometheusrules`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))

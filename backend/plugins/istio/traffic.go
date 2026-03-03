@@ -4,10 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
-	"net/url"
 	"strconv"
 	"sync"
 	"time"
@@ -16,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
 	"github.com/darkden-lab/argus/backend/internal/plugin"
+	"github.com/darkden-lab/argus/backend/internal/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -48,18 +47,6 @@ type TrafficResponse struct {
 	Edges         []TrafficEdge  `json:"edges,omitempty"`
 	ResourceNodes []TopologyNode `json:"resourceNodes,omitempty"`
 	ResourceEdges []TopologyEdge `json:"resourceEdges,omitempty"`
-}
-
-// prometheusResult models the /api/v1/query response.
-type prometheusResult struct {
-	Status string `json:"status"`
-	Data   struct {
-		ResultType string `json:"resultType"`
-		Result     []struct {
-			Metric map[string]string `json:"metric"`
-			Value  [2]interface{}    `json:"value"`
-		} `json:"result"`
-	} `json:"data"`
 }
 
 // trafficCache holds cached traffic data.
@@ -114,16 +101,20 @@ func newTrafficHandler(cm *cluster.Manager, pool *pgxpool.Pool) *trafficHandler 
 	}
 }
 
-// RegisterTrafficRoutes registers traffic and config endpoints.
+// RegisterTrafficRoutes registers traffic, config, and discovery endpoints.
 func (h *trafficHandler) RegisterTrafficRoutes(r *mux.Router) {
 	r.HandleFunc("/api/plugins/istio/{cluster}/traffic", h.GetTraffic).Methods("GET")
 	r.HandleFunc("/api/plugins/istio/{cluster}/config", h.GetConfig).Methods("GET")
 	r.HandleFunc("/api/plugins/istio/{cluster}/config", h.SaveConfig).Methods("PUT")
+	r.HandleFunc("/api/plugins/istio/{cluster}/discover-prometheus", h.DiscoverPrometheus).Methods("GET")
 }
 
 // istioConfig holds per-cluster Istio plugin config.
 type istioConfig struct {
-	PrometheusURL string `json:"prometheusUrl"`
+	// New format: structured Prometheus config
+	Prometheus prometheus.PrometheusConfig `json:"prometheus"`
+	// Legacy format (read-only, for backward compat)
+	PrometheusURL string `json:"prometheusUrl,omitempty"`
 }
 
 // GetConfig returns the per-cluster Istio config.
@@ -162,6 +153,26 @@ func (h *trafficHandler) SaveConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, cfg)
 }
 
+// DiscoverPrometheus returns discovered Prometheus instances for Istio traffic.
+func (h *trafficHandler) DiscoverPrometheus(w http.ResponseWriter, r *http.Request) {
+	clusterID := mux.Vars(r)["cluster"]
+	client, err := h.cm.GetClient(clusterID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		return
+	}
+
+	instances, err := prometheus.DiscoverInstances(r.Context(), client.Clientset)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, errMsg(err.Error()))
+		return
+	}
+	if instances == nil {
+		instances = []prometheus.PrometheusInstance{}
+	}
+	writeJSON(w, http.StatusOK, instances)
+}
+
 func (h *trafficHandler) loadConfig(ctx context.Context, clusterID string) istioConfig {
 	if h.store == nil {
 		return istioConfig{}
@@ -174,7 +185,72 @@ func (h *trafficHandler) loadConfig(ctx context.Context, clusterID string) istio
 	if err := json.Unmarshal(state.Config, &cfg); err != nil {
 		return istioConfig{}
 	}
+	// Backward compat: migrate legacy prometheusUrl to new Prometheus config
+	if cfg.Prometheus.ServiceName == "" && cfg.PrometheusURL != "" {
+		cfg.Prometheus = parseLegacyURL(cfg.PrometheusURL)
+	}
 	return cfg
+}
+
+// parseLegacyURL converts "http://name.namespace.svc:port" to PrometheusConfig.
+func parseLegacyURL(rawURL string) prometheus.PrometheusConfig {
+	// Expected format: http://servicename.namespace.svc:port
+	// Strip scheme
+	u := rawURL
+	for _, prefix := range []string{"http://", "https://"} {
+		if len(u) > len(prefix) && u[:len(prefix)] == prefix {
+			u = u[len(prefix):]
+			break
+		}
+	}
+	// Split host:port
+	host := u
+	port := 9090
+	if idx := lastIndex(u, ':'); idx >= 0 {
+		host = u[:idx]
+		if p, err := strconv.Atoi(u[idx+1:]); err == nil {
+			port = p
+		}
+	}
+	// Split name.namespace.svc
+	parts := splitN(host, '.', 3)
+	if len(parts) >= 2 {
+		return prometheus.PrometheusConfig{
+			ServiceName: parts[0],
+			Namespace:   parts[1],
+			Port:        port,
+		}
+	}
+	return prometheus.PrometheusConfig{ServiceName: host, Port: port}
+}
+
+func lastIndex(s string, b byte) int {
+	for i := len(s) - 1; i >= 0; i-- {
+		if s[i] == b {
+			return i
+		}
+	}
+	return -1
+}
+
+func splitN(s string, sep byte, n int) []string {
+	var parts []string
+	for i := 0; i < n-1; i++ {
+		idx := -1
+		for j := 0; j < len(s); j++ {
+			if s[j] == sep {
+				idx = j
+				break
+			}
+		}
+		if idx < 0 {
+			break
+		}
+		parts = append(parts, s[:idx])
+		s = s[idx+1:]
+	}
+	parts = append(parts, s)
+	return parts
 }
 
 // GetTraffic returns traffic topology when Prometheus is available, falls back to resource graph.
@@ -188,15 +264,31 @@ func (h *trafficHandler) GetTraffic(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Resolve Prometheus URL: manual override > auto-discovery
-	cfg := h.loadConfig(r.Context(), clusterID)
-	promURL := cfg.PrometheusURL
-	if promURL == "" {
-		promURL = discoverPrometheus(r.Context(), h.cm, clusterID)
+	// Get cluster client
+	client, err := h.cm.GetClient(clusterID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		return
 	}
 
-	if promURL != "" {
-		resp, err := h.buildTrafficGraph(r.Context(), promURL, namespace)
+	// Resolve Prometheus config: manual override > auto-discovery
+	cfg := h.loadConfig(r.Context(), clusterID)
+	promCfg := cfg.Prometheus
+
+	// Auto-discover if not configured
+	if promCfg.ServiceName == "" {
+		instances := discoverPrometheusInstances(r.Context(), h.cm, clusterID)
+		if len(instances) > 0 {
+			promCfg = prometheus.PrometheusConfig{
+				Namespace:   instances[0].Namespace,
+				ServiceName: instances[0].ServiceName,
+				Port:        instances[0].Port,
+			}
+		}
+	}
+
+	if promCfg.ServiceName != "" {
+		resp, err := h.buildTrafficGraph(r.Context(), client, promCfg, namespace)
 		if err != nil {
 			log.Printf("istio/traffic: prometheus query failed, falling back to resource graph: %v", err)
 		} else {
@@ -319,7 +411,7 @@ func buildResourceGraph(ctx context.Context, client *cluster.ClusterClient, name
 	return nodes, edges
 }
 
-func (h *trafficHandler) buildTrafficGraph(ctx context.Context, promURL, namespace string) (*TrafficResponse, error) {
+func (h *trafficHandler) buildTrafficGraph(ctx context.Context, client *cluster.ClusterClient, promCfg prometheus.PrometheusConfig, namespace string) (*TrafficResponse, error) {
 	// Query edge request rates
 	rateQuery := `sum(rate(istio_requests_total{reporter="source"}[5m])) by (source_workload, source_workload_namespace, destination_service, destination_service_namespace, request_protocol)`
 	if namespace != "" {
@@ -332,12 +424,12 @@ func (h *trafficHandler) buildTrafficGraph(ctx context.Context, promURL, namespa
 		errQuery = fmt.Sprintf(`sum(rate(istio_requests_total{reporter="source",response_code=~"5..",source_workload_namespace="%s"}[5m])) by (source_workload, source_workload_namespace, destination_service, destination_service_namespace)`, namespace)
 	}
 
-	rateResult, err := queryPrometheus(ctx, promURL, rateQuery)
+	rateResult, err := prometheus.Query(ctx, client.RestConfig, promCfg, rateQuery)
 	if err != nil {
 		return nil, fmt.Errorf("rate query failed: %w", err)
 	}
 
-	errResult, err := queryPrometheus(ctx, promURL, errQuery)
+	errResult, err := prometheus.Query(ctx, client.RestConfig, promCfg, errQuery)
 	if err != nil {
 		return nil, fmt.Errorf("error rate query failed: %w", err)
 	}
@@ -346,8 +438,9 @@ func (h *trafficHandler) buildTrafficGraph(ctx context.Context, promURL, namespa
 	errRates := make(map[string]float64)
 	for _, r := range errResult.Data.Result {
 		key := r.Metric["source_workload"] + "/" + r.Metric["source_workload_namespace"] + "->" + r.Metric["destination_service"] + "/" + r.Metric["destination_service_namespace"]
-		if val, ok := r.Value[1].(string); ok {
-			if f, err := strconv.ParseFloat(val, 64); err == nil {
+		var s string
+		if json.Unmarshal(r.Value[1], &s) == nil {
+			if f, err := strconv.ParseFloat(s, 64); err == nil {
 				errRates[key] = f
 			}
 		}
@@ -364,8 +457,9 @@ func (h *trafficHandler) buildTrafficGraph(ctx context.Context, promURL, namespa
 		protocol := r.Metric["request_protocol"]
 
 		var reqRate float64
-		if val, ok := r.Value[1].(string); ok {
-			reqRate, _ = strconv.ParseFloat(val, 64)
+		var s string
+		if json.Unmarshal(r.Value[1], &s) == nil {
+			reqRate, _ = strconv.ParseFloat(s, 64)
 		}
 		if reqRate < 0.001 {
 			continue
@@ -412,40 +506,4 @@ func (h *trafficHandler) buildTrafficGraph(ctx context.Context, promURL, namespa
 		Nodes: nodes,
 		Edges: edgeList,
 	}, nil
-}
-
-func queryPrometheus(ctx context.Context, promURL, query string) (*prometheusResult, error) {
-	u, err := url.Parse(promURL + "/api/v1/query")
-	if err != nil {
-		return nil, err
-	}
-	q := u.Query()
-	q.Set("query", query)
-	u.RawQuery = q.Encode()
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	resp, err := client.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("prometheus returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result prometheusResult
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode prometheus response: %w", err)
-	}
-	if result.Status != "success" {
-		return nil, fmt.Errorf("prometheus query failed: status=%s", result.Status)
-	}
-	return &result, nil
 }

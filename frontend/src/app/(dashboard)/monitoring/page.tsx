@@ -1,11 +1,18 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useClusterStore } from "@/stores/cluster";
 import { api } from "@/lib/api";
+import { PrometheusSelector } from "@/components/monitoring/prometheus-selector";
+import { MetricsOverview } from "@/components/monitoring/metrics-overview";
+import { AlertsTable } from "@/components/monitoring/alerts-table";
+import { TargetsTable } from "@/components/monitoring/targets-table";
+import { ServiceMonitorList } from "@/plugins/prometheus/service-monitors";
+import { RulesList } from "@/plugins/prometheus/rules";
 import {
   Activity,
   Cpu,
@@ -14,6 +21,10 @@ import {
   Server,
   Loader2,
   BarChart3,
+  AlertTriangle,
+  Radio,
+  FileText,
+  Eye,
 } from "lucide-react";
 
 interface PluginInfo {
@@ -22,9 +33,17 @@ interface PluginInfo {
   enabled: boolean;
 }
 
+interface PluginConfig {
+  namespace?: string;
+  serviceName?: string;
+  port?: number;
+}
+
 export default function MonitoringPage() {
   const [prometheusEnabled, setPrometheusEnabled] = useState(false);
   const [enablingPrometheus, setEnablingPrometheus] = useState(false);
+  const [hasConfig, setHasConfig] = useState(false);
+  const [configLoading, setConfigLoading] = useState(true);
   const clusters = useClusterStore((s) => s.clusters);
   const selectedCluster = useClusterStore((s) => s.selectedClusterId) ?? "";
   const setSelectedCluster = useClusterStore((s) => s.setSelectedClusterId);
@@ -46,6 +65,28 @@ export default function MonitoringPage() {
     };
     init();
   }, [fetchClusters]);
+
+  const checkConfig = useCallback(async () => {
+    if (!selectedCluster || !prometheusEnabled) {
+      setConfigLoading(false);
+      return;
+    }
+    setConfigLoading(true);
+    try {
+      const config = await api.get<PluginConfig>(
+        `/api/plugins/prometheus/${selectedCluster}/config`
+      );
+      setHasConfig(!!config.namespace && !!config.serviceName);
+    } catch {
+      setHasConfig(false);
+    } finally {
+      setConfigLoading(false);
+    }
+  }, [selectedCluster, prometheusEnabled]);
+
+  useEffect(() => {
+    checkConfig();
+  }, [checkConfig]);
 
   useEffect(() => {
     if (!selectedCluster) return;
@@ -124,111 +165,141 @@ export default function MonitoringPage() {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-sm font-medium flex items-center gap-2">
-            <Server className="h-4 w-4" /> Nodes ({nodes.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {nodes.length === 0 ? (
-            <p className="text-sm text-muted-foreground text-center py-8">
-              {selectedCluster ? "No nodes found." : "Select a cluster to view nodes."}
-            </p>
-          ) : (
-            <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-              {nodes.map((node) => {
-                const meta = node.metadata as Record<string, unknown>;
-                const status = node.status as Record<string, unknown> | undefined;
-                const conditions = status?.conditions as Array<Record<string, unknown>> | undefined;
-                const isReady = conditions?.some((c) => c.type === "Ready" && c.status === "True");
-                const capacity = status?.capacity as Record<string, string> | undefined;
-                const nodeInfo = status?.nodeInfo as Record<string, string> | undefined;
+      {prometheusEnabled && selectedCluster && !configLoading && !hasConfig && (
+        <PrometheusSelector
+          clusterId={selectedCluster}
+          pluginId="prometheus"
+          onConfigured={() => setHasConfig(true)}
+        />
+      )}
 
-                return (
-                  <Card key={String(meta.name)} className="border-border/50">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <div className="flex items-center gap-2">
-                          <div className={`h-2 w-2 rounded-full ${isReady ? "bg-emerald-500" : "bg-red-500"}`} />
-                          <span className="text-sm font-medium">{String(meta.name)}</span>
-                        </div>
-                        <Badge variant="outline" className="text-[10px]">
-                          {isReady ? "Ready" : "NotReady"}
-                        </Badge>
-                      </div>
-                      <div className="space-y-2 text-xs">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <Cpu className="h-3 w-3" /> CPU
-                          </div>
-                          <span>{capacity?.cpu ?? "-"} cores</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <MemoryStick className="h-3 w-3" /> Memory
-                          </div>
-                          <span>{capacity?.memory ?? "-"}</span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1.5 text-muted-foreground">
-                            <HardDrive className="h-3 w-3" /> Storage
-                          </div>
-                          <span>{capacity?.["ephemeral-storage"] ?? "-"}</span>
-                        </div>
-                        {nodeInfo?.kubeletVersion && (
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 text-muted-foreground">
-                              <Activity className="h-3 w-3" /> K8s
-                            </div>
-                            <span>{nodeInfo.kubeletVersion}</span>
-                          </div>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      {prometheusEnabled && hasConfig && selectedCluster && (
+        <Tabs defaultValue="overview">
+          <TabsList className="flex-wrap">
+            <TabsTrigger value="overview" className="gap-1.5">
+              <Eye className="h-3.5 w-3.5" /> Overview
+            </TabsTrigger>
+            <TabsTrigger value="service-monitors" className="gap-1.5">
+              <Activity className="h-3.5 w-3.5" /> Service Monitors
+            </TabsTrigger>
+            <TabsTrigger value="rules" className="gap-1.5">
+              <FileText className="h-3.5 w-3.5" /> Rules
+            </TabsTrigger>
+            <TabsTrigger value="alerts" className="gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5" /> Alerts
+            </TabsTrigger>
+            <TabsTrigger value="targets" className="gap-1.5">
+              <Radio className="h-3.5 w-3.5" /> Targets
+            </TabsTrigger>
+          </TabsList>
 
-      {prometheusEnabled && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm font-medium flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" /> Prometheus Metrics
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
-              {[
-                { label: "CPU Usage", icon: Cpu, color: "text-blue-500", bg: "bg-blue-500/10" },
-                { label: "Memory Usage", icon: MemoryStick, color: "text-purple-500", bg: "bg-purple-500/10" },
-                { label: "Disk Usage", icon: HardDrive, color: "text-amber-500", bg: "bg-amber-500/10" },
-              ].map((metric) => (
-                <Card key={metric.label} className="border-border/50">
+          <TabsContent value="overview" className="mt-4 space-y-6">
+            <MetricsOverview clusterId={selectedCluster} />
+            <NodesCard nodes={nodes} selectedCluster={selectedCluster} />
+          </TabsContent>
+
+          <TabsContent value="service-monitors" className="mt-4">
+            <ServiceMonitorList />
+          </TabsContent>
+
+          <TabsContent value="rules" className="mt-4">
+            <RulesList />
+          </TabsContent>
+
+          <TabsContent value="alerts" className="mt-4">
+            <AlertsTable clusterId={selectedCluster} />
+          </TabsContent>
+
+          <TabsContent value="targets" className="mt-4">
+            <TargetsTable clusterId={selectedCluster} />
+          </TabsContent>
+        </Tabs>
+      )}
+
+      {/* Show nodes when prometheus is not configured */}
+      {(!prometheusEnabled || !hasConfig || !selectedCluster) && (
+        <NodesCard nodes={nodes} selectedCluster={selectedCluster} />
+      )}
+    </div>
+  );
+}
+
+function NodesCard({
+  nodes,
+  selectedCluster,
+}: {
+  nodes: Array<Record<string, unknown>>;
+  selectedCluster: string;
+}) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="text-sm font-medium flex items-center gap-2">
+          <Server className="h-4 w-4" /> Nodes ({nodes.length})
+        </CardTitle>
+      </CardHeader>
+      <CardContent>
+        {nodes.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            {selectedCluster ? "No nodes found." : "Select a cluster to view nodes."}
+          </p>
+        ) : (
+          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
+            {nodes.map((node) => {
+              const meta = node.metadata as Record<string, unknown>;
+              const status = node.status as Record<string, unknown> | undefined;
+              const conditions = status?.conditions as Array<Record<string, unknown>> | undefined;
+              const isReady = conditions?.some((c) => c.type === "Ready" && c.status === "True");
+              const capacity = status?.capacity as Record<string, string> | undefined;
+              const nodeInfo = status?.nodeInfo as Record<string, string> | undefined;
+
+              return (
+                <Card key={String(meta.name)} className="border-border/50">
                   <CardContent className="pt-4">
-                    <div className="flex items-center gap-3">
-                      <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${metric.bg}`}>
-                        <metric.icon className={`h-5 w-5 ${metric.color}`} />
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="flex items-center gap-2">
+                        <div className={`h-2 w-2 rounded-full ${isReady ? "bg-emerald-500" : "bg-red-500"}`} />
+                        <span className="text-sm font-medium">{String(meta.name)}</span>
                       </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">{metric.label}</p>
-                        <p className="text-lg font-bold">--</p>
+                      <Badge variant="outline" className="text-[10px]">
+                        {isReady ? "Ready" : "NotReady"}
+                      </Badge>
+                    </div>
+                    <div className="space-y-2 text-xs">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <Cpu className="h-3 w-3" /> CPU
+                        </div>
+                        <span>{capacity?.cpu ?? "-"} cores</span>
                       </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <MemoryStick className="h-3 w-3" /> Memory
+                        </div>
+                        <span>{capacity?.memory ?? "-"}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-muted-foreground">
+                          <HardDrive className="h-3 w-3" /> Storage
+                        </div>
+                        <span>{capacity?.["ephemeral-storage"] ?? "-"}</span>
+                      </div>
+                      {nodeInfo?.kubeletVersion && (
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5 text-muted-foreground">
+                            <Activity className="h-3 w-3" /> K8s
+                          </div>
+                          <span>{nodeInfo.kubeletVersion}</span>
+                        </div>
+                      )}
                     </div>
                   </CardContent>
                 </Card>
-              ))}
-            </div>
-            <p className="text-xs text-muted-foreground text-center mt-4">
-              Detailed metrics available through the Prometheus plugin API endpoints.
-            </p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+              );
+            })}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }

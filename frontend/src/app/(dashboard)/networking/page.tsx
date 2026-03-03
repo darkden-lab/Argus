@@ -24,6 +24,7 @@ import { CreateNetworkPolicyWizard } from "@/components/networking/create-networ
 import { CreateGatewayWizard } from "@/components/networking/create-gateway-wizard";
 import { CreateHTTPRouteWizard } from "@/components/networking/create-httproute-wizard";
 import { PrometheusConfigDialog } from "@/components/networking/prometheus-config-dialog";
+import { PrometheusSelector } from "@/components/monitoring/prometheus-selector";
 import {
   Globe,
   ArrowRightLeft,
@@ -533,16 +534,23 @@ export default function NetworkingPage() {
           <TabsContent value="network-map" className="mt-4">
             {selectedCluster ? (
               <div className="space-y-3">
-                <div className="flex items-center justify-end">
+                <div className="flex items-center justify-end gap-2">
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setPromConfigOpen(true)}
                   >
                     <Settings className="mr-1.5 h-3.5 w-3.5" />
-                    Prometheus
+                    Prometheus (Manual)
                   </Button>
                 </div>
+                <PrometheusSelector
+                  clusterId={selectedCluster}
+                  pluginId="istio"
+                  onConfigured={() => {
+                    setPromConfigOpen(false);
+                  }}
+                />
                 <NetworkMap clusterID={selectedCluster} />
               </div>
             ) : (
