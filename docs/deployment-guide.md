@@ -91,7 +91,26 @@ Place a reverse proxy (nginx, Caddy, Traefik) in front to handle TLS termination
 - Helm 3
 - `kubectl` configured
 
-### Install
+### Install from OCI Registry (Recommended)
+
+Helm charts are published to the GitHub Container Registry on every release:
+
+```bash
+helm install argus oci://ghcr.io/darkden-lab/helm-charts/argus \
+  --version <VERSION> \
+  --namespace argus --create-namespace \
+  --set backend.env.jwtSecret="$(openssl rand -base64 48)" \
+  --set backend.env.encryptionKey="$(openssl rand -hex 32)" \
+  --set postgresql.env.password="strong-db-password" \
+  --set ingress.enabled=true \
+  --set ingress.host=argus.yourdomain.com
+```
+
+Replace `<VERSION>` with the desired release version (e.g., `1.0.0`).
+
+### Install from Local Chart
+
+If you have cloned the repository, you can install directly from the local chart:
 
 ```bash
 helm install argus deploy/helm/argus \
@@ -109,7 +128,7 @@ helm install argus deploy/helm/argus \
 
 | Value | Default | Description |
 |-------|---------|-------------|
-| `backend.image.repository` | `argus/backend` | Backend Docker image |
+| `backend.image.repository` | `ghcr.io/darkden-lab/argus-backend` | Backend Docker image |
 | `backend.image.tag` | `latest` | Image tag |
 | `backend.replicas` | `2` | Number of replicas |
 | `backend.resources.requests.cpu` | `100m` | CPU request |
@@ -128,7 +147,7 @@ helm install argus deploy/helm/argus \
 
 | Value | Default | Description |
 |-------|---------|-------------|
-| `frontend.image.repository` | `argus/frontend` | Frontend Docker image |
+| `frontend.image.repository` | `ghcr.io/darkden-lab/argus-frontend` | Frontend Docker image |
 | `frontend.image.tag` | `latest` | Image tag |
 | `frontend.replicas` | `2` | Number of replicas |
 | `frontend.env.apiUrl` | `http://argus-backend:8080` | Backend API URL (internal) |
@@ -156,6 +175,35 @@ helm install argus deploy/helm/argus \
 | `ingress.className` | `nginx` | Ingress class |
 | `ingress.host` | `argus.local` | Hostname |
 | `ingress.tls` | `[]` | TLS configuration |
+
+#### Gateway API (HTTPRoute)
+
+As an alternative to Ingress, Argus supports the Kubernetes [Gateway API](https://gateway-api.sigs.k8s.io/) via an HTTPRoute resource. This requires a Gateway API implementation (e.g., Envoy Gateway, Istio, Cilium) to be installed in your cluster.
+
+| Value | Default | Description |
+|-------|---------|-------------|
+| `gateway.enabled` | `false` | Enable HTTPRoute resource |
+| `gateway.gatewayName` | `""` | Name of the Gateway resource to attach to |
+| `gateway.gatewayNamespace` | `""` | Namespace of the Gateway (if different from release namespace) |
+| `gateway.hostname` | `argus.local` | Hostname for routing |
+| `gateway.annotations` | `{}` | Additional annotations on the HTTPRoute |
+
+When enabled, the HTTPRoute routes `/api` and `/ws` paths to the backend service (port 8080) and all other paths (`/`) to the frontend service (port 3000).
+
+**Example:**
+
+```bash
+helm install argus oci://ghcr.io/darkden-lab/helm-charts/argus \
+  --version <VERSION> \
+  --namespace argus --create-namespace \
+  --set gateway.enabled=true \
+  --set gateway.gatewayName=my-gateway \
+  --set gateway.gatewayNamespace=gateway-system \
+  --set gateway.hostname=argus.yourdomain.com \
+  --set backend.env.jwtSecret="$(openssl rand -base64 48)" \
+  --set backend.env.encryptionKey="$(openssl rand -hex 32)" \
+  --set postgresql.env.password="strong-db-password"
+```
 
 #### OIDC
 
@@ -191,11 +239,24 @@ Each plugin can be individually enabled/disabled:
 
 ### Upgrade
 
+From OCI registry:
+
+```bash
+helm upgrade argus oci://ghcr.io/darkden-lab/helm-charts/argus \
+  --version <VERSION> \
+  --namespace argus \
+  --reuse-values
+```
+
+From local chart:
+
 ```bash
 helm upgrade argus deploy/helm/argus \
   --namespace argus \
   --reuse-values
 ```
+
+> **Note:** If you previously installed from a local chart, you can upgrade to the OCI registry version seamlessly. Helm tracks releases by name, not source.
 
 ### Uninstall
 
@@ -242,6 +303,18 @@ Complete list of backend environment variables (from `backend/internal/config/co
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `NEXT_PUBLIC_API_URL` | `http://localhost:8080` | Backend API URL |
+
+---
+
+## Kubeconfig Limitations
+
+When adding clusters via kubeconfig upload, Argus does **not** support exec-based authentication plugins (e.g., `gcloud`, `aws-iam-authenticator`, `azure-kubelogin`). These tools require external binaries that are not available in the server container environment.
+
+If your kubeconfig uses exec-based auth, you will receive an error:
+
+> kubeconfig uses exec-based authentication (e.g., gcloud, aws-iam-authenticator) which is not supported in the server environment. Use the cluster agent instead
+
+**Recommended alternative:** Deploy the [Cluster Agent](cluster-agent.md) in the target cluster. The agent runs with a ServiceAccount inside the cluster and does not require a kubeconfig.
 
 ---
 

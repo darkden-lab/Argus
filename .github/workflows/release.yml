@@ -242,6 +242,17 @@ jobs:
             --app-version "$VERSION" \
             --destination ./helm-out
 
+      - name: Log in to GitHub Container Registry (OCI)
+        env:
+          HELM_REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+          HELM_REGISTRY_USER: ${{ github.actor }}
+        run: echo "$HELM_REGISTRY_PASSWORD" | helm registry login ghcr.io -u "$HELM_REGISTRY_USER" --password-stdin
+
+      - name: Push Helm charts to OCI registry
+        run: |
+          helm push helm-out/argus-${VERSION}.tgz oci://ghcr.io/darkden-lab/helm-charts/
+          helm push helm-out/argus-agent-${VERSION}.tgz oci://ghcr.io/darkden-lab/helm-charts/
+
       - name: Upload Helm chart artifacts
         uses: actions/upload-artifact@v6
         with:

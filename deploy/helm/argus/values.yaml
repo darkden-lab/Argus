@@ -75,6 +75,18 @@ ingress:
   host: argus.local
   tls: []
 
+# Gateway API (alternative to Ingress)
+gateway:
+  enabled: false
+  # Name of the Gateway resource to attach to
+  gatewayName: ""
+  # Namespace of the Gateway (if different from release namespace)
+  gatewayNamespace: ""
+  # Hostname for routing
+  hostname: argus.local
+  # Additional annotations
+  annotations: {}
+
 serviceAccount:
   create: true
   name: ""
