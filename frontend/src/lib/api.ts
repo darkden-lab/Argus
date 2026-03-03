@@ -1,6 +1,6 @@
 import { toast } from '@/stores/toast';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1000;
 

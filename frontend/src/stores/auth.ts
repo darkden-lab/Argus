@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { api } from '@/lib/api';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
 /** Sync token to both localStorage (for API calls) and cookie (for Next.js middleware). */
 function setToken(key: string, value: string) {

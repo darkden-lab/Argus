@@ -23,7 +23,7 @@ interface LogViewerProps {
   onClose?: () => void;
 }
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 const POLL_INTERVAL_MS = 3000;
 

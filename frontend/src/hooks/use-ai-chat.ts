@@ -4,7 +4,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { useAiChatStore, type ChatMessage, type PageContext, type AiStatus } from "@/stores/ai-chat";
 import { api } from "@/lib/api";
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8080";
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}` : "");
 
 interface ChatWsMessage {
   type:
