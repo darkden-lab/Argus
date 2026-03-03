@@ -133,6 +133,44 @@ users:
 	}
 }
 
+func TestBuildClient_ExecBasedAuth(t *testing.T) {
+	key := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	m := NewManager(nil, key)
+
+	kubeconfig := `
+apiVersion: v1
+kind: Config
+clusters:
+- cluster:
+    server: https://127.0.0.1:6443
+    insecure-skip-tls-verify: true
+  name: test
+contexts:
+- context:
+    cluster: test
+    user: test
+  name: test
+current-context: test
+users:
+- name: test
+  user:
+    exec:
+      apiVersion: client.authentication.k8s.io/v1beta1
+      command: gcloud
+      args:
+      - container
+      - clusters
+      - get-credentials
+`
+	_, err := m.buildClient([]byte(kubeconfig))
+	if err == nil {
+		t.Fatal("expected error for exec-based kubeconfig, got nil")
+	}
+	if !strings.Contains(err.Error(), "exec-based authentication") {
+		t.Errorf("expected error about exec-based auth, got %q", err.Error())
+	}
+}
+
 func TestHealthCheck_NoClients(t *testing.T) {
 	key := "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	m := NewManager(nil, key)

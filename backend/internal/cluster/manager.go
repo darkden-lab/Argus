@@ -68,6 +68,17 @@ func (m *Manager) AddCluster(ctx context.Context, name, apiServerURL string, kub
 	m.clients[cluster.ID] = client
 	m.mu.Unlock()
 
+	// Run immediate connectivity test
+	if _, err := client.Clientset.Discovery().ServerVersion(); err != nil {
+		log.Printf("cluster: connectivity test failed for %s: %v", cluster.ID, err)
+		cluster.Status = "unreachable"
+		_ = m.store.UpdateClusterStatus(ctx, cluster.ID, "unreachable")
+		return cluster, fmt.Errorf("cluster stored but connectivity test failed: %w", err)
+	}
+
+	_ = m.store.UpdateClusterStatus(ctx, cluster.ID, "connected")
+	cluster.Status = "connected"
+
 	return cluster, nil
 }
 
@@ -263,6 +274,10 @@ func (m *Manager) buildClient(kubeconfig []byte) (*ClusterClient, error) {
 	config, err := clientcmd.RESTConfigFromKubeConfig(kubeconfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse kubeconfig: %w", err)
+	}
+
+	if config.ExecProvider != nil {
+		return nil, fmt.Errorf("kubeconfig uses exec-based authentication (e.g., gcloud, aws-iam-authenticator) which is not supported in the server environment. Use the cluster agent instead")
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)

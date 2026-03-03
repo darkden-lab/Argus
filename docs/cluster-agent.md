@@ -54,8 +54,11 @@ The response includes:
 
 ### Step 2: Deploy with Helm
 
+**From OCI registry (recommended):**
+
 ```bash
-helm install argus-agent deploy/helm/argus-agent \
+helm install argus-agent oci://ghcr.io/darkden-lab/helm-charts/argus-agent \
+  --version <VERSION> \
   --namespace argus-system --create-namespace \
   --set dashboard.url="argus-backend.argus.svc.cluster.local:9090" \
   --set dashboard.clusterName="production" \
@@ -65,12 +68,23 @@ helm install argus-agent deploy/helm/argus-agent \
 Or with TLS:
 
 ```bash
-helm install argus-agent deploy/helm/argus-agent \
+helm install argus-agent oci://ghcr.io/darkden-lab/helm-charts/argus-agent \
+  --version <VERSION> \
   --namespace argus-system --create-namespace \
   --set dashboard.url="argus.yourdomain.com:9090" \
   --set dashboard.clusterName="production" \
   --set dashboard.token="<registration-token>" \
   --set dashboard.tlsEnabled=true
+```
+
+**From local chart (alternative):**
+
+```bash
+helm install argus-agent deploy/helm/argus-agent \
+  --namespace argus-system --create-namespace \
+  --set dashboard.url="argus-backend.argus.svc.cluster.local:9090" \
+  --set dashboard.clusterName="production" \
+  --set dashboard.token="<registration-token>"
 ```
 
 ### Step 3: One-liner Install Script
@@ -88,7 +102,7 @@ curl -sSL https://argus.yourdomain.com/api/agents/install.sh | bash -s -- \
 
 | Value | Default | Description |
 |-------|---------|-------------|
-| `image.repository` | `argus/agent` | Agent Docker image |
+| `image.repository` | `ghcr.io/darkden-lab/argus-agent` | Agent Docker image |
 | `image.tag` | `latest` | Image tag |
 | `replicas` | `1` | Number of agent replicas |
 | `dashboard.url` | `""` | gRPC endpoint of the dashboard (required) |

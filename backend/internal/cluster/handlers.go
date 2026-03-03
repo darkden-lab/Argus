@@ -55,7 +55,16 @@ func (h *Handlers) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	cluster, err := h.manager.AddCluster(r.Context(), req.Name, req.APIServerURL, []byte(req.Kubeconfig))
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "failed to add cluster")
+		log.Printf("cluster: AddCluster error: %v", err)
+		if cluster != nil {
+			// Cluster was stored but client creation or connectivity failed
+			httputil.WriteJSON(w, http.StatusCreated, map[string]interface{}{
+				"cluster": cluster,
+				"warning": err.Error(),
+			})
+			return
+		}
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
