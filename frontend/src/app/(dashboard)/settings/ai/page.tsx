@@ -28,6 +28,7 @@ import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
 
 interface AiConfig {
+  enabled: boolean;
   provider: string;
   model: string;
   api_key: string;
@@ -96,6 +97,7 @@ function entriesToHeaders(entries: HeaderEntry[]): Record<string, string> {
 
 export default function AiSettingsPage() {
   const [config, setConfig] = useState<AiConfig>({
+    enabled: false,
     provider: "claude",
     model: "claude-sonnet-4-6",
     api_key: "",
@@ -216,6 +218,23 @@ export default function AiSettingsPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="space-y-0.5">
+              <Label>Enable AI Assistant</Label>
+              <p className="text-xs text-muted-foreground">
+                Enable the AI chat assistant for all users
+              </p>
+            </div>
+            <Switch
+              checked={config.enabled}
+              onCheckedChange={(checked) =>
+                setConfig({ ...config, enabled: checked })
+              }
+            />
+          </div>
+
+          <Separator />
+
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label>Provider</Label>
