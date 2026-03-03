@@ -45,6 +45,14 @@ export function useTerminal({
   const [isConnected, setIsConnected] = useState(false);
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectDelayRef = useRef(1000);
+  const intentionalCloseRef = useRef(false);
+
+  const clusterRef = useRef(cluster);
+  const namespaceRef = useRef(namespace);
+  const modeRef = useRef(mode);
+  clusterRef.current = cluster;
+  namespaceRef.current = namespace;
+  modeRef.current = mode;
 
   const callbackRefs = useRef({ onOutput, onError, onConnected, onModeChanged });
   callbackRefs.current = { onOutput, onError, onConnected, onModeChanged };
@@ -55,17 +63,27 @@ export function useTerminal({
         ? localStorage.getItem("access_token")
         : null;
 
-    if (!token || !cluster) return;
+    if (!token || !clusterRef.current) return;
 
+    // Clear any pending reconnect timer
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+
+    // Close existing WS intentionally (skip auto-reconnect in its onclose)
     if (wsRef.current) {
+      intentionalCloseRef.current = true;
       wsRef.current.close();
     }
 
+    intentionalCloseRef.current = false;
+
     const params = new URLSearchParams({
       token,
-      cluster,
-      namespace,
-      mode,
+      cluster: clusterRef.current,
+      namespace: namespaceRef.current,
+      mode: modeRef.current,
     });
 
     const ws = new WebSocket(`${WS_URL}/ws/terminal?${params}`);
@@ -101,6 +119,10 @@ export function useTerminal({
 
     ws.onclose = () => {
       setIsConnected(false);
+
+      // Skip auto-reconnect if this WS was replaced or intentionally closed
+      if (wsRef.current !== ws || intentionalCloseRef.current) return;
+
       // Auto-reconnect with backoff
       reconnectTimerRef.current = setTimeout(() => {
         reconnectDelayRef.current = Math.min(
@@ -114,7 +136,7 @@ export function useTerminal({
     ws.onerror = () => {
       ws.close();
     };
-  }, [cluster, namespace, mode]);
+  }, []);
 
   const disconnect = useCallback(() => {
     if (reconnectTimerRef.current) {
@@ -122,6 +144,7 @@ export function useTerminal({
       reconnectTimerRef.current = null;
     }
     if (wsRef.current) {
+      intentionalCloseRef.current = true;
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -331,10 +354,12 @@ export function useTerminal({
     []
   );
 
+  // Only reconnect WebSocket when cluster changes.
+  // Namespace/mode changes are sent as in-band messages (set_context / mode).
   useEffect(() => {
     connect();
     return () => disconnect();
-  }, [connect, disconnect]);
+  }, [cluster]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return {
     isConnected,

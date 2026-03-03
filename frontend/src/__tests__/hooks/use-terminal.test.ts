@@ -22,13 +22,19 @@ class MockWebSocket {
   }
   close() {
     this.readyState = 3;
+    // Simulate async onclose like real WebSocket
+    setTimeout(() => this.onclose?.(), 0);
   }
 }
 
 let mockWsInstance: MockWebSocket;
+let wsInstanceCount = 0;
+const allWsInstances: MockWebSocket[] = [];
 
 function setMockWsInstance(instance: MockWebSocket) {
   mockWsInstance = instance;
+  wsInstanceCount++;
+  allWsInstances.push(instance);
 }
 
 // Override global WebSocket
@@ -51,11 +57,14 @@ beforeAll(() => {
 // Provide a token so the hook connects
 beforeEach(() => {
   localStorage.setItem('access_token', 'test-token');
+  wsInstanceCount = 0;
+  allWsInstances.length = 0;
 });
 
 afterEach(() => {
   localStorage.clear();
   jest.clearAllMocks();
+  jest.useRealTimers();
 });
 
 describe('handleInput - smart mode', () => {
@@ -291,5 +300,90 @@ describe('handleInput - history navigation', () => {
 
     const downOutput = writes.join('');
     expect(downOutput).toContain('bar');
+  });
+});
+
+describe('WebSocket lifecycle - regression tests', () => {
+  it('namespace change does NOT create a new WebSocket', async () => {
+    jest.useFakeTimers();
+
+    const { result, rerender } = renderHook(
+      ({ cluster, namespace, mode }: { cluster: string; namespace: string; mode: TerminalMode }) =>
+        useTerminal({ cluster, namespace, mode }),
+      { initialProps: { cluster: 'c1', namespace: 'default', mode: 'smart' as TerminalMode } }
+    );
+
+    // Let the initial WS connect
+    await act(async () => {
+      jest.runAllTimers();
+    });
+
+    const countAfterInit = wsInstanceCount;
+
+    // Change namespace — should NOT create new WS
+    rerender({ cluster: 'c1', namespace: 'kube-system', mode: 'smart' as TerminalMode });
+
+    await act(async () => {
+      jest.runAllTimers();
+    });
+
+    expect(wsInstanceCount).toBe(countAfterInit);
+    expect(result.current.isConnected).toBeDefined();
+  });
+
+  it('cluster change DOES create a new WebSocket', async () => {
+    jest.useFakeTimers();
+
+    const { rerender } = renderHook(
+      ({ cluster, namespace, mode }: { cluster: string; namespace: string; mode: TerminalMode }) =>
+        useTerminal({ cluster, namespace, mode }),
+      { initialProps: { cluster: 'c1', namespace: 'default', mode: 'smart' as TerminalMode } }
+    );
+
+    await act(async () => {
+      jest.runAllTimers();
+    });
+
+    const countAfterInit = wsInstanceCount;
+
+    // Change cluster — SHOULD create new WS
+    rerender({ cluster: 'c2', namespace: 'default', mode: 'smart' as TerminalMode });
+
+    await act(async () => {
+      jest.runAllTimers();
+    });
+
+    expect(wsInstanceCount).toBe(countAfterInit + 1);
+  });
+
+  it('intentional disconnect does NOT trigger auto-reconnect', async () => {
+    jest.useFakeTimers();
+
+    const { result } = renderHook(() =>
+      useTerminal({
+        cluster: 'c1',
+        namespace: 'default',
+        mode: 'smart' as TerminalMode,
+      })
+    );
+
+    await act(async () => {
+      jest.runAllTimers();
+    });
+
+    const countAfterInit = wsInstanceCount;
+
+    // Disconnect intentionally
+    act(() => {
+      result.current.disconnect();
+    });
+
+    // Advance timers well past any reconnect delay
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+
+    // No new WS should have been created
+    expect(wsInstanceCount).toBe(countAfterInit);
   });
 });

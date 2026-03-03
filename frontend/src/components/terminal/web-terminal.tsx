@@ -212,7 +212,6 @@ export function WebTerminal() {
   const handleClusterChange = (clusterId: string) => {
     setSelectedClusterGlobal(clusterId);
     setSelectedNamespace("default");
-    sendContextChange(clusterId, "default");
     xtermRef.current?.clear();
   };
 
