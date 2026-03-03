@@ -315,7 +315,7 @@ func main() {
 		aiIndexer.Start(ctx)
 		defer aiIndexer.Stop()
 	}
-	aiChatHandler := ai.NewChatHandler(aiService, jwtService, aiCfg)
+	aiChatHandler := ai.NewChatHandler(aiService, jwtService)
 	aiChatHandler.RegisterRoutes(r)
 
 	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard, aiService, aiProviderFactory, cfg.EncryptionKey)
