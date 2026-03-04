@@ -85,7 +85,7 @@ interface DatabaseBackupsTabProps {
   clusterId: string;
   dbName: string;
   namespace: string;
-  engine: "postgresql" | "mariadb";
+  engine: string;
   isCNPG: boolean;
   isMariaDB: boolean;
 }

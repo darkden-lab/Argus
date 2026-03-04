@@ -576,8 +576,8 @@ export default function DatabaseDetailPage() {
             dbName={dbName}
             namespace={namespace}
             engine={database.engine}
-            isCNPG={database.isCNPG}
-            isMariaDB={database.isMariaDB}
+            isCNPG={!!database.isCNPG}
+            isMariaDB={!!database.isMariaDB}
           />
         </TabsContent>
 
@@ -586,9 +586,9 @@ export default function DatabaseDetailPage() {
             clusterId={clusterId}
             dbName={dbName}
             namespace={namespace}
-            engine={database.engine}
-            isCNPG={database.isCNPG}
-            isMariaDB={database.isMariaDB}
+            isCNPG={!!database.isCNPG}
+            isMariaDB={!!database.isMariaDB}
+            cnpgCluster={cnpgCluster}
           />
         </TabsContent>
 
@@ -599,6 +599,8 @@ export default function DatabaseDetailPage() {
             namespace={namespace}
             engine={database.engine}
             services={database.services}
+            isCNPG={!!database.isCNPG}
+            cnpgCluster={cnpgCluster}
           />
         </TabsContent>
 
@@ -615,8 +617,8 @@ export default function DatabaseDetailPage() {
             clusterId={clusterId}
             dbName={dbName}
             namespace={namespace}
-            engine={database.engine}
-            isCNPG={database.isCNPG}
+            isCNPG={!!database.isCNPG}
+            cnpgCluster={cnpgCluster}
           />
         </TabsContent>
       </Tabs>
