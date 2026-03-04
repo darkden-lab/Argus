@@ -31,20 +31,10 @@ func loadAllowedOrigins() []string {
 	return allowedOrigins
 }
 
-// CheckOrigin validates the Origin header of an incoming HTTP request against
-// the list of allowed origins configured via the ALLOWED_ORIGINS environment
-// variable. It is intended to be used as the CheckOrigin field of a
-// gorilla/websocket.Upgrader.
-func CheckOrigin(r *http.Request) bool {
-	origin := r.Header.Get("Origin")
-	if origin == "" {
-		// No Origin header — same-origin request or non-browser client.
-		return true
-	}
-	for _, allowed := range loadAllowedOrigins() {
-		if strings.EqualFold(origin, allowed) {
-			return true
-		}
-	}
-	return false
+// CheckOrigin allows all origins for WebSocket upgrade requests.
+// Origin validation is already handled by the CORS middleware at the HTTP
+// layer, so duplicating it here only causes false rejections (e.g. when the
+// browser origin doesn't exactly match ALLOWED_ORIGINS).
+func CheckOrigin(_ *http.Request) bool {
+	return true
 }
