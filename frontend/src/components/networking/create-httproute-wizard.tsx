@@ -31,6 +31,8 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
+import { ManifestPreview } from "@/components/ui/manifest-preview";
+import { InlineResourceCreator } from "@/components/ui/inline-resource-creator";
 
 interface CreateHTTPRouteWizardProps {
   open: boolean;
@@ -210,28 +212,10 @@ export function CreateHTTPRouteWizard({
   const [loadingNamespaces, setLoadingNamespaces] = useState(false);
   const [loadingGateways, setLoadingGateways] = useState(false);
   const [loadingServices, setLoadingServices] = useState(false);
+  const [showInlineGateway, setShowInlineGateway] = useState(false);
+  const [gatewayRefreshKey, setGatewayRefreshKey] = useState(0);
 
-  useEffect(() => {
-    if (!open) return;
-
-    setLoadingNamespaces(true);
-    api
-      .get<{ items: Array<{ metadata: { name: string } }> }>(
-        `/api/clusters/${clusterId}/resources/_/v1/namespaces`
-      )
-      .then((data) => {
-        setNamespaceOptions(
-          (data.items || []).map((item) => ({
-            value: item.metadata.name,
-            label: item.metadata.name,
-          }))
-        );
-      })
-      .catch(() => {
-        setNamespaceOptions([]);
-      })
-      .finally(() => setLoadingNamespaces(false));
-
+  function fetchGateways() {
     setLoadingGateways(true);
     api
       .get<{
@@ -254,6 +238,30 @@ export function CreateHTTPRouteWizard({
         setGatewayOptions([]);
       })
       .finally(() => setLoadingGateways(false));
+  }
+
+  useEffect(() => {
+    if (!open) return;
+
+    setLoadingNamespaces(true);
+    api
+      .get<{ items: Array<{ metadata: { name: string } }> }>(
+        `/api/clusters/${clusterId}/resources/_/v1/namespaces`
+      )
+      .then((data) => {
+        setNamespaceOptions(
+          (data.items || []).map((item) => ({
+            value: item.metadata.name,
+            label: item.metadata.name,
+          }))
+        );
+      })
+      .catch(() => {
+        setNamespaceOptions([]);
+      })
+      .finally(() => setLoadingNamespaces(false));
+
+    fetchGateways();
 
     setLoadingServices(true);
     api
@@ -275,7 +283,8 @@ export function CreateHTTPRouteWizard({
         setServiceOptions([]);
       })
       .finally(() => setLoadingServices(false));
-  }, [open, clusterId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, clusterId, gatewayRefreshKey]);
 
   const filteredServiceOptions = serviceOptions.filter(
     (s) =>
@@ -422,9 +431,6 @@ export function CreateHTTPRouteWizard({
       setSubmitting(false);
     }
   }
-
-  const manifest = buildManifest(form);
-  const jsonPreview = JSON.stringify(manifest, null, 2);
 
   return (
     <Dialog
@@ -606,6 +612,8 @@ export function CreateHTTPRouteWizard({
                       searchPlaceholder="Search gateways..."
                       loading={loadingGateways}
                       allowCustomValue
+                      onCreateNew={() => setShowInlineGateway(true)}
+                      createNewLabel="Create new Gateway..."
                     />
                   </div>
 
@@ -1006,11 +1014,9 @@ export function CreateHTTPRouteWizard({
 
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">
-                Generated Manifest (JSON)
+                Generated Manifest
               </Label>
-              <pre className="rounded-md bg-muted p-3 text-xs font-mono overflow-auto max-h-[300px] whitespace-pre-wrap">
-                {jsonPreview}
-              </pre>
+              <ManifestPreview manifest={buildManifest(form)} maxHeight="400px" />
             </div>
           </div>
         )}
@@ -1050,6 +1056,57 @@ export function CreateHTTPRouteWizard({
             </Button>
           )}
         </div>
+        {showInlineGateway && (
+          <InlineResourceCreator
+            open={showInlineGateway}
+            onOpenChange={setShowInlineGateway}
+            title="Create Gateway"
+          >
+            <div className="space-y-4 p-4">
+              <p className="text-sm text-muted-foreground">
+                Create a new Gateway resource. After creation, it will appear in the gateway selector.
+              </p>
+              <div className="space-y-2">
+                <Label>Gateway Name</Label>
+                <Input placeholder="my-gateway" id="inline-gw-name" />
+              </div>
+              <div className="space-y-2">
+                <Label>Gateway Class</Label>
+                <Input placeholder="istio" id="inline-gw-class" defaultValue="istio" />
+              </div>
+              <div className="space-y-2">
+                <Label>Port</Label>
+                <Input type="number" placeholder="80" id="inline-gw-port" defaultValue="80" />
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button variant="outline" onClick={() => setShowInlineGateway(false)}>Cancel</Button>
+                <Button onClick={async () => {
+                  const name = (document.getElementById("inline-gw-name") as HTMLInputElement)?.value;
+                  const gwClass = (document.getElementById("inline-gw-class") as HTMLInputElement)?.value || "istio";
+                  const port = parseInt((document.getElementById("inline-gw-port") as HTMLInputElement)?.value || "80");
+                  if (!name) { toast("Name required", { variant: "error" }); return; }
+                  try {
+                    const ns = form.namespace || "default";
+                    await api.post(`/api/clusters/${clusterId}/resources/gateway.networking.k8s.io/v1/gateways?namespace=${ns}`, {
+                      apiVersion: "gateway.networking.k8s.io/v1",
+                      kind: "Gateway",
+                      metadata: { name, namespace: ns },
+                      spec: {
+                        gatewayClassName: gwClass,
+                        listeners: [{ name: "http", port, protocol: "HTTP", allowedRoutes: { namespaces: { from: "Same" } } }]
+                      }
+                    });
+                    toast("Gateway created", { variant: "success" });
+                    setShowInlineGateway(false);
+                    setGatewayRefreshKey((k) => k + 1);
+                  } catch (err) {
+                    toast("Failed to create gateway", { description: String(err), variant: "error" });
+                  }
+                }}>Create Gateway</Button>
+              </div>
+            </div>
+          </InlineResourceCreator>
+        )}
       </DialogContent>
     </Dialog>
   );
