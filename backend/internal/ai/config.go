@@ -19,17 +19,27 @@ const (
 	ProviderOllama ProviderType = "ollama"
 )
 
+// ToolPermissionLevel controls which tools the AI assistant can use.
+type ToolPermissionLevel string
+
+const (
+	ToolsDisabled ToolPermissionLevel = "disabled"
+	ToolsReadOnly ToolPermissionLevel = "read_only"
+	ToolsAll      ToolPermissionLevel = "all"
+)
+
 // AIConfig holds the configuration for the AI subsystem.
 type AIConfig struct {
-	Provider      ProviderType      `json:"provider"`
-	APIKey        string            `json:"api_key,omitempty"`
-	Model         string            `json:"model"`
-	BaseURL       string            `json:"base_url,omitempty"` // For Ollama or custom endpoints
-	EmbedModel    string            `json:"embed_model,omitempty"`
-	MaxTokens     int               `json:"max_tokens"`
-	Temperature   float64           `json:"temperature"`
-	Enabled       bool              `json:"enabled"`
-	CustomHeaders map[string]string `json:"custom_headers,omitempty"`
+	Provider            ProviderType        `json:"provider"`
+	APIKey              string              `json:"api_key,omitempty"`
+	Model               string              `json:"model"`
+	BaseURL             string              `json:"base_url,omitempty"` // For Ollama or custom endpoints
+	EmbedModel          string              `json:"embed_model,omitempty"`
+	MaxTokens           int                 `json:"max_tokens"`
+	Temperature         float64             `json:"temperature"`
+	Enabled             bool                `json:"enabled"`
+	ToolPermissionLevel ToolPermissionLevel `json:"tool_permission_level"`
+	CustomHeaders       map[string]string   `json:"custom_headers,omitempty"`
 }
 
 // DefaultConfig returns sensible defaults for AI configuration.
@@ -40,7 +50,8 @@ func DefaultConfig() AIConfig {
 		EmbedModel:  "text-embedding-3-small",
 		MaxTokens:   4096,
 		Temperature: 0.1,
-		Enabled:     false,
+		Enabled:             false,
+		ToolPermissionLevel: ToolsAll,
 	}
 }
 
@@ -89,9 +100,9 @@ func LoadConfigFromDB(ctx context.Context, pool *pgxpool.Pool, fallback AIConfig
 	var headersJSON []byte
 	var encAPIKey []byte
 	err := pool.QueryRow(ctx,
-		`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled, COALESCE(custom_headers, '{}'), encrypted_api_key
+		`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled, tool_permission_level, COALESCE(custom_headers, '{}'), encrypted_api_key
 		 FROM ai_config LIMIT 1`,
-	).Scan(&dbCfg.Provider, &dbCfg.Model, &dbCfg.EmbedModel, &dbCfg.BaseURL, &dbCfg.MaxTokens, &dbCfg.Temperature, &dbCfg.Enabled, &headersJSON, &encAPIKey)
+	).Scan(&dbCfg.Provider, &dbCfg.Model, &dbCfg.EmbedModel, &dbCfg.BaseURL, &dbCfg.MaxTokens, &dbCfg.Temperature, &dbCfg.Enabled, &dbCfg.ToolPermissionLevel, &headersJSON, &encAPIKey)
 	if err != nil {
 		return fallback
 	}

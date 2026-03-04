@@ -1,13 +1,14 @@
 package ai
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
 
 func TestBuildSystemPrompt_NoContext(t *testing.T) {
 	s := &Service{config: DefaultConfig()}
-	prompt := s.buildSystemPrompt(ChatContext{})
+	prompt := s.buildSystemPrompt(context.Background(), "", ChatContext{})
 
 	if !strings.Contains(prompt, "Kubernetes assistant") {
 		t.Error("expected system prompt to contain 'Kubernetes assistant'")
@@ -19,7 +20,7 @@ func TestBuildSystemPrompt_NoContext(t *testing.T) {
 
 func TestBuildSystemPrompt_WithContext(t *testing.T) {
 	s := &Service{config: DefaultConfig()}
-	prompt := s.buildSystemPrompt(ChatContext{
+	prompt := s.buildSystemPrompt(context.Background(), "", ChatContext{
 		ClusterID: "cluster-1",
 		Namespace: "production",
 		Resource:  "deployments",

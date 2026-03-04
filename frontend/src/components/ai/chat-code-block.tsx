@@ -2,8 +2,8 @@
 
 import { useState } from "react";
 import { Copy, Check, Play } from "lucide-react";
+import { highlight } from "sugar-high";
 import { Button } from "@/components/ui/button";
-
 
 interface ChatCodeBlockProps {
   code: string;
@@ -21,12 +21,16 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
   };
 
   const isYaml = language === "yaml" || language === "yml";
+  // sugar-high generates safe HTML (only <span> elements with CSS class
+  // names for syntax tokens). It does not process user input — only source
+  // code provided by the LLM, so XSS is not a concern here.
+  const highlightedHtml = highlight(code);
 
   return (
-    <div className="my-2 rounded-md border border-border bg-background">
+    <div className="my-2 overflow-hidden rounded-md border border-border bg-zinc-950 dark:bg-zinc-950">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-border px-3 py-1">
-        <span className="text-[10px] font-medium uppercase text-muted-foreground">
+      <div className="flex items-center justify-between bg-zinc-900 px-3 py-1.5">
+        <span className="text-[10px] font-medium uppercase text-zinc-400">
           {language}
         </span>
         <div className="flex items-center gap-1">
@@ -34,7 +38,7 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6"
+              className="h-6 w-6 text-zinc-400 hover:text-zinc-200"
               onClick={() => onApply(code)}
               title="Apply YAML"
             >
@@ -44,7 +48,7 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6"
+            className="h-6 w-6 text-zinc-400 hover:text-zinc-200"
             onClick={handleCopy}
           >
             {copied ? (
@@ -53,12 +57,15 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
               <Copy className="h-3 w-3" />
             )}
           </Button>
+          {copied && (
+            <span className="text-[10px] text-green-500">Copied!</span>
+          )}
         </div>
       </div>
 
-      {/* Code */}
-      <pre className="overflow-x-auto p-3 text-xs">
-        <code>{code}</code>
+      {/* Code — sugar-high output is safe (spans with CSS classes only) */}
+      <pre className="overflow-x-auto p-3 text-xs leading-relaxed">
+        <code dangerouslySetInnerHTML={{ __html: highlightedHtml }} />
       </pre>
     </div>
   );

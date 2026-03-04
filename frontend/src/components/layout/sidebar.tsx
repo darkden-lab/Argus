@@ -42,7 +42,6 @@ import {
 import { useUIStore } from "@/stores/ui";
 import { useAuthStore } from "@/stores/auth";
 import { usePluginStore } from "@/stores/plugins";
-import { useAiChatStore } from "@/stores/ai-chat";
 import { useClusterStore } from "@/stores/cluster";
 import type { LucideIcon } from "lucide-react";
 
@@ -111,7 +110,6 @@ export function Sidebar() {
   const pathname = usePathname();
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
-  const openAiChat = useAiChatStore((s) => s.open);
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const fetchPlugins = usePluginStore((s) => s.fetchPlugins);
@@ -228,26 +226,12 @@ export function Sidebar() {
                   collapsed={collapsed}
                 />
               ))}
-              {/* AI Assistant (action, not a route) */}
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={openAiChat}
-                    aria-label="AI Assistant"
-                    className={cn(
-                      "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-                      "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground",
-                      collapsed && "justify-center px-0"
-                    )}
-                  >
-                    <Sparkles className="h-4 w-4 shrink-0" />
-                    {!collapsed && <span>AI Assistant</span>}
-                  </button>
-                </TooltipTrigger>
-                {collapsed && (
-                  <TooltipContent side="right">AI Assistant</TooltipContent>
-                )}
-              </Tooltip>
+              {/* AI Assistant */}
+              <SidebarItem
+                item={{ label: "AI Assistant", href: "/chat", icon: Sparkles }}
+                isActive={pathname === "/chat"}
+                collapsed={collapsed}
+              />
             </div>
           </div>
 

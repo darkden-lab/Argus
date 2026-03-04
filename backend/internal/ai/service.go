@@ -9,6 +9,7 @@ import (
 	"github.com/darkden-lab/argus/backend/internal/ai/rag"
 	"github.com/darkden-lab/argus/backend/internal/ai/tools"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/plugin"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -30,13 +31,15 @@ Current context is provided by the user's active page in the dashboard.`
 // Service orchestrates the AI chat pipeline: RAG retrieval, LLM calls, and
 // tool execution.
 type Service struct {
-	mu         sync.RWMutex
-	provider   LLMProvider
-	retriever  *rag.Retriever
-	executor   *tools.Executor
-	confirmMgr *tools.ConfirmationManager
-	pool       *pgxpool.Pool
-	config     AIConfig
+	mu          sync.RWMutex
+	provider    LLMProvider
+	retriever   *rag.Retriever
+	executor    *tools.Executor
+	confirmMgr  *tools.ConfirmationManager
+	pool        *pgxpool.Pool
+	config      AIConfig
+	memoryStore *MemoryStore
+	agentStore  *AgentStore
 }
 
 // NewService creates a new AI service orchestrator.
@@ -44,16 +47,19 @@ func NewService(
 	provider LLMProvider,
 	retriever *rag.Retriever,
 	clusterMgr *cluster.Manager,
+	pluginEngine *plugin.Engine,
 	pool *pgxpool.Pool,
 	config AIConfig,
+	memoryStore *MemoryStore,
 ) *Service {
 	return &Service{
-		provider:   provider,
-		retriever:  retriever,
-		executor:   tools.NewExecutor(clusterMgr),
-		confirmMgr: tools.NewConfirmationManager(),
-		pool:       pool,
-		config:     config,
+		provider:    provider,
+		retriever:   retriever,
+		executor:    tools.NewExecutor(clusterMgr, pluginEngine, pool),
+		confirmMgr:  tools.NewConfirmationManager(),
+		pool:        pool,
+		config:      config,
+		memoryStore: memoryStore,
 	}
 }
 
@@ -61,6 +67,16 @@ func NewService(
 // This breaks a circular dependency: Service → Embedder → Service.
 func (s *Service) SetRetriever(r *rag.Retriever) {
 	s.retriever = r
+}
+
+// SetAgentStore sets the agent store after construction.
+func (s *Service) SetAgentStore(store *AgentStore) {
+	s.agentStore = store
+}
+
+// GetAgentStore returns the agent store (used by handlers for agent lookup).
+func (s *Service) GetAgentStore() *AgentStore {
+	return s.agentStore
 }
 
 // UpdateProvider swaps the active LLM provider and config at runtime.
@@ -103,11 +119,11 @@ func (s *Service) ProcessMessage(ctx context.Context, userID string, conversatio
 
 	// Build messages
 	messages := []Message{
-		{Role: RoleSystem, Content: s.buildSystemPrompt(pageCtx)},
+		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
 	}
 
-	// Load conversation history from DB
-	history, err := s.loadHistory(ctx, conversationID)
+	// Load conversation history (with summarization for long conversations)
+	history, err := s.getHistoryWithSummary(ctx, conversationID)
 	if err != nil {
 		log.Printf("ai service: failed to load history: %v", err)
 		// Continue without history
@@ -134,8 +150,8 @@ func (s *Service) ProcessMessage(ctx context.Context, userID string, conversatio
 		Content: userMessage,
 	})
 
-	// Call LLM with tools
-	allTools := tools.AllTools()
+	// Call LLM with tools based on permission level
+	allTools := tools.ToolsForLevel(string(cfg.ToolPermissionLevel))
 	req := ChatRequest{
 		Messages:    messages,
 		Tools:       allTools,
@@ -210,10 +226,10 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 	}
 
 	messages := []Message{
-		{Role: RoleSystem, Content: s.buildSystemPrompt(pageCtx)},
+		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
 	}
 
-	history, _ := s.loadHistory(ctx, conversationID)
+	history, _ := s.getHistoryWithSummary(ctx, conversationID)
 	messages = append(messages, history...)
 
 	if s.retriever != nil {
@@ -228,9 +244,10 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 
 	messages = append(messages, Message{Role: RoleUser, Content: userMessage})
 
+	toolDefs := tools.ToolsForLevel(string(cfg.ToolPermissionLevel))
 	req := ChatRequest{
 		Messages:    messages,
-		Tools:       tools.AllTools(),
+		Tools:       toolDefs,
 		MaxTokens:   cfg.MaxTokens,
 		Temperature: cfg.Temperature,
 		Stream:      true,
@@ -239,12 +256,77 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 	return provider.ChatStream(ctx, req)
 }
 
+// ExecuteToolsAndRespond handles the tool-call loop for streaming: it rebuilds
+// the conversation, executes the accumulated tool calls, and re-invokes the LLM
+// to produce a final text response.
+func (s *Service) ExecuteToolsAndRespond(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext, assistantContent string, toolCalls []ToolCall) (*ChatResponse, error) {
+	provider, cfg := s.Snapshot()
+
+	// Rebuild messages (same as ProcessMessageStream)
+	messages := []Message{
+		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
+	}
+	history, _ := s.getHistoryWithSummary(ctx, conversationID)
+	messages = append(messages, history...)
+
+	if s.retriever != nil {
+		ragResults, _ := s.retriever.RetrieveContext(ctx, userMessage, "")
+		if len(ragResults) > 0 {
+			messages = append(messages, Message{
+				Role:    RoleSystem,
+				Content: "Relevant context:\n\n" + rag.FormatContext(ragResults),
+			})
+		}
+	}
+
+	messages = append(messages, Message{Role: RoleUser, Content: userMessage})
+
+	// Add assistant message with tool calls
+	messages = append(messages, Message{
+		Role:      RoleAssistant,
+		Content:   assistantContent,
+		ToolCalls: toolCalls,
+	})
+
+	allTools := tools.ToolsForLevel(string(cfg.ToolPermissionLevel))
+
+	// Execute each tool
+	for _, call := range toolCalls {
+		if tools.RequiresConfirm(call.Name) {
+			status, err := s.confirmMgr.RequestConfirmation(ctx, userID, call)
+			if err != nil || status != tools.ConfirmationApproved {
+				messages = append(messages, Message{
+					Role:       RoleTool,
+					Content:    "Action cancelled by user or timed out.",
+					ToolCallID: call.ID,
+				})
+				continue
+			}
+		}
+		result := s.executor.Execute(ctx, call)
+		messages = append(messages, Message{
+			Role:       RoleTool,
+			Content:    result.Content,
+			ToolCallID: call.ID,
+		})
+	}
+
+	req := ChatRequest{
+		Messages:    messages,
+		Tools:       allTools,
+		MaxTokens:   cfg.MaxTokens,
+		Temperature: cfg.Temperature,
+	}
+
+	return provider.Chat(ctx, req)
+}
+
 // GetConfirmationManager returns the confirmation manager for WebSocket handlers.
 func (s *Service) GetConfirmationManager() *tools.ConfirmationManager {
 	return s.confirmMgr
 }
 
-func (s *Service) buildSystemPrompt(pageCtx ChatContext) string {
+func (s *Service) buildSystemPrompt(ctx context.Context, userID string, pageCtx ChatContext) string {
 	prompt := systemPrompt
 	if pageCtx.ClusterID != "" {
 		prompt += fmt.Sprintf("\n\nUser's current context:\n- Cluster: %s", pageCtx.ClusterID)
@@ -258,12 +340,277 @@ func (s *Service) buildSystemPrompt(pageCtx ChatContext) string {
 			}
 		}
 	}
+
+	// Inject user memories
+	if s.memoryStore != nil && userID != "" {
+		memoryText, err := s.memoryStore.LoadForPrompt(ctx, userID)
+		if err != nil {
+			log.Printf("ai service: failed to load memories: %v", err)
+		} else if memoryText != "" {
+			prompt += memoryText
+		}
+	}
+
 	return prompt
+}
+
+// BuildAgentSystemPrompt returns the system prompt for the given agent,
+// augmented with page context and user memories.
+func (s *Service) BuildAgentSystemPrompt(ctx context.Context, userID string, agent *Agent, pageCtx ChatContext) string {
+	prompt := agent.SystemPrompt
+
+	if pageCtx.ClusterID != "" {
+		prompt += fmt.Sprintf("\n\nUser's current context:\n- Cluster: %s", pageCtx.ClusterID)
+		if pageCtx.Namespace != "" {
+			prompt += fmt.Sprintf("\n- Namespace: %s", pageCtx.Namespace)
+		}
+		if pageCtx.Resource != "" {
+			prompt += fmt.Sprintf("\n- Viewing: %s", pageCtx.Resource)
+			if pageCtx.Name != "" {
+				prompt += fmt.Sprintf("/%s", pageCtx.Name)
+			}
+		}
+	}
+
+	if s.memoryStore != nil && userID != "" {
+		memoryText, err := s.memoryStore.LoadForPrompt(ctx, userID)
+		if err != nil {
+			log.Printf("ai service: failed to load memories for agent: %v", err)
+		} else if memoryText != "" {
+			prompt += memoryText
+		}
+	}
+
+	return prompt
+}
+
+// ResolveAgentTools returns the tools available for an agent, intersecting the agent's
+// allowed tools with the global permission level. Never escalates beyond global config.
+func (s *Service) ResolveAgentTools(agent *Agent) []Tool {
+	_, cfg := s.Snapshot()
+
+	// Determine effective permission level: min of agent level and global level
+	globalLevel := string(cfg.ToolPermissionLevel)
+	agentLevel := agent.ToolPermissionLevel
+	if agentLevel == "" {
+		agentLevel = globalLevel
+	}
+
+	// Never escalate: if global is read_only, agent cannot be "all"
+	effectiveLevel := agentLevel
+	if globalLevel == "disabled" {
+		effectiveLevel = "disabled"
+	} else if globalLevel == "read_only" && agentLevel == "all" {
+		effectiveLevel = "read_only"
+	}
+
+	allTools := tools.ToolsForLevel(effectiveLevel)
+	if len(agent.AllowedTools) == 0 {
+		return allTools
+	}
+
+	allowed := make(map[string]bool, len(agent.AllowedTools))
+	for _, t := range agent.AllowedTools {
+		allowed[t] = true
+	}
+
+	var filtered []Tool
+	for _, t := range allTools {
+		if allowed[t.Name] {
+			filtered = append(filtered, t)
+		}
+	}
+	return filtered
 }
 
 // LoadHistory returns the conversation history for the given conversation ID.
 func (s *Service) LoadHistory(ctx context.Context, conversationID string) ([]Message, error) {
 	return s.loadHistory(ctx, conversationID)
+}
+
+// getHistoryWithSummary returns conversation history with summarization for long conversations.
+// When there are more than 50 messages and more than 20 unsummarized, it triggers summarization.
+// Returns: [summary as system message] + [last 20 messages verbatim].
+func (s *Service) getHistoryWithSummary(ctx context.Context, conversationID string) ([]Message, error) {
+	if s.pool == nil || conversationID == "" {
+		return nil, nil
+	}
+
+	// Count total messages
+	var totalCount int
+	err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM ai_messages WHERE conversation_id = $1`,
+		conversationID,
+	).Scan(&totalCount)
+	if err != nil || totalCount <= 50 {
+		// Not enough messages to warrant summarization, return normal history
+		return s.loadHistory(ctx, conversationID)
+	}
+
+	// Check if we have an existing summary
+	var summary *string
+	var summarizedUpTo *string
+	err = s.pool.QueryRow(ctx,
+		`SELECT summary, summarized_up_to::text FROM ai_conversations WHERE id = $1`,
+		conversationID,
+	).Scan(&summary, &summarizedUpTo)
+	if err != nil {
+		return s.loadHistory(ctx, conversationID)
+	}
+
+	// Count unsummarized messages
+	var unsummarizedCount int
+	if summarizedUpTo != nil && *summarizedUpTo != "" {
+		err = s.pool.QueryRow(ctx,
+			`SELECT COUNT(*) FROM ai_messages WHERE conversation_id = $1 AND created_at > (SELECT created_at FROM ai_messages WHERE id = $2)`,
+			conversationID, *summarizedUpTo,
+		).Scan(&unsummarizedCount)
+	} else {
+		unsummarizedCount = totalCount
+	}
+	if err != nil {
+		return s.loadHistory(ctx, conversationID)
+	}
+
+	// If we have enough unsummarized messages, trigger summarization
+	if unsummarizedCount > 20 {
+		s.triggerSummarization(ctx, conversationID)
+	}
+
+	// Build the response: summary + last 20 messages
+	var messages []Message
+
+	// Re-read summary (may have been updated by summarization)
+	err = s.pool.QueryRow(ctx,
+		`SELECT summary FROM ai_conversations WHERE id = $1`,
+		conversationID,
+	).Scan(&summary)
+	if err == nil && summary != nil && *summary != "" {
+		messages = append(messages, Message{
+			Role:    RoleSystem,
+			Content: "Previous conversation summary:\n" + *summary,
+		})
+	}
+
+	// Load last 20 messages
+	rows, err := s.pool.Query(ctx,
+		`SELECT role, content, tool_calls, tool_call_id
+		 FROM ai_messages
+		 WHERE conversation_id = $1
+		 ORDER BY created_at DESC
+		 LIMIT 20`,
+		conversationID,
+	)
+	if err != nil {
+		return messages, nil
+	}
+	defer rows.Close()
+
+	var recent []Message
+	for rows.Next() {
+		var m Message
+		var roleStr string
+		var toolCallsJSON *[]byte
+		var toolCallID *string
+
+		if err := rows.Scan(&roleStr, &m.Content, &toolCallsJSON, &toolCallID); err != nil {
+			continue
+		}
+		m.Role = Role(roleStr)
+		if toolCallID != nil {
+			m.ToolCallID = *toolCallID
+		}
+		recent = append(recent, m)
+	}
+
+	// Reverse to get chronological order
+	for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
+		recent[i], recent[j] = recent[j], recent[i]
+	}
+
+	messages = append(messages, recent...)
+	return messages, nil
+}
+
+// triggerSummarization summarizes older messages and stores the summary.
+func (s *Service) triggerSummarization(ctx context.Context, conversationID string) {
+	provider, cfg := s.Snapshot()
+	if provider == nil {
+		return
+	}
+
+	// Load all messages except the last 20
+	rows, err := s.pool.Query(ctx,
+		`SELECT role, content FROM ai_messages
+		 WHERE conversation_id = $1
+		 ORDER BY created_at ASC`,
+		conversationID,
+	)
+	if err != nil {
+		log.Printf("ai service: summarization query failed: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	var allMessages []Message
+	var lastMsgID string
+	for rows.Next() {
+		var m Message
+		var roleStr string
+		if err := rows.Scan(&roleStr, &m.Content); err != nil {
+			continue
+		}
+		m.Role = Role(roleStr)
+		allMessages = append(allMessages, m)
+	}
+
+	if len(allMessages) <= 20 {
+		return
+	}
+
+	// Get the ID of the message up to which we summarize
+	err = s.pool.QueryRow(ctx,
+		`SELECT id FROM ai_messages
+		 WHERE conversation_id = $1
+		 ORDER BY created_at DESC
+		 OFFSET 19 LIMIT 1`,
+		conversationID,
+	).Scan(&lastMsgID)
+	if err != nil {
+		log.Printf("ai service: failed to get summarization boundary: %v", err)
+		return
+	}
+
+	// Summarize the older messages
+	toSummarize := allMessages[:len(allMessages)-20]
+	var contentBuf string
+	for _, m := range toSummarize {
+		contentBuf += fmt.Sprintf("[%s]: %s\n", m.Role, m.Content)
+	}
+
+	summaryReq := ChatRequest{
+		Messages: []Message{
+			{Role: RoleSystem, Content: "Summarize this conversation concisely, preserving key facts, decisions, and context. Output only the summary."},
+			{Role: RoleUser, Content: contentBuf},
+		},
+		MaxTokens:   cfg.MaxTokens,
+		Temperature: 0,
+	}
+
+	resp, err := provider.Chat(ctx, summaryReq)
+	if err != nil {
+		log.Printf("ai service: summarization LLM call failed: %v", err)
+		return
+	}
+
+	// Store summary
+	_, err = s.pool.Exec(ctx,
+		`UPDATE ai_conversations SET summary = $1, summarized_up_to = $2 WHERE id = $3`,
+		resp.Message.Content, lastMsgID, conversationID,
+	)
+	if err != nil {
+		log.Printf("ai service: failed to store summary: %v", err)
+	}
 }
 
 func (s *Service) loadHistory(ctx context.Context, conversationID string) ([]Message, error) {

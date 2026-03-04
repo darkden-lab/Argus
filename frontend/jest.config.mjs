@@ -14,6 +14,9 @@ const config = {
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^react-markdown$': '<rootDir>/src/__tests__/__mocks__/react-markdown.tsx',
+    '^remark-gfm$': '<rootDir>/src/__tests__/__mocks__/remark-gfm.ts',
+    '^sugar-high$': '<rootDir>/src/__tests__/__mocks__/sugar-high.ts',
   },
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   collectCoverageFrom: [

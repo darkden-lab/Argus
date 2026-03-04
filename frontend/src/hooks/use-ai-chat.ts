@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useAiChatStore, type ChatMessage, type PageContext, type AiStatus } from "@/stores/ai-chat";
+import { useAiChatStore, type ChatMessage, type PageContext, type AiStatus, type Agent } from "@/stores/ai-chat";
 import { api } from "@/lib/api";
 import { WS_URL } from "@/lib/ws";
 
@@ -11,12 +11,14 @@ interface ChatWsMessage {
     | "confirm_action"
     | "new_conversation"
     | "load_history"
-    | "context_update";
+    | "context_update"
+    | "select_agent";
   content?: string;
   conversation_id?: string;
   confirmation_id?: string;
   approved?: boolean;
   context?: PageContext;
+  agent_id?: string | null;
 }
 
 interface ChatServerMessage {
@@ -30,6 +32,10 @@ interface ChatServerMessage {
     | "history"
     | "history_message"
     | "history_end"
+    | "task_created"
+    | "task_progress"
+    | "task_completed"
+    | "task_failed"
     | "error";
   content?: string;
   role?: string;
@@ -40,6 +46,13 @@ interface ChatServerMessage {
   title?: string;
   messages?: ChatMessage[];
   error?: string;
+  task_id?: string;
+  agent_id?: string;
+  progress?: number;
+  current_step?: string;
+  total_steps?: number;
+  completed_steps?: number;
+  result?: string;
 }
 
 export function useAiChat() {
@@ -49,6 +62,7 @@ export function useAiChat() {
 
   const {
     isOpen,
+    isFullPage,
     pageContext,
     addMessage,
     appendToMessage,
@@ -61,6 +75,10 @@ export function useAiChat() {
     setAiStatus,
     setConnectionState,
     setConnectionError,
+    setAgents,
+    setTasks,
+    updateTask,
+    setActiveAgent,
   } = useAiChatStore();
 
   const storeRef = useRef({
@@ -75,6 +93,10 @@ export function useAiChat() {
     setAiStatus,
     setConnectionState,
     setConnectionError,
+    setAgents,
+    setTasks,
+    updateTask,
+    setActiveAgent,
   });
   storeRef.current = {
     addMessage,
@@ -88,6 +110,10 @@ export function useAiChat() {
     setAiStatus,
     setConnectionState,
     setConnectionError,
+    setAgents,
+    setTasks,
+    updateTask,
+    setActiveAgent,
   };
 
   // Fetch AI status when panel opens
@@ -99,6 +125,17 @@ export function useAiChat() {
       })
       .catch(() => {
         storeRef.current.setAiStatus(null);
+      });
+  }, []);
+
+  const fetchAgents = useCallback(() => {
+    api
+      .get<Agent[]>("/api/ai/agents")
+      .then((agents) => {
+        storeRef.current.setAgents(agents);
+      })
+      .catch(() => {
+        // Agents endpoint may not exist yet
       });
   }, []);
 
@@ -179,6 +216,14 @@ export function useAiChat() {
 
           case "confirm_request":
             if (msg.confirmation_id) {
+              let parsedArgs: Record<string, unknown> | undefined;
+              if (msg.tool_args) {
+                try {
+                  parsedArgs = JSON.parse(msg.tool_args);
+                } catch {
+                  // Ignore malformed args
+                }
+              }
               store.addMessage({
                 id: crypto.randomUUID(),
                 role: "assistant",
@@ -188,6 +233,7 @@ export function useAiChat() {
                   id: msg.confirmation_id,
                   tool: msg.tool_name || "",
                   description: msg.content || "",
+                  args: parsedArgs,
                   status: "pending" as const,
                 },
               });
@@ -225,6 +271,58 @@ export function useAiChat() {
           case "history_end":
             // History loading complete — no action needed
             break;
+
+          case "task_created": {
+            if (msg.task_id) {
+              const state = useAiChatStore.getState();
+              store.setTasks([
+                ...state.tasks,
+                {
+                  id: msg.task_id,
+                  agent_id: msg.agent_id || "",
+                  title: msg.title || "Task",
+                  status: "running",
+                  progress: 0,
+                  current_step: msg.current_step || "",
+                  total_steps: msg.total_steps || 0,
+                  completed_steps: 0,
+                },
+              ]);
+            }
+            break;
+          }
+
+          case "task_progress": {
+            if (msg.task_id) {
+              store.updateTask(msg.task_id, {
+                progress: msg.progress ?? 0,
+                current_step: msg.current_step || "",
+                completed_steps: msg.completed_steps ?? 0,
+              });
+            }
+            break;
+          }
+
+          case "task_completed": {
+            if (msg.task_id) {
+              store.updateTask(msg.task_id, {
+                status: "completed",
+                progress: 100,
+                result: msg.result || msg.content,
+              });
+            }
+            break;
+          }
+
+          case "task_failed": {
+            if (msg.task_id) {
+              store.updateTask(msg.task_id, {
+                status: "failed",
+                error: msg.error || msg.content || "Task failed",
+              });
+            }
+            break;
+          }
 
           case "error": {
             store.setIsStreaming(false);
@@ -282,16 +380,17 @@ export function useAiChat() {
     }
   }, []);
 
-  // Connect when panel opens, fetch AI status
+  // Connect when panel opens or full page is active, fetch AI status
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen || isFullPage) {
       fetchAiStatus();
+      fetchAgents();
       connect();
     } else {
       disconnect();
     }
     return () => disconnect();
-  }, [isOpen, connect, disconnect, fetchAiStatus]);
+  }, [isOpen, isFullPage, connect, disconnect, fetchAiStatus, fetchAgents]);
 
   const sendMessage = useCallback(
     (content: string) => {
@@ -320,11 +419,13 @@ export function useAiChat() {
       };
       storeRef.current.addMessage(userMessage);
 
+      const state = useAiChatStore.getState();
       const msg: ChatWsMessage = {
         type: "user_message",
         content,
-        conversation_id: useAiChatStore.getState().activeConversationId || undefined,
+        conversation_id: state.activeConversationId || undefined,
         context: pageContext,
+        agent_id: state.activeAgentId,
       };
       wsRef.current.send(JSON.stringify(msg));
     },
@@ -375,11 +476,24 @@ export function useAiChat() {
     wsRef.current.send(JSON.stringify(msg));
   }, []);
 
+  const selectAgent = useCallback((agentId: string | null) => {
+    storeRef.current.setActiveAgent(agentId);
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      const msg: ChatWsMessage = {
+        type: "select_agent",
+        agent_id: agentId,
+      };
+      wsRef.current.send(JSON.stringify(msg));
+    }
+  }, []);
+
   return {
     sendMessage,
     confirmAction,
     startNewConversation,
     loadConversation,
     updateContext,
+    selectAgent,
+    fetchAgents,
   };
 }

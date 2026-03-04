@@ -59,11 +59,12 @@ func (h *AdminHandlers) RegisterRoutes(r *mux.Router) {
 
 // AIStatus is the response for the /api/ai/status endpoint.
 type AIStatus struct {
-	Enabled    bool   `json:"enabled"`
-	Configured bool   `json:"configured"`
-	Provider   string `json:"provider"`
-	Model      string `json:"model"`
-	Message    string `json:"message,omitempty"`
+	Enabled             bool   `json:"enabled"`
+	Configured          bool   `json:"configured"`
+	Provider            string `json:"provider"`
+	Model               string `json:"model"`
+	ToolPermissionLevel string `json:"tool_permission_level"`
+	Message             string `json:"message,omitempty"`
 }
 
 func (h *AdminHandlers) getStatus(w http.ResponseWriter, r *http.Request) {
@@ -75,9 +76,9 @@ func (h *AdminHandlers) getStatus(w http.ResponseWriter, r *http.Request) {
 		var headersJSON []byte
 		var encAPIKey []byte
 		err := h.pool.QueryRow(r.Context(),
-			`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled, COALESCE(custom_headers, '{}'), encrypted_api_key
+			`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled, tool_permission_level, COALESCE(custom_headers, '{}'), encrypted_api_key
 			 FROM ai_config LIMIT 1`,
-		).Scan(&dbCfg.Provider, &dbCfg.Model, &dbCfg.EmbedModel, &dbCfg.BaseURL, &dbCfg.MaxTokens, &dbCfg.Temperature, &dbCfg.Enabled, &headersJSON, &encAPIKey)
+		).Scan(&dbCfg.Provider, &dbCfg.Model, &dbCfg.EmbedModel, &dbCfg.BaseURL, &dbCfg.MaxTokens, &dbCfg.Temperature, &dbCfg.Enabled, &dbCfg.ToolPermissionLevel, &headersJSON, &encAPIKey)
 		if err == nil {
 			if len(headersJSON) > 0 {
 				_ = json.Unmarshal(headersJSON, &dbCfg.CustomHeaders)
@@ -92,9 +93,10 @@ func (h *AdminHandlers) getStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status := AIStatus{
-		Enabled:  cfg.Enabled,
-		Provider: string(cfg.Provider),
-		Model:    cfg.Model,
+		Enabled:             cfg.Enabled,
+		Provider:            string(cfg.Provider),
+		Model:               cfg.Model,
+		ToolPermissionLevel: string(cfg.ToolPermissionLevel),
 	}
 
 	if !cfg.Enabled {
@@ -121,9 +123,9 @@ func (h *AdminHandlers) getConfig(w http.ResponseWriter, r *http.Request) {
 	var headersJSON []byte
 	var encAPIKey []byte
 	err := h.pool.QueryRow(r.Context(),
-		`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled, COALESCE(custom_headers, '{}'), encrypted_api_key
+		`SELECT provider, model, embed_model, COALESCE(base_url, ''), max_tokens, temperature, enabled, tool_permission_level, COALESCE(custom_headers, '{}'), encrypted_api_key
 		 FROM ai_config LIMIT 1`,
-	).Scan(&cfg.Provider, &cfg.Model, &cfg.EmbedModel, &cfg.BaseURL, &cfg.MaxTokens, &cfg.Temperature, &cfg.Enabled, &headersJSON, &encAPIKey)
+	).Scan(&cfg.Provider, &cfg.Model, &cfg.EmbedModel, &cfg.BaseURL, &cfg.MaxTokens, &cfg.Temperature, &cfg.Enabled, &cfg.ToolPermissionLevel, &headersJSON, &encAPIKey)
 	if err != nil {
 		writeAIJSON(w, http.StatusOK, DefaultConfig())
 		return
@@ -174,18 +176,18 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		_, err = h.pool.Exec(r.Context(),
 			`UPDATE ai_config SET
 				provider = $1, model = $2, embed_model = $3, base_url = NULLIF($4, ''),
-				max_tokens = $5, temperature = $6, enabled = $7, custom_headers = $8, encrypted_api_key = $9, updated_at = NOW()
+				max_tokens = $5, temperature = $6, enabled = $7, tool_permission_level = $8, custom_headers = $9, encrypted_api_key = $10, updated_at = NOW()
 			 WHERE true`,
-			cfg.Provider, cfg.Model, cfg.EmbedModel, cfg.BaseURL, cfg.MaxTokens, cfg.Temperature, cfg.Enabled, headersJSON, encAPIKey,
+			cfg.Provider, cfg.Model, cfg.EmbedModel, cfg.BaseURL, cfg.MaxTokens, cfg.Temperature, cfg.Enabled, cfg.ToolPermissionLevel, headersJSON, encAPIKey,
 		)
 	} else {
 		// Keep existing API key untouched
 		_, err = h.pool.Exec(r.Context(),
 			`UPDATE ai_config SET
 				provider = $1, model = $2, embed_model = $3, base_url = NULLIF($4, ''),
-				max_tokens = $5, temperature = $6, enabled = $7, custom_headers = $8, updated_at = NOW()
+				max_tokens = $5, temperature = $6, enabled = $7, tool_permission_level = $8, custom_headers = $9, updated_at = NOW()
 			 WHERE true`,
-			cfg.Provider, cfg.Model, cfg.EmbedModel, cfg.BaseURL, cfg.MaxTokens, cfg.Temperature, cfg.Enabled, headersJSON,
+			cfg.Provider, cfg.Model, cfg.EmbedModel, cfg.BaseURL, cfg.MaxTokens, cfg.Temperature, cfg.Enabled, cfg.ToolPermissionLevel, headersJSON,
 		)
 	}
 	if err != nil {
