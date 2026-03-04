@@ -29,6 +29,7 @@ func (h *ConvenienceHandlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/namespaces", h.ListNamespaces).Methods(http.MethodGet)
 	api.HandleFunc("/nodes", h.ListNodes).Methods(http.MethodGet)
 	api.HandleFunc("/events", h.ListEvents).Methods(http.MethodGet)
+	api.HandleFunc("/api-resources", h.ListAPIResources).Methods(http.MethodGet)
 }
 
 // proxyAgentList is a convenience wrapper around proxyAgentResponse for GET requests.

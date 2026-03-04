@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -21,6 +21,7 @@ import {
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Loader2, Plus, Trash2, Eye, EyeOff } from "lucide-react";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
 
@@ -82,6 +83,29 @@ export function CreateSecretWizard({
   const [importMode, setImportMode] = useState(false);
   const [importKey, setImportKey] = useState("");
   const [importContent, setImportContent] = useState("");
+
+  const [namespaceOptions, setNamespaceOptions] = useState<ComboboxOption[]>([]);
+  const [loadingNamespaces, setLoadingNamespaces] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setLoadingNamespaces(true);
+    api
+      .get<{ items: Array<{ metadata: { name: string } }> }>(
+        `/api/clusters/${clusterId}/resources/_/v1/namespaces`
+      )
+      .then((data) => {
+        setNamespaceOptions(
+          (data.items || []).map((item) => ({
+            value: item.metadata.name,
+            label: item.metadata.name,
+          }))
+        );
+      })
+      .catch(() => setNamespaceOptions([]))
+      .finally(() => setLoadingNamespaces(false));
+  }, [open, clusterId]);
 
   function reset() {
     setForm(defaultForm);
@@ -237,12 +261,15 @@ export function CreateSecretWizard({
 
           {/* Namespace */}
           <div className="space-y-2">
-            <Label htmlFor="secret-namespace">Namespace</Label>
-            <Input
-              id="secret-namespace"
-              placeholder="default"
+            <Label>Namespace</Label>
+            <Combobox
+              options={namespaceOptions}
               value={form.namespace}
-              onChange={(e) => updateForm({ namespace: e.target.value })}
+              onValueChange={(v) => updateForm({ namespace: v })}
+              placeholder="Select namespace..."
+              searchPlaceholder="Search namespaces..."
+              loading={loadingNamespaces}
+              allowCustomValue
             />
             {errors.namespace && (
               <p className="text-xs text-destructive">{errors.namespace}</p>

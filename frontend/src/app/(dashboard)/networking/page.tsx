@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { api } from "@/lib/api";
 import { type K8sHTTPRoute as HTTPRoute } from "@/lib/abstractions";
 import { useClusterStore } from "@/stores/cluster";
@@ -155,6 +156,14 @@ export default function NetworkingPage() {
   const [simLoading, setSimLoading] = useState(false);
   const [simError, setSimError] = useState<string | null>(null);
 
+  // Simulator autocomplete state
+  const [simNamespaceOptions, setSimNamespaceOptions] = useState<ComboboxOption[]>([]);
+  const [simLoadingNamespaces, setSimLoadingNamespaces] = useState(false);
+  const [simSourcePodOptions, setSimSourcePodOptions] = useState<ComboboxOption[]>([]);
+  const [simDestPodOptions, setSimDestPodOptions] = useState<ComboboxOption[]>([]);
+  const [simLoadingSourcePods, setSimLoadingSourcePods] = useState(false);
+  const [simLoadingDestPods, setSimLoadingDestPods] = useState(false);
+
   const selectedCluster = selectedClusterId || "";
 
   const fetchData = useCallback(async () => {
@@ -182,6 +191,72 @@ export default function NetworkingPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Fetch namespaces for simulator
+  useEffect(() => {
+    if (!selectedCluster) return;
+    setSimLoadingNamespaces(true);
+    api
+      .get<{ items: Array<{ metadata: { name: string } }> }>(
+        `/api/clusters/${selectedCluster}/resources/_/v1/namespaces`
+      )
+      .then((data) => {
+        setSimNamespaceOptions(
+          (data.items || []).map((item) => ({
+            value: item.metadata.name,
+            label: item.metadata.name,
+          }))
+        );
+      })
+      .catch(() => setSimNamespaceOptions([]))
+      .finally(() => setSimLoadingNamespaces(false));
+  }, [selectedCluster]);
+
+  // Fetch source pods when source namespace changes
+  useEffect(() => {
+    if (!selectedCluster || !simSourceNs) {
+      setSimSourcePodOptions([]);
+      return;
+    }
+    setSimLoadingSourcePods(true);
+    api
+      .get<{ items: Array<{ metadata: { name: string } }> }>(
+        `/api/clusters/${selectedCluster}/resources/_/v1/pods?namespace=${simSourceNs}`
+      )
+      .then((data) => {
+        setSimSourcePodOptions(
+          (data.items || []).map((item) => ({
+            value: item.metadata.name,
+            label: item.metadata.name,
+          }))
+        );
+      })
+      .catch(() => setSimSourcePodOptions([]))
+      .finally(() => setSimLoadingSourcePods(false));
+  }, [selectedCluster, simSourceNs]);
+
+  // Fetch dest pods when dest namespace changes
+  useEffect(() => {
+    if (!selectedCluster || !simDestNs) {
+      setSimDestPodOptions([]);
+      return;
+    }
+    setSimLoadingDestPods(true);
+    api
+      .get<{ items: Array<{ metadata: { name: string } }> }>(
+        `/api/clusters/${selectedCluster}/resources/_/v1/pods?namespace=${simDestNs}`
+      )
+      .then((data) => {
+        setSimDestPodOptions(
+          (data.items || []).map((item) => ({
+            value: item.metadata.name,
+            label: item.metadata.name,
+          }))
+        );
+      })
+      .catch(() => setSimDestPodOptions([]))
+      .finally(() => setSimLoadingDestPods(false));
+  }, [selectedCluster, simDestNs]);
 
   const handlePolicyClick = (np: NetworkPolicy) => {
     setSelectedPolicy(np as NetworkPolicyFull);
@@ -576,38 +651,58 @@ export default function NetworkingPage() {
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                   <div className="space-y-2">
                     <Label className="text-xs font-medium">Source Namespace</Label>
-                    <Input
-                      placeholder="e.g. default"
+                    <Combobox
+                      options={simNamespaceOptions}
                       value={simSourceNs}
-                      onChange={(e) => setSimSourceNs(e.target.value)}
-                      className="h-8 text-xs"
+                      onValueChange={(v) => {
+                        setSimSourceNs(v);
+                        setSimSourcePod("");
+                      }}
+                      placeholder="e.g. default"
+                      searchPlaceholder="Search namespaces..."
+                      loading={simLoadingNamespaces}
+                      allowCustomValue
                     />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-medium">Source Pod</Label>
-                    <Input
-                      placeholder="e.g. frontend-abc123"
+                    <Combobox
+                      options={simSourcePodOptions}
                       value={simSourcePod}
-                      onChange={(e) => setSimSourcePod(e.target.value)}
-                      className="h-8 text-xs"
+                      onValueChange={setSimSourcePod}
+                      placeholder="e.g. frontend-abc123"
+                      searchPlaceholder="Search pods..."
+                      loading={simLoadingSourcePods}
+                      disabled={!simSourceNs}
+                      allowCustomValue
                     />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-medium">Destination Namespace</Label>
-                    <Input
-                      placeholder="e.g. backend"
+                    <Combobox
+                      options={simNamespaceOptions}
                       value={simDestNs}
-                      onChange={(e) => setSimDestNs(e.target.value)}
-                      className="h-8 text-xs"
+                      onValueChange={(v) => {
+                        setSimDestNs(v);
+                        setSimDestPod("");
+                      }}
+                      placeholder="e.g. backend"
+                      searchPlaceholder="Search namespaces..."
+                      loading={simLoadingNamespaces}
+                      allowCustomValue
                     />
                   </div>
                   <div className="space-y-2">
                     <Label className="text-xs font-medium">Destination Pod</Label>
-                    <Input
-                      placeholder="e.g. api-server-xyz789"
+                    <Combobox
+                      options={simDestPodOptions}
                       value={simDestPod}
-                      onChange={(e) => setSimDestPod(e.target.value)}
-                      className="h-8 text-xs"
+                      onValueChange={setSimDestPod}
+                      placeholder="e.g. api-server-xyz789"
+                      searchPlaceholder="Search pods..."
+                      loading={simLoadingDestPods}
+                      disabled={!simDestNs}
+                      allowCustomValue
                     />
                   </div>
                   <div className="space-y-2">

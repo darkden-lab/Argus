@@ -28,6 +28,11 @@ var (
 	gvrServiceEntries   = schema.GroupVersionResource{Group: "networking.istio.io", Version: "v1", Resource: "serviceentries"}
 	gvrServices         = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "services"}
 
+	// Workload GVRs (apps/v1)
+	gvrDeployments  = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "deployments"}
+	gvrStatefulSets = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"}
+	gvrDaemonSets   = schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"}
+
 	// allWatchedGVRs is the list iterated by RegisterWatchers.
 	allWatchedGVRs = []schema.GroupVersionResource{
 		gvrVirtualServices,

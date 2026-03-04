@@ -21,6 +21,7 @@ import {
   ChevronsUpDown,
   Check,
   LogOut,
+  FileCode2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -77,6 +78,7 @@ const infrastructureSection: NavSection = {
     { label: "Networking", href: "/networking", icon: Wifi },
     { label: "Storage", href: "/storage", icon: HardDrive },
     { label: "Monitoring", href: "/monitoring", icon: Activity },
+    { label: "API Resources", href: "/api-resources", icon: FileCode2 },
   ],
 };
 
