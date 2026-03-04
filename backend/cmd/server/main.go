@@ -338,8 +338,7 @@ func main() {
 	srv := &http.Server{
 		Addr:           ":" + cfg.Port,
 		Handler:        securityHeadersMiddleware(corsMiddleware(r)),
-		ReadTimeout:    15 * time.Second,
-		WriteTimeout:   15 * time.Second,
+		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:    60 * time.Second,
 		MaxHeaderBytes: 1 << 20, // 1 MB
 	}
