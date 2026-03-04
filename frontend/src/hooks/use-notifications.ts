@@ -2,8 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { useNotificationStore, type Notification } from "@/stores/notifications";
-
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== "undefined" ? `${window.location.protocol === "https:" ? "wss:" : "ws:"}//${window.location.host}` : "");
+import { WS_URL } from "@/lib/ws";
 
 /**
  * Hook that manages real-time notification updates via WebSocket

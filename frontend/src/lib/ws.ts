@@ -1,4 +1,13 @@
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || (typeof window !== 'undefined' ? `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}` : '');
+function resolveWsUrl(): string {
+  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL;
+  if (apiUrl) {
+    return apiUrl.replace(/^http/, 'ws');
+  }
+  return '';
+}
+
+export const WS_URL = resolveWsUrl();
 
 export interface WatchEvent {
   cluster: string;
