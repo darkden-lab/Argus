@@ -192,6 +192,50 @@ func (t *topologyHandler) GetTopology(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Fetch Workloads (Deployments, StatefulSets, DaemonSets) and link to Services
+	workloadGVRs := []struct {
+		gvr      schema.GroupVersionResource
+		nodeType string
+	}{
+		{gvrDeployments, "deployment"},
+		{gvrStatefulSets, "statefulset"},
+		{gvrDaemonSets, "daemonset"},
+	}
+	for _, wg := range workloadGVRs {
+		wList, err := client.DynClient.Resource(wg.gvr).Namespace(namespace).List(r.Context(), metav1.ListOptions{})
+		if err != nil {
+			continue
+		}
+		for _, w := range wList.Items {
+			id := w.GetNamespace() + "/" + wg.nodeType + "-" + w.GetName()
+			if !nodeSet[id] {
+				nodeSet[id] = true
+				nodes = append(nodes, TopologyNode{
+					ID:        id,
+					Name:      w.GetName(),
+					Namespace: w.GetNamespace(),
+					Type:      wg.nodeType,
+					Status:    "active",
+				})
+			}
+
+			// Match workload selector to services
+			matchLabels, _, _ := unstructured.NestedStringMap(w.Object, "spec", "selector", "matchLabels")
+			if len(matchLabels) > 0 && svcList != nil {
+				for _, svc := range svcList.Items {
+					svcSelector, _, _ := unstructured.NestedStringMap(svc.Object, "spec", "selector")
+					if len(svcSelector) > 0 && labelsMatch(matchLabels, svcSelector) {
+						svcID := svc.GetNamespace() + "/" + svc.GetName()
+						edges = append(edges, TopologyEdge{
+							Source: id,
+							Target: svcID,
+						})
+					}
+				}
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusOK, TopologyResponse{
 		Nodes: nodes,
 		Edges: edges,
@@ -252,4 +296,14 @@ func extractStringSlice(obj map[string]interface{}, fields ...string) []string {
 		return nil
 	}
 	return slice
+}
+
+// labelsMatch returns true if all entries in selector exist in labels with the same values.
+func labelsMatch(selector, labels map[string]string) bool {
+	for k, v := range selector {
+		if labels[k] != v {
+			return false
+		}
+	}
+	return true
 }

@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, AlertTriangle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Loader2, AlertTriangle, Eye, EyeOff } from "lucide-react";
 import * as d3 from "d3";
 
 // --- Existing resource/topology types ---
@@ -89,8 +90,40 @@ const NODE_COLORS: Record<string, string> = {
   virtualservice: "#22c55e",
   external: "#6b7280",
   gateway: "#a855f7",
-  deployment: "#f59e0b",
+  deployment: "#8b5cf6",
+  statefulset: "#ec4899",
+  daemonset: "#14b8a6",
 };
+
+const LEGEND_ITEMS: { type: string; label: string; color: string }[] = [
+  { type: "service", label: "Service", color: "#3b82f6" },
+  { type: "virtualservice", label: "VirtualService", color: "#22c55e" },
+  { type: "external", label: "External", color: "#6b7280" },
+  { type: "gateway", label: "Gateway", color: "#a855f7" },
+  { type: "deployment", label: "Deployment", color: "#8b5cf6" },
+  { type: "statefulset", label: "StatefulSet", color: "#ec4899" },
+  { type: "daemonset", label: "DaemonSet", color: "#14b8a6" },
+];
+
+const VISIBILITY_STORAGE_KEY = "argus-network-map-visibility";
+
+function loadVisibility(): Record<string, boolean> {
+  try {
+    const stored = localStorage.getItem(VISIBILITY_STORAGE_KEY);
+    if (stored) return JSON.parse(stored);
+  } catch {
+    // ignore
+  }
+  return Object.fromEntries(LEGEND_ITEMS.map((item) => [item.type, true]));
+}
+
+function saveVisibility(v: Record<string, boolean>) {
+  try {
+    localStorage.setItem(VISIBILITY_STORAGE_KEY, JSON.stringify(v));
+  } catch {
+    // ignore
+  }
+}
 
 function getNodeColor(type: string): string {
   return NODE_COLORS[type.toLowerCase()] ?? "#6b7280";
@@ -129,6 +162,23 @@ export function NetworkMap({ clusterID }: NetworkMapProps) {
   } | null>(null);
   const [istioEnabled, setIstioEnabled] = useState(true);
   const [refreshInterval, setRefreshInterval] = useState("15");
+  const [visibility, setVisibility] = useState<Record<string, boolean>>(loadVisibility);
+
+  const toggleVisibility = useCallback((type: string) => {
+    setVisibility((prev) => {
+      const next = { ...prev, [type]: !prev[type] };
+      saveVisibility(next);
+      return next;
+    });
+  }, []);
+
+  const setAllVisibility = useCallback((visible: boolean) => {
+    setVisibility(() => {
+      const next = Object.fromEntries(LEGEND_ITEMS.map((item) => [item.type, visible]));
+      saveVisibility(next);
+      return next;
+    });
+  }, []);
 
   const fetchTraffic = useCallback(async () => {
     if (!clusterID) return;
@@ -290,6 +340,19 @@ export function NetworkMap({ clusterID }: NetworkMapProps) {
         weight: e.weight,
       }));
     }
+
+    // Filter by visibility
+    const visibleNodeIds = new Set(
+      nodes.filter((n) => visibility[n.type.toLowerCase()] !== false).map((n) => n.id)
+    );
+    nodes = nodes.filter((n) => visibleNodeIds.has(n.id));
+    links = links.filter(
+      (l) => {
+        const srcId = typeof l.source === "string" ? l.source : (l.source as SimNode).id;
+        const tgtId = typeof l.target === "string" ? l.target : (l.target as SimNode).id;
+        return visibleNodeIds.has(srcId) && visibleNodeIds.has(tgtId);
+      }
+    );
 
     const simulation = d3
       .forceSimulation(nodes)
@@ -534,7 +597,7 @@ export function NetworkMap({ clusterID }: NetworkMapProps) {
     return () => {
       simulation.stop();
     };
-  }, [trafficData]);
+  }, [trafficData, visibility]);
 
   useEffect(() => {
     renderGraph();
@@ -629,28 +692,44 @@ export function NetworkMap({ clusterID }: NetworkMapProps) {
           </div>
         )}
 
-        {/* Node type legend */}
-        <div className="flex items-center gap-2">
-          <span
-            className="inline-block h-3 w-3 rounded-full"
-            style={{ background: "#3b82f6" }}
-          />
-          <span className="text-xs text-muted-foreground">Service</span>
-          <span
-            className="inline-block h-3 w-3 rounded-full ml-2"
-            style={{ background: "#22c55e" }}
-          />
-          <span className="text-xs text-muted-foreground">VirtualService</span>
-          <span
-            className="inline-block h-3 w-3 rounded-full ml-2"
-            style={{ background: "#6b7280" }}
-          />
-          <span className="text-xs text-muted-foreground">External</span>
-          <span
-            className="inline-block h-3 w-3 rounded-full ml-2"
-            style={{ background: "#a855f7" }}
-          />
-          <span className="text-xs text-muted-foreground">Gateway</span>
+        {/* Node type legend (interactive) */}
+        <div className="flex items-center gap-1 flex-wrap">
+          {LEGEND_ITEMS.map((item) => {
+            const visible = visibility[item.type] !== false;
+            return (
+              <button
+                key={item.type}
+                type="button"
+                onClick={() => toggleVisibility(item.type)}
+                className={`flex items-center gap-1.5 px-1.5 py-0.5 rounded text-xs transition-opacity ${visible ? "opacity-100" : "opacity-40 line-through"}`}
+                title={visible ? `Hide ${item.label}` : `Show ${item.label}`}
+              >
+                <span
+                  className="inline-block h-3 w-3 rounded-full shrink-0"
+                  style={{ background: item.color }}
+                />
+                <span className="text-muted-foreground">{item.label}</span>
+              </button>
+            );
+          })}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[10px] ml-1"
+            onClick={() => setAllVisibility(true)}
+          >
+            <Eye className="h-3 w-3 mr-1" />
+            All
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-[10px]"
+            onClick={() => setAllVisibility(false)}
+          >
+            <EyeOff className="h-3 w-3 mr-1" />
+            None
+          </Button>
         </div>
       </div>
 

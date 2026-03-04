@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
+import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
 
@@ -68,6 +69,47 @@ export function CreatePVCWizard({
   const [form, setForm] = useState<PVCForm>(defaultForm);
   const [submitting, setSubmitting] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<keyof PVCForm, string>>>({});
+
+  const [namespaceOptions, setNamespaceOptions] = useState<ComboboxOption[]>([]);
+  const [storageClassOptions, setStorageClassOptions] = useState<ComboboxOption[]>([]);
+  const [loadingNamespaces, setLoadingNamespaces] = useState(false);
+  const [loadingStorageClasses, setLoadingStorageClasses] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+
+    setLoadingNamespaces(true);
+    api
+      .get<{ items: Array<{ metadata: { name: string } }> }>(
+        `/api/clusters/${clusterId}/resources/_/v1/namespaces`
+      )
+      .then((data) => {
+        setNamespaceOptions(
+          (data.items || []).map((item) => ({
+            value: item.metadata.name,
+            label: item.metadata.name,
+          }))
+        );
+      })
+      .catch(() => setNamespaceOptions([]))
+      .finally(() => setLoadingNamespaces(false));
+
+    setLoadingStorageClasses(true);
+    api
+      .get<{ items: Array<{ metadata: { name: string } }> }>(
+        `/api/clusters/${clusterId}/resources/storage.k8s.io/v1/storageclasses`
+      )
+      .then((data) => {
+        setStorageClassOptions(
+          (data.items || []).map((item) => ({
+            value: item.metadata.name,
+            label: item.metadata.name,
+          }))
+        );
+      })
+      .catch(() => setStorageClassOptions([]))
+      .finally(() => setLoadingStorageClasses(false));
+  }, [open, clusterId]);
 
   function reset() {
     setForm(defaultForm);
@@ -196,12 +238,15 @@ export function CreatePVCWizard({
 
           {/* Namespace */}
           <div className="space-y-2">
-            <Label htmlFor="pvc-namespace">Namespace</Label>
-            <Input
-              id="pvc-namespace"
-              placeholder="default"
+            <Label>Namespace</Label>
+            <Combobox
+              options={namespaceOptions}
               value={form.namespace}
-              onChange={(e) => updateForm({ namespace: e.target.value })}
+              onValueChange={(v) => updateForm({ namespace: v })}
+              placeholder="Select namespace..."
+              searchPlaceholder="Search namespaces..."
+              loading={loadingNamespaces}
+              allowCustomValue
             />
             {errors.namespace && (
               <p className="text-xs text-destructive">{errors.namespace}</p>
@@ -210,14 +255,17 @@ export function CreatePVCWizard({
 
           {/* Storage Class */}
           <div className="space-y-2">
-            <Label htmlFor="pvc-storage-class">
+            <Label>
               Storage Class <span className="text-muted-foreground text-xs">(optional)</span>
             </Label>
-            <Input
-              id="pvc-storage-class"
-              placeholder="standard"
+            <Combobox
+              options={storageClassOptions}
               value={form.storageClass}
-              onChange={(e) => updateForm({ storageClass: e.target.value })}
+              onValueChange={(v) => updateForm({ storageClass: v })}
+              placeholder="Select storage class..."
+              searchPlaceholder="Search storage classes..."
+              loading={loadingStorageClasses}
+              allowCustomValue
             />
             <p className="text-xs text-muted-foreground">
               Leave empty to use the default storage class.

@@ -242,7 +242,7 @@ export function CreateHTTPRouteWizard({
       .then((data) => {
         setGatewayOptions(
           (data.items || []).map((item) => ({
-            value: item.metadata.name,
+            value: `${item.metadata.namespace ?? "default"}/${item.metadata.name}`,
             label: item.metadata.name,
             description: item.metadata.namespace
               ? `Namespace: ${item.metadata.namespace}`
@@ -590,11 +590,18 @@ export function CreateHTTPRouteWizard({
                   </div>
 
                   <div className="space-y-2">
-                    <Label className="text-xs">Gateway Name</Label>
+                    <Label className="text-xs">Gateway</Label>
                     <Combobox
                       options={gatewayOptions}
-                      value={ref.name}
-                      onValueChange={(v) => updateParentRef(i, { name: v })}
+                      value={ref.namespace && ref.name ? `${ref.namespace}/${ref.name}` : ref.name}
+                      onValueChange={(v) => {
+                        if (v.includes("/")) {
+                          const [ns, ...rest] = v.split("/");
+                          updateParentRef(i, { name: rest.join("/"), namespace: ns });
+                        } else {
+                          updateParentRef(i, { name: v });
+                        }
+                      }}
                       placeholder="Select gateway..."
                       searchPlaceholder="Search gateways..."
                       loading={loadingGateways}
@@ -980,7 +987,7 @@ export function CreateHTTPRouteWizard({
                   Parent Refs:{" "}
                   {form.parentRefs
                     .filter((p) => p.name.trim())
-                    .map((p) => p.name)
+                    .map((p) => p.namespace ? `${p.namespace}/${p.name}` : p.name)
                     .join(", ") || "(none)"}
                 </p>
                 <p>Rules: {form.rules.length}</p>

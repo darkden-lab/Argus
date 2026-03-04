@@ -17,6 +17,7 @@ import (
 	"github.com/darkden-lab/argus/backend/internal/prometheus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // TrafficNode represents a workload node in the traffic graph.
@@ -404,6 +405,42 @@ func buildResourceGraph(ctx context.Context, client *cluster.ClusterClient, name
 				nodes = append(nodes, TopologyNode{
 					ID: id, Name: se.GetName(), Namespace: se.GetNamespace(), Type: "serviceentry", Status: "active",
 				})
+			}
+		}
+	}
+
+	// Fetch Workloads (Deployments, StatefulSets, DaemonSets) and link to Services
+	workloadGVRs := []struct {
+		gvr      schema.GroupVersionResource
+		nodeType string
+	}{
+		{gvrDeployments, "deployment"},
+		{gvrStatefulSets, "statefulset"},
+		{gvrDaemonSets, "daemonset"},
+	}
+	for _, wg := range workloadGVRs {
+		wList, wErr := client.DynClient.Resource(wg.gvr).Namespace(namespace).List(ctx, metav1.ListOptions{})
+		if wErr != nil {
+			continue
+		}
+		for _, w := range wList.Items {
+			id := w.GetNamespace() + "/" + wg.nodeType + "-" + w.GetName()
+			if !nodeSet[id] {
+				nodeSet[id] = true
+				nodes = append(nodes, TopologyNode{
+					ID: id, Name: w.GetName(), Namespace: w.GetNamespace(), Type: wg.nodeType, Status: "active",
+				})
+			}
+
+			matchLabels, _, _ := unstructured.NestedStringMap(w.Object, "spec", "selector", "matchLabels")
+			if len(matchLabels) > 0 && svcList != nil {
+				for _, svc := range svcList.Items {
+					svcSelector, _, _ := unstructured.NestedStringMap(svc.Object, "spec", "selector")
+					if len(svcSelector) > 0 && labelsMatch(matchLabels, svcSelector) {
+						svcID := svc.GetNamespace() + "/" + svc.GetName()
+						edges = append(edges, TopologyEdge{Source: id, Target: svcID})
+					}
+				}
 			}
 		}
 	}
