@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
+import { ManifestPreview } from "@/components/ui/manifest-preview";
 
 interface CreateGatewayWizardProps {
   open: boolean;
@@ -264,9 +265,6 @@ export function CreateGatewayWizard({
       setSubmitting(false);
     }
   }
-
-  const manifest = buildManifest(form);
-  const jsonPreview = JSON.stringify(manifest, null, 2);
 
   return (
     <Dialog
@@ -543,14 +541,7 @@ export function CreateGatewayWizard({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Generated Manifest (JSON)
-              </Label>
-              <pre className="rounded-md bg-muted p-3 text-xs font-mono overflow-auto max-h-[300px] whitespace-pre-wrap">
-                {jsonPreview}
-              </pre>
-            </div>
+            <ManifestPreview manifest={buildManifest(form)} maxHeight="400px" />
           </div>
         )}
 
