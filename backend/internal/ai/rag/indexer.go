@@ -86,6 +86,11 @@ func (idx *Indexer) Stop() {
 // shutdown does not cancel in-flight embedding requests.
 func (idx *Indexer) RunOnce(_ context.Context) {
 	idx.mu.Lock()
+	if idx.Status == "running" {
+		idx.mu.Unlock()
+		log.Printf("rag indexer: already running, skipping")
+		return
+	}
 	idx.Status = "running"
 	idx.mu.Unlock()
 

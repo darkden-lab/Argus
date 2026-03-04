@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Copy, Check, Play } from "lucide-react";
 import { highlight } from "sugar-high";
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,22 @@ interface ChatCodeBlockProps {
 
 export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleCopy = async () => {
-    await navigator.clipboard.writeText(code);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // Clipboard API not available or permission denied
+    });
   };
 
   const isYaml = language === "yaml" || language === "yml";
@@ -41,6 +52,7 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
               className="h-6 w-6 text-zinc-400 hover:text-zinc-200"
               onClick={() => onApply(code)}
               title="Apply YAML"
+              aria-label="Apply YAML"
             >
               <Play className="h-3 w-3" />
             </Button>
@@ -50,6 +62,7 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
             size="icon"
             className="h-6 w-6 text-zinc-400 hover:text-zinc-200"
             onClick={handleCopy}
+            aria-label="Copy code"
           >
             {copied ? (
               <Check className="h-3 w-3 text-green-500" />

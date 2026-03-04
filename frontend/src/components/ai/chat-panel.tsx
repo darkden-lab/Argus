@@ -37,8 +37,8 @@ export function ChatPanel() {
 
   const [panelWidth, setPanelWidth] = useState(() => {
     if (typeof window !== "undefined") {
-      const stored = localStorage.getItem("argus:ai-panel-width");
-      if (stored) return parseInt(stored, 10);
+      const stored = parseInt(localStorage.getItem("argus:ai-panel-width") || "", 10);
+      if (Number.isFinite(stored) && stored >= MIN_WIDTH && stored <= MAX_WIDTH) return stored;
     }
     return DEFAULT_WIDTH;
   });
@@ -91,7 +91,7 @@ export function ChatPanel() {
   return (
     <div
       ref={panelRef}
-      className="fixed inset-y-0 right-0 z-40 flex flex-col border-l border-border bg-background shadow-xl"
+      className="fixed inset-y-0 right-0 z-40 flex flex-col border-l border-border bg-background shadow-xl will-change-transform"
       style={{ width: `${panelWidth}px` }}
     >
       {/* Drag handle on left edge */}
@@ -112,6 +112,7 @@ export function ChatPanel() {
             size="icon"
             className="h-8 w-8"
             onClick={toggleSidebar}
+            aria-label="Toggle conversation sidebar"
           >
             {showSidebar ? (
               <PanelLeftClose className="h-4 w-4" />
@@ -139,6 +140,7 @@ export function ChatPanel() {
             className="h-8 w-8"
             onClick={startNewConversation}
             title="New conversation"
+            aria-label="New conversation"
           >
             <Plus className="h-4 w-4" />
           </Button>
@@ -147,6 +149,7 @@ export function ChatPanel() {
             size="icon"
             className="h-8 w-8"
             onClick={close}
+            aria-label="Close AI panel"
           >
             <X className="h-4 w-4" />
           </Button>
@@ -159,10 +162,17 @@ export function ChatPanel() {
 }
 
 export function ChatToggleButton() {
-  const { toggle, isOpen, messages } = useAiChatStore();
+  const { toggle, isOpen, messages, lastReadMessageIndex, markAsRead } = useAiChatStore();
   const unread = messages.filter(
-    (m) => m.role === "assistant" && !m.isStreaming
+    (m, i) => i > lastReadMessageIndex && m.role === "assistant" && !m.isStreaming
   ).length;
+
+  // Mark as read when panel opens
+  useEffect(() => {
+    if (isOpen) {
+      markAsRead();
+    }
+  }, [isOpen, messages.length, markAsRead]);
 
   return (
     <Button
@@ -170,6 +180,7 @@ export function ChatToggleButton() {
       size="icon"
       className="fixed bottom-6 right-6 z-50 h-12 w-12 rounded-full shadow-lg"
       onClick={toggle}
+      aria-label={isOpen ? "Close AI assistant" : "Open AI assistant"}
     >
       <MessageSquare className="h-5 w-5" />
       {!isOpen && unread > 0 && (

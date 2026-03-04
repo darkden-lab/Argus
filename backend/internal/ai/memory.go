@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -103,6 +104,63 @@ func (s *MemoryStore) Delete(ctx context.Context, id, userID string) error {
 		return fmt.Errorf("memory not found or access denied")
 	}
 	return nil
+}
+
+// Search returns memories matching the query via case-insensitive text search.
+func (s *MemoryStore) Search(ctx context.Context, userID, query string) ([]Memory, error) {
+	// Escape LIKE metacharacters so user input is treated literally
+	escaped := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(query)
+	rows, err := s.pool.Query(ctx,
+		`SELECT id, user_id, content, category, created_at, updated_at
+		 FROM ai_memories WHERE user_id = $1 AND content ILIKE '%' || $2 || '%'
+		 ORDER BY updated_at DESC LIMIT 10`,
+		userID, escaped,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var memories []Memory
+	for rows.Next() {
+		var m Memory
+		if err := rows.Scan(&m.ID, &m.UserID, &m.Content, &m.Category, &m.CreatedAt, &m.UpdatedAt); err != nil {
+			continue
+		}
+		memories = append(memories, m)
+	}
+	return memories, nil
+}
+
+// CreateForTool wraps Create and returns a JSON string for use by AI tool execution.
+func (s *MemoryStore) CreateForTool(ctx context.Context, userID, content, category string) (string, error) {
+	m, err := s.Create(ctx, userID, content, category)
+	if err != nil {
+		return "", err
+	}
+	data, err := json.Marshal(m)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// SearchForTool wraps Search and returns a JSON string for use by AI tool execution.
+func (s *MemoryStore) SearchForTool(ctx context.Context, userID, query string) (string, error) {
+	memories, err := s.Search(ctx, userID, query)
+	if err != nil {
+		return "", err
+	}
+	data, err := json.MarshalIndent(memories, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// DeleteForTool wraps Delete for use by AI tool execution.
+func (s *MemoryStore) DeleteForTool(ctx context.Context, id, userID string) error {
+	return s.Delete(ctx, id, userID)
 }
 
 // LoadForPrompt formats all user memories as text suitable for system prompt injection.

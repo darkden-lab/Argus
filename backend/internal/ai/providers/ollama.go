@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/darkden-lab/argus/backend/internal/ai"
 )
@@ -32,7 +33,7 @@ func NewOllama(baseURL, model string, customHeaders map[string]string) *Ollama {
 		baseURL:       strings.TrimRight(baseURL, "/"),
 		model:         model,
 		customHeaders: customHeaders,
-		client:        &http.Client{},
+		client:        &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -114,7 +115,7 @@ func (o *Ollama) Chat(ctx context.Context, req ai.ChatRequest) (*ai.ChatResponse
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		return nil, fmt.Errorf("ollama: API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -171,7 +172,7 @@ func (o *Ollama) ChatStream(ctx context.Context, req ai.ChatRequest) (ai.StreamR
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		resp.Body.Close()
 		return nil, fmt.Errorf("ollama: API error %d: %s", resp.StatusCode, string(respBody))
 	}
@@ -210,7 +211,7 @@ func (o *Ollama) Embed(ctx context.Context, req ai.EmbedRequest) (*ai.EmbedRespo
 		}
 
 		if resp.StatusCode != http.StatusOK {
-			respBody, _ := io.ReadAll(resp.Body)
+			respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 			resp.Body.Close()
 			return nil, fmt.Errorf("ollama: embed API error %d: %s", resp.StatusCode, string(respBody))
 		}

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -59,12 +60,25 @@ func (h *AgentHandlers) listAgents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AgentHandlers) getAgent(w http.ResponseWriter, r *http.Request) {
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		writeAIJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 	agent, err := h.store.GetByID(r.Context(), id)
 	if err != nil {
 		writeAIJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
 		return
 	}
+
+	// Private agents are only visible to their owner
+	if !agent.IsBuiltin && !agent.IsPublic && (agent.OwnerUserID == nil || *agent.OwnerUserID != claims.UserID) {
+		writeAIJSON(w, http.StatusNotFound, map[string]string{"error": "agent not found"})
+		return
+	}
+
 	writeAIJSON(w, http.StatusOK, agent)
 }
 
@@ -190,9 +204,19 @@ func (h *AgentHandlers) listTasks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *AgentHandlers) getTask(w http.ResponseWriter, r *http.Request) {
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		writeAIJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
 	id := mux.Vars(r)["id"]
 	task, err := h.store.GetTask(r.Context(), id)
 	if err != nil {
+		writeAIJSON(w, http.StatusNotFound, map[string]string{"error": "task not found"})
+		return
+	}
+	if task.UserID != claims.UserID {
 		writeAIJSON(w, http.StatusNotFound, map[string]string{"error": "task not found"})
 		return
 	}
@@ -243,16 +267,31 @@ func (h *AgentHandlers) createTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Start task execution in background if runner is available
+	// Start task execution in background if runner is available.
+	// Use context.Background() because r.Context() is cancelled when the HTTP
+	// response is sent, which would immediately cancel the long-running task.
 	if h.taskRunner != nil {
-		go h.taskRunner.RunTask(r.Context(), task, agent, claims.UserID)
+		go h.taskRunner.RunTask(context.Background(), task, agent, claims.UserID)
 	}
 
 	writeAIJSON(w, http.StatusCreated, task)
 }
 
 func (h *AgentHandlers) cancelTask(w http.ResponseWriter, r *http.Request) {
+	claims, ok := auth.ClaimsFromContext(r.Context())
+	if !ok {
+		writeAIJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
 	id := mux.Vars(r)["id"]
+
+	// Verify the user owns this task before cancelling
+	task, err := h.store.GetTask(r.Context(), id)
+	if err != nil || task.UserID != claims.UserID {
+		writeAIJSON(w, http.StatusNotFound, map[string]string{"error": "task not found"})
+		return
+	}
 
 	if h.taskRunner != nil {
 		h.taskRunner.CancelTask(id)

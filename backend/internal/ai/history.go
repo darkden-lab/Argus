@@ -108,6 +108,20 @@ func (s *HistoryStore) GetMessages(ctx context.Context, conversationID string, l
 	return messages, rows.Err()
 }
 
+// GetConversation returns a single conversation by ID, scoped to the given user.
+func (s *HistoryStore) GetConversation(ctx context.Context, conversationID, userID string) (*Conversation, error) {
+	var c Conversation
+	err := s.pool.QueryRow(ctx,
+		`SELECT id, user_id, title, COALESCE(cluster_id::text, ''), COALESCE(namespace, ''), created_at, updated_at
+		 FROM ai_conversations WHERE id = $1 AND user_id = $2`,
+		conversationID, userID,
+	).Scan(&c.ID, &c.UserID, &c.Title, &c.ClusterID, &c.Namespace, &c.CreatedAt, &c.UpdatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &c, nil
+}
+
 // DeleteConversation removes a conversation and all its messages.
 func (s *HistoryStore) DeleteConversation(ctx context.Context, conversationID, userID string) error {
 	result, err := s.pool.Exec(ctx,
@@ -123,11 +137,21 @@ func (s *HistoryStore) DeleteConversation(ctx context.Context, conversationID, u
 	return nil
 }
 
-// UpdateTitle updates a conversation's title.
-func (s *HistoryStore) UpdateTitle(ctx context.Context, conversationID, title string) error {
+// VerifyConversationOwnership checks that the given conversation belongs to the user.
+func (s *HistoryStore) VerifyConversationOwnership(ctx context.Context, conversationID, userID string) (bool, error) {
+	var exists bool
+	err := s.pool.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM ai_conversations WHERE id = $1 AND user_id = $2)`,
+		conversationID, userID,
+	).Scan(&exists)
+	return exists, err
+}
+
+// UpdateTitle updates a conversation's title (scoped to the owning user).
+func (s *HistoryStore) UpdateTitle(ctx context.Context, conversationID, title, userID string) error {
 	_, err := s.pool.Exec(ctx,
-		`UPDATE ai_conversations SET title = $1, updated_at = NOW() WHERE id = $2`,
-		title, conversationID,
+		`UPDATE ai_conversations SET title = $1, updated_at = NOW() WHERE id = $2 AND user_id = $3`,
+		title, conversationID, userID,
 	)
 	return err
 }

@@ -82,6 +82,10 @@ interface AiChatState {
   close: () => void;
   toggle: () => void;
 
+  // Unread tracking
+  lastReadMessageIndex: number;
+  markAsRead: () => void;
+
   // AI status
   aiStatus: AiStatus | null;
   setAiStatus: (status: AiStatus | null) => void;
@@ -98,6 +102,7 @@ interface AiChatState {
   setConversations: (conversations: Conversation[]) => void;
   setActiveConversation: (id: string | null) => void;
   addConversation: (conversation: Conversation) => void;
+  removeConversation: (id: string) => void;
 
   // Messages
   messages: ChatMessage[];
@@ -145,6 +150,10 @@ export const useAiChatStore = create<AiChatState>((set) => ({
   close: () => set({ isOpen: false }),
   toggle: () => set((s) => ({ isOpen: !s.isOpen })),
 
+  // Unread tracking
+  lastReadMessageIndex: -1,
+  markAsRead: () => set((s) => ({ lastReadMessageIndex: s.messages.length - 1 })),
+
   // AI status
   aiStatus: null,
   setAiStatus: (status) => set({ aiStatus: status }),
@@ -160,13 +169,20 @@ export const useAiChatStore = create<AiChatState>((set) => ({
   activeConversationId: null,
   setConversations: (conversations) => set({ conversations }),
   setActiveConversation: (id) =>
-    set({ activeConversationId: id, messages: [] }),
+    set({ activeConversationId: id, messages: [], lastReadMessageIndex: -1 }),
   addConversation: (conversation) =>
     set((s) => ({ conversations: [conversation, ...s.conversations] })),
+  removeConversation: (id) =>
+    set((s) => ({
+      conversations: s.conversations.filter((c) => c.id !== id),
+      ...(s.activeConversationId === id
+        ? { activeConversationId: null, messages: [], lastReadMessageIndex: -1 }
+        : {}),
+    })),
 
   // Messages
   messages: [],
-  setMessages: (messages) => set({ messages }),
+  setMessages: (messages) => set({ messages, lastReadMessageIndex: messages.length > 0 ? messages.length - 1 : -1 }),
   addMessage: (message) =>
     set((s) => ({ messages: [...s.messages, message] })),
   updateMessage: (id, updates) =>

@@ -24,7 +24,7 @@ const sockets = new Map<Namespace, Socket>();
  */
 export function getSocket(namespace: Namespace): Socket {
   const existing = sockets.get(namespace);
-  if (existing?.connected) return existing;
+  if (existing && !existing.disconnected) return existing;
 
   // Disconnect stale socket if exists
   if (existing) {

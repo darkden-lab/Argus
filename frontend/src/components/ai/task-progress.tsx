@@ -8,6 +8,7 @@ import {
   Loader2,
   X,
   Eye,
+  Ban,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -20,10 +21,12 @@ interface TaskProgressProps {
 
 export function TaskProgress({ tasks, onCancelTask }: TaskProgressProps) {
   const [expanded, setExpanded] = useState(true);
+  const [expandedResult, setExpandedResult] = useState<string | null>(null);
 
   const activeTasks = tasks.filter((t) => t.status === "running" || t.status === "pending");
   const completedTasks = tasks.filter((t) => t.status === "completed");
   const failedTasks = tasks.filter((t) => t.status === "failed");
+  const cancelledTasks = tasks.filter((t) => t.status === "cancelled");
 
   if (tasks.length === 0) return null;
 
@@ -32,6 +35,7 @@ export function TaskProgress({ tasks, onCancelTask }: TaskProgressProps) {
       <button
         className="flex w-full items-center justify-between px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-accent/50 transition-colors"
         onClick={() => setExpanded(!expanded)}
+        aria-expanded={expanded}
       >
         <span className="flex items-center gap-1.5">
           Tasks
@@ -65,6 +69,8 @@ export function TaskProgress({ tasks, onCancelTask }: TaskProgressProps) {
                   size="icon"
                   className="h-5 w-5 shrink-0 text-muted-foreground hover:text-destructive"
                   onClick={() => onCancelTask(task.id)}
+                  title="Cancel task"
+                  aria-label="Cancel task"
                 >
                   <X className="h-3 w-3" />
                 </Button>
@@ -78,7 +84,7 @@ export function TaskProgress({ tasks, onCancelTask }: TaskProgressProps) {
               <div className="h-1.5 rounded-full bg-muted overflow-hidden">
                 <div
                   className="h-full rounded-full bg-primary transition-all duration-300"
-                  style={{ width: `${task.progress}%` }}
+                  style={{ width: `${Number.isFinite(task.progress) ? Math.min(100, Math.max(0, task.progress)) : 0}%` }}
                 />
               </div>
               {task.total_steps > 0 && (
@@ -92,19 +98,28 @@ export function TaskProgress({ tasks, onCancelTask }: TaskProgressProps) {
           {completedTasks.map((task) => (
             <div
               key={task.id}
-              className="flex items-center gap-2 rounded-md border border-green-500/20 bg-green-500/5 px-2 py-1.5"
+              className="rounded-md border border-green-500/20 bg-green-500/5 px-2 py-1.5"
             >
-              <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
-              <span className="text-xs truncate flex-1">{task.title}</span>
-              {task.result && (
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-5 w-5 shrink-0"
-                  title="View result"
-                >
-                  <Eye className="h-3 w-3" />
-                </Button>
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                <span className="text-xs truncate flex-1">{task.title}</span>
+                {task.result && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-5 shrink-0"
+                    title="View result"
+                    aria-label="View result"
+                    onClick={() => setExpandedResult(expandedResult === task.id ? null : task.id)}
+                  >
+                    <Eye className="h-3 w-3" />
+                  </Button>
+                )}
+              </div>
+              {expandedResult === task.id && task.result && (
+                <p className="mt-1 text-xs text-muted-foreground whitespace-pre-wrap line-clamp-6">
+                  {task.result}
+                </p>
               )}
             </div>
           ))}
@@ -119,10 +134,20 @@ export function TaskProgress({ tasks, onCancelTask }: TaskProgressProps) {
                 <span className="text-xs truncate flex-1">{task.title}</span>
               </div>
               {task.error && (
-                <p className="mt-0.5 ml-5.5 text-[10px] text-destructive/80 truncate">
+                <p className="mt-0.5 ml-6 text-[10px] text-destructive/80 truncate">
                   {task.error}
                 </p>
               )}
+            </div>
+          ))}
+
+          {cancelledTasks.map((task) => (
+            <div
+              key={task.id}
+              className="flex items-center gap-2 rounded-md border border-border bg-muted/20 px-2 py-1.5"
+            >
+              <Ban className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs truncate flex-1 text-muted-foreground">{task.title}</span>
             </div>
           ))}
         </div>

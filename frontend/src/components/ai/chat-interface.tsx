@@ -16,6 +16,7 @@ import {
   PanelLeftOpen,
   PanelLeftClose,
   Plus,
+  Trash2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -108,8 +109,10 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
     confirmAction,
     startNewConversation,
     loadConversation,
+    deleteConversation,
     selectAgent,
     fetchAgents,
+    cancelTask,
   } = useAiChat();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -165,9 +168,8 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
     sendMessage(prompt);
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleCancelTask = (taskId: string) => {
-    // Task cancellation will be handled via WS in the future
+    cancelTask(taskId);
   };
 
   const hasContext = pageContext.cluster_id || pageContext.namespace;
@@ -195,6 +197,7 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
           }
           rows={1}
           disabled={!!(aiStatus && !aiStatus.configured)}
+          aria-label="Message to AI assistant"
           className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
           style={{
             minHeight: "20px",
@@ -212,6 +215,7 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
           className="h-7 w-7 shrink-0"
           disabled={!inputValue.trim() || isStreaming || !!(aiStatus && !aiStatus.configured)}
           onClick={handleSubmit}
+          aria-label="Send message"
         >
           {isStreaming ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -320,6 +324,7 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
                   placeholder="Search..."
                   value={sidebarSearch}
                   onChange={(e) => setSidebarSearch(e.target.value)}
+                  aria-label="Search conversations"
                   className="w-full rounded-md border border-border bg-transparent pl-7 pr-2 py-1 text-xs outline-none placeholder:text-muted-foreground focus:border-primary/50"
                 />
               </div>
@@ -338,18 +343,36 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
                       </p>
                       <div className="space-y-0.5">
                         {group.items.map((conv) => (
-                          <button
+                          <div
                             key={conv.id}
                             className={cn(
-                              "w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                              "group flex items-center rounded-md transition-colors",
                               conv.id === activeConversationId
                                 ? "bg-accent text-accent-foreground"
                                 : "text-muted-foreground hover:bg-accent/50"
                             )}
-                            onClick={() => loadConversation(conv.id)}
                           >
-                            <p className="truncate font-medium">{conv.title}</p>
-                          </button>
+                            <button
+                              className="flex-1 min-w-0 px-2 py-1.5 text-left text-xs"
+                              onClick={() => loadConversation(conv.id)}
+                              aria-label={`Load conversation: ${conv.title}`}
+                            >
+                              <p className="truncate font-medium">{conv.title}</p>
+                            </button>
+                            <button
+                              className="hidden group-hover:flex shrink-0 items-center justify-center h-6 w-6 mr-1 rounded hover:bg-destructive/20 hover:text-destructive"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (window.confirm("Delete this conversation?")) {
+                                  deleteConversation(conv.id);
+                                }
+                              }}
+                              title="Delete conversation"
+                              aria-label="Delete conversation"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </div>
                         ))}
                       </div>
                     </div>

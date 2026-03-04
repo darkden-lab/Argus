@@ -322,9 +322,6 @@ func main() {
 		aiIndexer.Start(ctx)
 		defer aiIndexer.Stop()
 	}
-	aiChatHandler := ai.NewChatHandler(aiService, jwtService)
-	aiChatHandler.RegisterRoutes(r)
-
 	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard, aiService, aiProviderFactory, cfg.EncryptionKey)
 	aiAdminHandlers.RegisterRoutes(protected)
 
@@ -335,12 +332,19 @@ func main() {
 	}
 
 	// AI Agent system (agents CRUD + task runner)
+	var aiAgentStore *ai.AgentStore
+	var aiTaskRunner *ai.TaskRunner
+	var aiHistoryStore *ai.HistoryStore
 	if pool != nil {
-		aiAgentStore := ai.NewAgentStore(pool)
+		aiHistoryStore = ai.NewHistoryStore(pool)
+		aiAgentStore = ai.NewAgentStore(pool)
 		aiService.SetAgentStore(aiAgentStore)
-		aiTaskRunner := ai.NewTaskRunner(aiService, aiAgentStore)
+		aiTaskRunner = ai.NewTaskRunner(aiService, aiAgentStore)
 		aiAgentHandlers := ai.NewAgentHandlers(aiAgentStore, aiTaskRunner)
 		aiAgentHandlers.RegisterRoutes(protected)
+
+		aiConvHandlers := ai.NewConversationHandlers(aiHistoryStore)
+		aiConvHandlers.RegisterRoutes(protected)
 	}
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)
@@ -353,6 +357,10 @@ func main() {
 		ClusterMgr:      clusterMgr,
 		NotifWSHandler:  notifWSHandler,
 		TerminalHandler: terminalHandler,
+		HistoryStore:    aiHistoryStore,
+		AgentStore:      aiAgentStore,
+		TaskRunner:      aiTaskRunner,
+		MemoryStore:     aiMemoryStore,
 	})
 	defer sioServer.Close()
 	r.PathPrefix("/socket.io/").Handler(sioServer.Handler())

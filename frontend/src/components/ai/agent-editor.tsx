@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import {
   Bot,
   Search,
@@ -134,6 +134,25 @@ export function AgentEditor({ open, onOpenChange, agent, onSaved }: AgentEditorP
   );
   const [saving, setSaving] = useState(false);
 
+  // Reset form state when dialog opens or agent changes
+  const prevOpenRef = useRef(open);
+  if (open && !prevOpenRef.current) {
+    // Dialog just opened — sync state from agent prop
+    setName(agent?.name || "");
+    setDescription(agent?.description || "");
+    setIcon(agent?.icon || "bot");
+    setCategory(agent?.category || "general");
+    setSystemPrompt(agent?.system_prompt || "");
+    setWorkflowSteps(
+      agent?.workflow_steps?.map((s) => ({ name: s.name, description: s.description })) || []
+    );
+    setWorkflowMode(agent?.workflow_mode || "interactive");
+    setAllowedTools(agent?.allowed_tools || []);
+    setToolPermissionLevel(agent?.tool_permission_level || "inherit");
+    setSaving(false);
+  }
+  prevOpenRef.current = open;
+
   const toggleTool = (tool: string) => {
     setAllowedTools((prev) =>
       prev.includes(tool) ? prev.filter((t) => t !== tool) : [...prev, tool]
@@ -255,6 +274,8 @@ export function AgentEditor({ open, onOpenChange, agent, onSaved }: AgentEditorP
                           : "border-border text-muted-foreground hover:bg-accent"
                       )}
                       onClick={() => setIcon(opt.name)}
+                      aria-label={`Select ${opt.name.replace(/_/g, " ")} icon`}
+                      aria-pressed={icon === opt.name}
                     >
                       <IconComp className="h-4 w-4" />
                     </button>
@@ -375,6 +396,7 @@ export function AgentEditor({ open, onOpenChange, agent, onSaved }: AgentEditorP
                               : "border-border text-muted-foreground hover:bg-accent"
                           )}
                           onClick={() => toggleTool(tool)}
+                          aria-pressed={allowedTools.includes(tool)}
                         >
                           {tool}
                         </button>

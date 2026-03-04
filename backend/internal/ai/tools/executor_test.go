@@ -70,8 +70,8 @@ func TestAllToolsCount(t *testing.T) {
 			len(all), len(readOnly)+len(write), len(readOnly), len(write))
 	}
 
-	if len(readOnly) != 16 {
-		t.Errorf("ReadOnlyTools() has %d tools, expected 16", len(readOnly))
+	if len(readOnly) != 19 {
+		t.Errorf("ReadOnlyTools() has %d tools, expected 19", len(readOnly))
 	}
 
 	if len(write) != 6 {

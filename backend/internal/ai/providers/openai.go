@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/darkden-lab/argus/backend/internal/ai"
 )
@@ -36,7 +38,7 @@ func NewOpenAI(apiKey, model, baseURL string, customHeaders map[string]string) *
 		model:         model,
 		baseURL:       strings.TrimRight(baseURL, "/"),
 		customHeaders: customHeaders,
-		client:        &http.Client{},
+		client:        &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -122,7 +124,7 @@ func (o *OpenAI) Chat(ctx context.Context, req ai.ChatRequest) (*ai.ChatResponse
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		return nil, fmt.Errorf("openai: API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -187,12 +189,12 @@ func (o *OpenAI) ChatStream(ctx context.Context, req ai.ChatRequest) (ai.StreamR
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		resp.Body.Close()
 		return nil, fmt.Errorf("openai: API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	return &openaiStreamReader{body: resp.Body}, nil
+	return &openaiStreamReader{body: resp.Body, scanner: bufio.NewScanner(resp.Body)}, nil
 }
 
 func (o *OpenAI) Embed(ctx context.Context, req ai.EmbedRequest) (*ai.EmbedResponse, error) {
@@ -224,7 +226,7 @@ func (o *OpenAI) Embed(ctx context.Context, req ai.EmbedRequest) (*ai.EmbedRespo
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		return nil, fmt.Errorf("openai: embed API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -298,27 +300,20 @@ func (o *OpenAI) buildRequest(req ai.ChatRequest) openaiRequest {
 
 // openaiStreamReader implements ai.StreamReader for OpenAI SSE streams.
 type openaiStreamReader struct {
-	body io.ReadCloser
+	body    io.ReadCloser
+	scanner *bufio.Scanner
 }
 
 func (r *openaiStreamReader) Next() (*ai.StreamDelta, error) {
-	buf := make([]byte, 0, 4096)
-	single := make([]byte, 1)
-
 	for {
-		buf = buf[:0]
-		for {
-			_, err := r.body.Read(single)
-			if err != nil {
+		if !r.scanner.Scan() {
+			if err := r.scanner.Err(); err != nil {
 				return nil, err
 			}
-			if single[0] == '\n' {
-				break
-			}
-			buf = append(buf, single[0])
+			return nil, io.EOF
 		}
 
-		line := strings.TrimSpace(string(buf))
+		line := strings.TrimSpace(r.scanner.Text())
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
