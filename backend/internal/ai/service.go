@@ -389,7 +389,7 @@ func (s *Service) ExecuteToolsWithNotify(ctx context.Context, userID string, con
 	for _, call := range toolCalls {
 		if tools.RequiresConfirm(call.Name) {
 			// Create the confirmation first (non-blocking), notify the client, then wait
-			req := s.confirmMgr.CreateRequest(userID, tools.ToolCall{ID: call.ID, Name: call.Name, Arguments: call.Arguments})
+			req := s.confirmMgr.CreateRequest(userID, tools.ToolCall(call))
 			if confirmNotify != nil {
 				confirmNotify(req)
 			}
