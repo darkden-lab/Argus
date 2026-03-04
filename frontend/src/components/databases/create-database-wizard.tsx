@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
+import { ManifestPreview } from "@/components/ui/manifest-preview";
 
 interface CreateDatabaseWizardProps {
   open: boolean;
@@ -348,7 +349,6 @@ export function CreateDatabaseWizard({
   }
 
   const manifest = buildManifest(form);
-  const jsonPreview = JSON.stringify(manifest, null, 2);
 
   return (
     <Dialog
@@ -677,9 +677,7 @@ export function CreateDatabaseWizard({
               <Label className="text-xs text-muted-foreground">
                 Generated Manifest (JSON)
               </Label>
-              <pre className="rounded-md bg-muted p-3 text-xs font-mono overflow-auto max-h-[300px] whitespace-pre-wrap">
-                {jsonPreview}
-              </pre>
+              <ManifestPreview manifest={manifest} maxHeight="400px" />
             </div>
           </div>
         )}
