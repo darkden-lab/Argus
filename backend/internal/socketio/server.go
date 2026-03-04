@@ -42,7 +42,7 @@ func NewServer(deps Deps) *Server {
 		Credentials: true,
 	})
 
-	io := socket.NewServer(nil, nil)
+	io := socket.NewServer(nil, opts)
 
 	// Register namespaces
 	registerK8sNamespace(io, deps.JWTService, deps.Hub)
@@ -120,5 +120,5 @@ func getClaims(s *socket.Socket) *auth.Claims {
 
 // emitError sends an error event to the socket.
 func emitError(s *socket.Socket, msg string) {
-	_ = s.Emit("error", fmt.Sprintf(`{"error":"%s"}`, msg))
+	_ = s.Emit("ai_error", fmt.Sprintf(`{"error":"%s"}`, msg))
 }
