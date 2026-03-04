@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronDown, Loader2 } from "lucide-react";
+import { Check, ChevronDown, Loader2, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +24,9 @@ interface ComboboxProps {
   disabled?: boolean;
   className?: string;
   allowCustomValue?: boolean;
+  onSearch?: (query: string) => void;
+  onCreateNew?: () => void;
+  createNewLabel?: string;
 }
 
 function Combobox({
@@ -37,6 +40,9 @@ function Combobox({
   disabled = false,
   className,
   allowCustomValue = false,
+  onSearch,
+  onCreateNew,
+  createNewLabel,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -118,7 +124,10 @@ function Combobox({
           <Input
             placeholder={searchPlaceholder}
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              onSearch?.(e.target.value);
+            }}
             className="h-8 text-xs"
             autoFocus
           />
@@ -164,6 +173,19 @@ function Combobox({
               </div>
             </button>
           ))}
+          {onCreateNew && (
+            <button
+              className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs cursor-pointer outline-none border-t border-border mt-1 pt-1.5 text-primary hover:bg-accent"
+              onClick={(e) => {
+                e.stopPropagation();
+                setOpen(false);
+                onCreateNew();
+              }}
+            >
+              <Plus className="h-3.5 w-3.5" />
+              <span>{createNewLabel || "Create new..."}</span>
+            </button>
+          )}
         </div>
       </PopoverContent>
     </Popover>

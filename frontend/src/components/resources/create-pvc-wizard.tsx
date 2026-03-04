@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { ManifestPreview } from "@/components/ui/manifest-preview";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
 
@@ -325,6 +326,35 @@ export function CreatePVCWizard({
             )}
           </div>
         </div>
+
+        {/* Preview */}
+        {form.name && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Preview</Label>
+            <ManifestPreview
+              manifest={{
+                apiVersion: "v1",
+                kind: "PersistentVolumeClaim",
+                metadata: {
+                  name: form.name,
+                  namespace: form.namespace || "default",
+                },
+                spec: {
+                  accessModes: [form.accessMode],
+                  resources: {
+                    requests: {
+                      storage: `${form.size}${form.sizeUnit}`,
+                    },
+                  },
+                  ...(form.storageClass
+                    ? { storageClassName: form.storageClass }
+                    : {}),
+                },
+              }}
+              maxHeight="200px"
+            />
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-2">

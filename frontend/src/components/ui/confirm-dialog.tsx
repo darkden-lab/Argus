@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,6 +10,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -20,6 +22,7 @@ interface ConfirmDialogProps {
   variant?: "destructive" | "default";
   onConfirm: () => void;
   loading?: boolean;
+  requireTypedConfirmation?: string;
 }
 
 export function ConfirmDialog({
@@ -32,7 +35,13 @@ export function ConfirmDialog({
   variant = "default",
   onConfirm,
   loading = false,
+  requireTypedConfirmation,
 }: ConfirmDialogProps) {
+  const [typedValue, setTypedValue] = useState("");
+
+  useEffect(() => {
+    if (open) setTypedValue("");
+  }, [open]);
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent showCloseButton={false}>
@@ -40,6 +49,20 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {requireTypedConfirmation && (
+          <div className="py-3">
+            <p className="text-sm text-muted-foreground mb-2">
+              Type <span className="font-mono font-semibold text-foreground">{requireTypedConfirmation}</span> to confirm:
+            </p>
+            <Input
+              value={typedValue}
+              onChange={(e) => setTypedValue(e.target.value)}
+              placeholder={requireTypedConfirmation}
+              className="font-mono"
+              autoFocus
+            />
+          </div>
+        )}
         <DialogFooter>
           <Button
             variant="outline"
@@ -51,7 +74,7 @@ export function ConfirmDialog({
           <Button
             variant={variant === "destructive" ? "destructive" : "default"}
             onClick={onConfirm}
-            disabled={loading}
+            disabled={loading || (!!requireTypedConfirmation && typedValue !== requireTypedConfirmation)}
           >
             {loading ? "..." : confirmLabel}
           </Button>

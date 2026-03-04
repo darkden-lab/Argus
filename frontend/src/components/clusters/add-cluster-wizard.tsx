@@ -323,7 +323,11 @@ export function AddClusterWizard({
               </button>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-between">
+              <Button variant="outline" onClick={handleClose}>
+                <ArrowLeft className="mr-1.5 h-4 w-4" />
+                Cancel
+              </Button>
               <Button
                 onClick={() => setStep(1)}
                 disabled={!connectionType}

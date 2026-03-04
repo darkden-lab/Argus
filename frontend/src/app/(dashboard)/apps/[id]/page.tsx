@@ -32,6 +32,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { LogViewer } from "@/components/resources/log-viewer";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EditAppDialog } from "@/components/apps/edit-app-dialog";
+import { AppEnvironmentsTab } from "@/components/apps/app-environments-tab";
 import {
   ArrowLeft,
   Box,
@@ -46,6 +49,8 @@ import {
   Route,
   Scale,
   Shield,
+  Trash2,
+  Pencil,
 } from "lucide-react";
 
 interface K8sPod {
@@ -96,6 +101,13 @@ export default function AppDetailPage() {
   // Restart dialog
   const [restartOpen, setRestartOpen] = useState(false);
   const [restarting, setRestarting] = useState(false);
+
+  // Delete dialog
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+
+  // Edit dialog
+  const [editOpen, setEditOpen] = useState(false);
 
   const fetchApp = useCallback(async () => {
     if (!clusterId) return;
@@ -250,6 +262,32 @@ export default function AppDetailPage() {
     }
   }
 
+  async function handleDelete() {
+    if (!clusterId || !app) return;
+    setDeleting(true);
+    try {
+      await api.del(
+        `/api/clusters/${clusterId}/resources/apps/v1/deployments/${app.name}?namespace=${namespace}`
+      );
+      // Try to delete associated services (non-blocking)
+      for (const svc of app.services) {
+        await api.del(
+          `/api/clusters/${clusterId}/resources/_/v1/services/${svc.metadata.name}?namespace=${namespace}`
+        ).catch(() => {});
+      }
+      toast("App deleted", {
+        description: `${app.name} has been deleted`,
+        variant: "success",
+      });
+      router.push("/apps");
+    } catch {
+      // Handled by api client
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -311,6 +349,14 @@ export default function AppDetailPage() {
           <Button
             variant="outline"
             size="sm"
+            onClick={() => setEditOpen(true)}
+          >
+            <Pencil className="mr-1.5 h-4 w-4" />
+            Edit
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => {
               setScaleValue(app.replicas.desired);
               setScaleOpen(true);
@@ -327,6 +373,14 @@ export default function AppDetailPage() {
             <RotateCcw className="mr-1.5 h-4 w-4" />
             Restart
           </Button>
+          <Button
+            variant="destructive"
+            size="sm"
+            onClick={() => setDeleteOpen(true)}
+          >
+            <Trash2 className="mr-1.5 h-4 w-4" />
+            Delete
+          </Button>
           <Button variant="ghost" size="icon" onClick={fetchApp}>
             <RefreshCw className="h-4 w-4" />
           </Button>
@@ -339,6 +393,7 @@ export default function AppDetailPage() {
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="pods">Pods ({pods.length})</TabsTrigger>
           <TabsTrigger value="resources">Resources</TabsTrigger>
+          <TabsTrigger value="environment">Environment</TabsTrigger>
           <TabsTrigger value="events">Events</TabsTrigger>
         </TabsList>
 
@@ -686,6 +741,16 @@ export default function AppDetailPage() {
           )}
         </TabsContent>
 
+        {/* Environment tab */}
+        <TabsContent value="environment" className="space-y-4">
+          <AppEnvironmentsTab
+            clusterId={clusterId}
+            appName={app.name}
+            namespace={app.namespace}
+            onRefresh={fetchApp}
+          />
+        </TabsContent>
+
         {/* Events tab */}
         <TabsContent value="events" className="space-y-4">
           <Card className="py-4">
@@ -819,6 +884,31 @@ export default function AppDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Edit Dialog */}
+      <EditAppDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        clusterId={clusterId}
+        appName={app.name}
+        namespace={app.namespace}
+        currentImage={app.image}
+        currentReplicas={app.replicas.desired}
+        onSaved={fetchApp}
+      />
+
+      {/* Delete Dialog */}
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Application"
+        description={`This will permanently delete the deployment "${app.name}" and its associated services. This action cannot be undone.`}
+        confirmLabel="Delete"
+        variant="destructive"
+        requireTypedConfirmation={app.name}
+        onConfirm={handleDelete}
+        loading={deleting}
+      />
     </div>
   );
 }
