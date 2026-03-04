@@ -82,15 +82,24 @@ func (idx *Indexer) Stop() {
 }
 
 // RunOnce performs a single indexing pass over all content sources.
-func (idx *Indexer) RunOnce(ctx context.Context) {
+// It creates an isolated context with a 5-minute timeout so that server
+// shutdown does not cancel in-flight embedding requests.
+func (idx *Indexer) RunOnce(_ context.Context) {
 	idx.mu.Lock()
 	idx.Status = "running"
 	idx.mu.Unlock()
 
 	log.Printf("rag indexer: starting indexing pass")
 
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
+
 	var indexErr error
 	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("rag indexer: panic recovered: %v", r)
+			indexErr = context.Canceled
+		}
 		idx.mu.Lock()
 		idx.LastRun = time.Now()
 		if indexErr != nil {

@@ -54,15 +54,28 @@ function getLatestWs(): MockWebSocket {
 }
 
 describe('WebSocket Security', () => {
+  const localStorageMock = (() => {
+    let store: Record<string, string> = {};
+    return {
+      getItem: (key: string) => store[key] ?? null,
+      setItem: (key: string, value: string) => { store[key] = value; },
+      removeItem: (key: string) => { delete store[key]; },
+      clear: () => { store = {}; },
+    };
+  })();
+
   beforeEach(() => {
     jest.useFakeTimers();
     wsInstances = [];
     k8sWs.disconnect();
+    Object.defineProperty(window, 'localStorage', { value: localStorageMock, writable: true });
+    localStorageMock.clear();
   });
 
   afterEach(() => {
     k8sWs.disconnect();
     jest.useRealTimers();
+    localStorageMock.clear();
   });
 
   describe('token handling', () => {
@@ -258,6 +271,7 @@ describe('WebSocket Security', () => {
 
   describe('reconnection behavior', () => {
     it('implements exponential backoff on reconnection', () => {
+      localStorageMock.setItem('access_token', 'test-token');
       k8sWs.connect('test-token');
       jest.runAllTimers();
 
