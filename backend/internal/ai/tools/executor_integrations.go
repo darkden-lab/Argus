@@ -15,7 +15,7 @@ import (
 
 func (e *Executor) queryPrometheus(ctx context.Context, args map[string]string) (string, error) {
 	if e.pluginEngine == nil || !e.pluginEngine.IsEnabled("prometheus") {
-		return "", fmt.Errorf("Prometheus plugin is not enabled on this cluster. Enable it in Settings > Plugins")
+		return "", fmt.Errorf("prometheus plugin is not enabled on this cluster, enable it in Settings > Plugins")
 	}
 
 	client, err := e.clusterMgr.GetClient(args["cluster_id"])
@@ -110,7 +110,7 @@ func (e *Executor) queryPrometheus(ctx context.Context, args map[string]string) 
 
 func (e *Executor) getAlerts(ctx context.Context, args map[string]string) (string, error) {
 	if e.pluginEngine == nil || !e.pluginEngine.IsEnabled("prometheus") {
-		return "", fmt.Errorf("Prometheus plugin is not enabled on this cluster. Enable it in Settings > Plugins")
+		return "", fmt.Errorf("prometheus plugin is not enabled on this cluster, enable it in Settings > Plugins")
 	}
 
 	_, err := e.clusterMgr.GetClient(args["cluster_id"])
@@ -162,7 +162,7 @@ func (e *Executor) getAlerts(ctx context.Context, args map[string]string) (strin
 
 func (e *Executor) getHelmReleases(ctx context.Context, args map[string]string) (string, error) {
 	if e.pluginEngine == nil || !e.pluginEngine.IsEnabled("helm") {
-		return "", fmt.Errorf("Helm plugin is not enabled on this cluster. Enable it in Settings > Plugins")
+		return "", fmt.Errorf("helm plugin is not enabled on this cluster, enable it in Settings > Plugins")
 	}
 
 	client, err := e.clusterMgr.GetClient(args["cluster_id"])
