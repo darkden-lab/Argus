@@ -34,7 +34,7 @@ type ToolParam struct {
 func RequiresConfirm(toolName string) bool {
 	switch toolName {
 	case "apply_yaml", "delete_resource", "scale_resource", "restart_resource",
-		"rollback_deployment", "get_pod_exec":
+		"rollback_deployment", "get_pod_exec", "delete_memory":
 		return true
 	default:
 		return false
@@ -270,6 +270,40 @@ func ReadOnlyTools() []Tool {
 					"namespace":  {Type: "string", Description: "Optional: namespace to filter releases"},
 				},
 				Required: []string{"cluster_id"},
+			},
+		},
+		{
+			Name:        "save_memory",
+			Description: "Save an important fact, preference, or learning about this user for future conversations. Use this proactively when the user shares preferences, environment details, or recurring patterns.",
+			Parameters: ToolParams{
+				Type: "object",
+				Properties: map[string]ToolParam{
+					"content":  {Type: "string", Description: "The fact or preference to remember"},
+					"category": {Type: "string", Description: "Category: preference, fact, learning, workflow", Enum: []string{"preference", "fact", "learning", "workflow"}},
+				},
+				Required: []string{"content", "category"},
+			},
+		},
+		{
+			Name:        "recall_memory",
+			Description: "Search user's saved memories for relevant context. Use before save_memory to avoid duplicates.",
+			Parameters: ToolParams{
+				Type: "object",
+				Properties: map[string]ToolParam{
+					"query": {Type: "string", Description: "Search term to find relevant memories"},
+				},
+				Required: []string{"query"},
+			},
+		},
+		{
+			Name:        "delete_memory",
+			Description: "Delete a specific user memory by ID. Use when user asks to forget something. REQUIRES USER CONFIRMATION.",
+			Parameters: ToolParams{
+				Type: "object",
+				Properties: map[string]ToolParam{
+					"memory_id": {Type: "string", Description: "ID of the memory to delete"},
+				},
+				Required: []string{"memory_id"},
 			},
 		},
 	}

@@ -1,13 +1,16 @@
 "use client";
 
 import { useEffect, useRef, useCallback } from "react";
-import { useAiChatStore, type ChatMessage, type PageContext, type AiStatus, type Agent } from "@/stores/ai-chat";
+import { useAiChatStore, type ChatMessage, type PageContext, type AiStatus, type Agent, type Conversation } from "@/stores/ai-chat";
 import { api } from "@/lib/api";
 import { getSocket, disconnectSocket } from "@/lib/socket";
 import type { Socket } from "socket.io-client";
 
+const STREAM_TIMEOUT_MS = 30_000; // 30s without a stream_delta → reset isStreaming
+
 export function useAiChat() {
   const socketRef = useRef<Socket | null>(null);
+  const streamTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const {
     isOpen,
@@ -19,6 +22,7 @@ export function useAiChat() {
     setMessages,
     setIsStreaming,
     addConversation,
+    removeConversation,
     setActiveConversation,
     setConversations,
     setAiStatus,
@@ -37,6 +41,7 @@ export function useAiChat() {
     setMessages,
     setIsStreaming,
     addConversation,
+    removeConversation,
     setActiveConversation,
     setConversations,
     setAiStatus,
@@ -54,6 +59,7 @@ export function useAiChat() {
     setMessages,
     setIsStreaming,
     addConversation,
+    removeConversation,
     setActiveConversation,
     setConversations,
     setAiStatus,
@@ -64,6 +70,41 @@ export function useAiChat() {
     updateTask,
     setActiveAgent,
   };
+
+  // Clear streaming timeout
+  const clearStreamTimeout = useCallback(() => {
+    if (streamTimeoutRef.current) {
+      clearTimeout(streamTimeoutRef.current);
+      streamTimeoutRef.current = null;
+    }
+  }, []);
+
+  // Reset streaming timeout — fires if no stream_delta for STREAM_TIMEOUT_MS
+  const resetStreamTimeout = useCallback(() => {
+    clearStreamTimeout();
+    streamTimeoutRef.current = setTimeout(() => {
+      const state = useAiChatStore.getState();
+      if (state.isStreaming) {
+        const streamingMsg = state.messages.findLast((m) => m.isStreaming);
+        if (streamingMsg) {
+          storeRef.current.updateMessage(streamingMsg.id, { isStreaming: false });
+        }
+        storeRef.current.setIsStreaming(false);
+      }
+    }, STREAM_TIMEOUT_MS);
+  }, [clearStreamTimeout]);
+
+  // Fetch conversations via REST
+  const fetchConversations = useCallback(() => {
+    api
+      .get<Conversation[]>("/api/ai/conversations")
+      .then((conversations) => {
+        storeRef.current.setConversations(conversations || []);
+      })
+      .catch(() => {
+        // Endpoint may not be available yet
+      });
+  }, []);
 
   // Fetch AI status when panel opens
   const fetchAiStatus = useCallback(() => {
@@ -106,9 +147,15 @@ export function useAiChat() {
     const socket = getSocket("/ai");
     socketRef.current = socket;
 
+    // Prevent duplicate handlers on reconnect or re-render
+    socket.removeAllListeners();
+
     socket.on("connect", () => {
       storeRef.current.setConnectionState("connected");
       storeRef.current.setConnectionError(null);
+      // Fetch conversation list and agents on connect/reconnect
+      fetchConversations();
+      fetchAgents();
     });
 
     socket.on("stream_delta", (msg: { content?: string }) => {
@@ -128,9 +175,12 @@ export function useAiChat() {
       } else if (msg.content) {
         store.appendToMessage(lastMsg.id, msg.content);
       }
+      // Reset streaming timeout on each delta
+      resetStreamTimeout();
     });
 
     socket.on("stream_end", () => {
+      clearStreamTimeout();
       const store = storeRef.current;
       const state = useAiChatStore.getState();
       const streamingMsg = state.messages.findLast((m) => m.isStreaming);
@@ -177,7 +227,8 @@ export function useAiChat() {
           updatedAt: new Date().toISOString(),
           messageCount: 0,
         });
-        store.setActiveConversation(msg.conversation_id);
+        // Set activeConversationId WITHOUT clearing messages (we may be mid-stream)
+        useAiChatStore.setState({ activeConversationId: msg.conversation_id });
       }
     });
 
@@ -246,7 +297,17 @@ export function useAiChat() {
       }
     });
 
+    socket.on("task_cancelled", (msg: { task_id?: string }) => {
+      if (msg.task_id) {
+        storeRef.current.updateTask(msg.task_id, {
+          status: "cancelled",
+          progress: 0,
+        });
+      }
+    });
+
     socket.on("ai_error", (msg: { error?: string; content?: string } | string) => {
+      clearStreamTimeout();
       const store = storeRef.current;
       store.setIsStreaming(false);
       const errorText = typeof msg === "string" ? msg : (msg.error || msg.content || "Unknown error");
@@ -263,7 +324,17 @@ export function useAiChat() {
     });
 
     socket.on("disconnect", () => {
+      clearStreamTimeout();
       storeRef.current.setConnectionState("disconnected");
+      // If streaming was active during disconnect, reset it
+      const state = useAiChatStore.getState();
+      if (state.isStreaming) {
+        const streamingMsg = state.messages.findLast((m) => m.isStreaming);
+        if (streamingMsg) {
+          storeRef.current.updateMessage(streamingMsg.id, { isStreaming: false });
+        }
+        storeRef.current.setIsStreaming(false);
+      }
     });
 
     socket.on("connect_error", () => {
@@ -272,12 +343,13 @@ export function useAiChat() {
         "Failed to connect to AI assistant. The server may be unavailable."
       );
     });
-  }, []);
+  }, [fetchConversations, fetchAgents, resetStreamTimeout, clearStreamTimeout]);
 
   const disconnect = useCallback(() => {
+    clearStreamTimeout();
     disconnectSocket("/ai");
     socketRef.current = null;
-  }, []);
+  }, [clearStreamTimeout]);
 
   // Connect when panel opens or full page is active, fetch AI status first
   useEffect(() => {
@@ -352,6 +424,14 @@ export function useAiChat() {
       confirmation_id: confirmId,
       approved,
     });
+    // Update the confirmation status locally so the UI reflects approve/reject
+    const state = useAiChatStore.getState();
+    const targetMsg = state.messages.find(m => m.confirmAction?.id === confirmId);
+    if (targetMsg) {
+      storeRef.current.updateMessage(targetMsg.id, {
+        confirmAction: { ...targetMsg.confirmAction!, status: approved ? "approved" : "rejected" },
+      });
+    }
   }, []);
 
   const startNewConversation = useCallback(() => {
@@ -368,6 +448,17 @@ export function useAiChat() {
     });
   }, []);
 
+  const deleteConversation = useCallback((conversationId: string) => {
+    api
+      .del(`/api/ai/conversations/${conversationId}`)
+      .then(() => {
+        storeRef.current.removeConversation(conversationId);
+      })
+      .catch(() => {
+        // Silently handle — conversation may already be gone
+      });
+  }, []);
+
   const updateContext = useCallback((context: PageContext) => {
     socketRef.current?.emit("context_update", context);
   }, []);
@@ -377,13 +468,29 @@ export function useAiChat() {
     socketRef.current?.emit("select_agent", { agent_id: agentId });
   }, []);
 
+  const startTask = useCallback((agentId: string, title: string, content?: string) => {
+    socketRef.current?.emit("start_task", {
+      agent_id: agentId,
+      task_title: title,
+      content: content || title,
+    });
+  }, []);
+
+  const cancelTask = useCallback((taskId: string) => {
+    socketRef.current?.emit("cancel_task", { task_id: taskId });
+  }, []);
+
   return {
     sendMessage,
     confirmAction,
     startNewConversation,
     loadConversation,
+    deleteConversation,
     updateContext,
     selectAgent,
     fetchAgents,
+    fetchConversations,
+    startTask,
+    cancelTask,
   };
 }

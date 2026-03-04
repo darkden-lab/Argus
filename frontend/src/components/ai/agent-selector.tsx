@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useCallback } from "react";
 import {
   Bot,
   Search,
@@ -39,8 +40,37 @@ export function AgentSelector({
   onSelectAgent,
   onCreateAgent,
 }: AgentSelectorProps) {
+  const toolbarRef = useRef<HTMLDivElement>(null);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const buttons = toolbarRef.current?.querySelectorAll<HTMLButtonElement>(
+        'button:not([data-create])'
+      );
+      if (!buttons || buttons.length === 0) return;
+      const currentIndex = Array.from(buttons).findIndex(
+        (b) => b === document.activeElement
+      );
+      if (currentIndex === -1) return;
+      e.preventDefault();
+      const next =
+        e.key === "ArrowRight"
+          ? (currentIndex + 1) % buttons.length
+          : (currentIndex - 1 + buttons.length) % buttons.length;
+      buttons[next].focus();
+    },
+    []
+  );
+
   return (
-    <div className="flex items-center gap-1.5 overflow-x-auto px-3 py-1.5 border-b border-border scrollbar-hide">
+    <div
+      ref={toolbarRef}
+      role="toolbar"
+      aria-label="Agent selector"
+      className="flex items-center gap-1.5 overflow-x-auto px-3 py-1.5 border-b border-border scrollbar-hide"
+      onKeyDown={handleKeyDown}
+    >
       <button
         className={cn(
           "shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium transition-colors",
@@ -49,10 +79,14 @@ export function AgentSelector({
             : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground"
         )}
         onClick={() => onSelectAgent(null)}
+        aria-label="Select general assistant"
       >
         <Bot className="h-3 w-3" />
         General
       </button>
+      {agents.length === 0 && (
+        <span className="text-xs text-muted-foreground italic">No agents available</span>
+      )}
       {agents.map((agent) => {
         const Icon = getIcon(agent.icon);
         const isActive = agent.id === activeAgentId;
@@ -67,6 +101,7 @@ export function AgentSelector({
             )}
             onClick={() => onSelectAgent(agent.id)}
             title={agent.description}
+            aria-label={`Select agent: ${agent.name}`}
           >
             <Icon className="h-3 w-3" />
             {agent.name}
@@ -74,9 +109,11 @@ export function AgentSelector({
         );
       })}
       <button
+        data-create
         className="shrink-0 inline-flex items-center gap-1 rounded-full border border-dashed border-border px-2.5 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-accent-foreground transition-colors"
         onClick={onCreateAgent}
         title="Create custom agent"
+        aria-label="Create custom agent"
       >
         <Plus className="h-3 w-3" />
         New

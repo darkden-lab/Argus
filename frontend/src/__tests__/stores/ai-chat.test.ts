@@ -33,6 +33,14 @@ describe('useAiChatStore', () => {
       pageContext: {},
       inputValue: '',
       showSidebar: false,
+      lastReadMessageIndex: -1,
+      aiStatus: null,
+      connectionState: 'disconnected',
+      connectionError: null,
+      isFullPage: false,
+      agents: [],
+      activeAgentId: null,
+      tasks: [],
     });
   });
 
@@ -147,9 +155,9 @@ describe('useAiChatStore', () => {
 
   describe('page context', () => {
     it('setPageContext updates context', () => {
-      useAiChatStore.getState().setPageContext({ cluster: 'prod', namespace: 'default' });
+      useAiChatStore.getState().setPageContext({ cluster_id: 'prod', namespace: 'default' });
       expect(useAiChatStore.getState().pageContext).toEqual({
-        cluster: 'prod',
+        cluster_id: 'prod',
         namespace: 'default',
       });
     });

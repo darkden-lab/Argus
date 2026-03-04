@@ -52,10 +52,14 @@ func NewService(
 	config AIConfig,
 	memoryStore *MemoryStore,
 ) *Service {
+	exec := tools.NewExecutor(clusterMgr, pluginEngine, pool)
+	if memoryStore != nil {
+		exec.SetMemoryOps(memoryStore)
+	}
 	return &Service{
 		provider:    provider,
 		retriever:   retriever,
-		executor:    tools.NewExecutor(clusterMgr, pluginEngine, pool),
+		executor:    exec,
 		confirmMgr:  tools.NewConfirmationManager(),
 		pool:        pool,
 		config:      config,
@@ -218,7 +222,7 @@ func (s *Service) handleToolCalls(ctx context.Context, userID string, messages [
 		}
 
 		// Execute the tool
-		result := s.executor.Execute(ctx, call)
+		result := s.executor.ExecuteForUser(ctx, call, userID)
 		messages = append(messages, Message{
 			Role:       RoleTool,
 			Content:    result.Content,
@@ -250,12 +254,17 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
 	}
 
-	history, _ := s.getHistoryWithSummary(ctx, conversationID)
+	history, err := s.getHistoryWithSummary(ctx, conversationID)
+	if err != nil {
+		log.Printf("ai service: stream: failed to load history: %v", err)
+	}
 	messages = append(messages, history...)
 
 	if s.retriever != nil {
-		ragResults, _ := s.retriever.RetrieveContext(ctx, userMessage, "")
-		if len(ragResults) > 0 {
+		ragResults, ragErr := s.retriever.RetrieveContext(ctx, userMessage, "")
+		if ragErr != nil {
+			log.Printf("ai service: stream: RAG retrieval failed: %v", ragErr)
+		} else if len(ragResults) > 0 {
 			messages = append(messages, Message{
 				Role:    RoleSystem,
 				Content: "Relevant context:\n\n" + rag.FormatContext(ragResults),
@@ -324,7 +333,77 @@ func (s *Service) ExecuteToolsAndRespond(ctx context.Context, userID string, con
 				continue
 			}
 		}
-		result := s.executor.Execute(ctx, call)
+		result := s.executor.ExecuteForUser(ctx, call, userID)
+		messages = append(messages, Message{
+			Role:       RoleTool,
+			Content:    result.Content,
+			ToolCallID: call.ID,
+		})
+	}
+
+	req := ChatRequest{
+		Messages:    messages,
+		Tools:       allTools,
+		MaxTokens:   cfg.MaxTokens,
+		Temperature: cfg.Temperature,
+	}
+
+	return provider.Chat(ctx, req)
+}
+
+// ConfirmNotifyFunc is called before blocking on a confirmation request, giving the
+// caller a chance to notify the client (e.g., emit a Socket.IO event).
+type ConfirmNotifyFunc func(req *tools.ConfirmationRequest)
+
+// ExecuteToolsWithNotify is like ExecuteToolsAndRespond but calls confirmNotify
+// before blocking on each confirmation, allowing the Socket.IO handler to emit
+// confirm_request events to the client.
+func (s *Service) ExecuteToolsWithNotify(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext, assistantContent string, toolCalls []ToolCall, confirmNotify ConfirmNotifyFunc) (*ChatResponse, error) {
+	provider, cfg := s.Snapshot()
+
+	messages := []Message{
+		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
+	}
+	history, _ := s.getHistoryWithSummary(ctx, conversationID)
+	messages = append(messages, history...)
+
+	if s.retriever != nil {
+		ragResults, _ := s.retriever.RetrieveContext(ctx, userMessage, "")
+		if len(ragResults) > 0 {
+			messages = append(messages, Message{
+				Role:    RoleSystem,
+				Content: "Relevant context:\n\n" + rag.FormatContext(ragResults),
+			})
+		}
+	}
+
+	messages = append(messages, Message{Role: RoleUser, Content: userMessage})
+	messages = append(messages, Message{
+		Role:      RoleAssistant,
+		Content:   assistantContent,
+		ToolCalls: toolCalls,
+	})
+
+	allTools := tools.ToolsForLevel(string(cfg.ToolPermissionLevel))
+
+	for _, call := range toolCalls {
+		if tools.RequiresConfirm(call.Name) {
+			// Create the confirmation first (non-blocking), notify the client, then wait
+			req := s.confirmMgr.CreateRequest(userID, tools.ToolCall(call))
+			if confirmNotify != nil {
+				confirmNotify(req)
+			}
+			status, err := s.confirmMgr.WaitForRequest(ctx, req.ID)
+			if err != nil || status != tools.ConfirmationApproved {
+				messages = append(messages, Message{
+					Role:       RoleTool,
+					Content:    "Action cancelled by user or timed out.",
+					ToolCallID: call.ID,
+				})
+				continue
+			}
+		}
+		result := s.executor.ExecuteForUser(ctx, call, userID)
 		messages = append(messages, Message{
 			Role:       RoleTool,
 			Content:    result.Content,
@@ -369,6 +448,15 @@ func (s *Service) buildSystemPrompt(ctx context.Context, userID string, pageCtx 
 			log.Printf("ai service: failed to load memories: %v", err)
 		} else if memoryText != "" {
 			prompt += memoryText
+		}
+
+		// Instruct AI about memory tools when they are available
+		_, cfg := s.Snapshot()
+		if cfg.ToolPermissionLevel != "disabled" {
+			prompt += "\n\n## Memory System\nYou have access to a memory system via tools: save_memory, recall_memory, delete_memory. " +
+				"Proactively save important user preferences, environment details, and recurring patterns using save_memory. " +
+				"Always use recall_memory before saving to avoid duplicates. " +
+				"When the user asks you to forget something, use delete_memory."
 		}
 	}
 
@@ -447,6 +535,22 @@ func (s *Service) ResolveAgentTools(agent *Agent) []Tool {
 // LoadHistory returns the conversation history for the given conversation ID.
 func (s *Service) LoadHistory(ctx context.Context, conversationID string) ([]Message, error) {
 	return s.loadHistory(ctx, conversationID)
+}
+
+// SaveMessage persists a message to the given conversation. Exposed for use by
+// the Socket.IO handler after streaming completes.
+func (s *Service) SaveMessage(ctx context.Context, conversationID string, msg Message) {
+	s.saveMessage(ctx, conversationID, msg)
+}
+
+// GetPool returns the database pool for direct queries by handlers.
+func (s *Service) GetPool() *pgxpool.Pool {
+	return s.pool
+}
+
+// GetMemoryStore returns the memory store (may be nil).
+func (s *Service) GetMemoryStore() *MemoryStore {
+	return s.memoryStore
 }
 
 // getHistoryWithSummary returns conversation history with summarization for long conversations.
@@ -564,7 +668,8 @@ func (s *Service) triggerSummarization(ctx context.Context, conversationID strin
 	rows, err := s.pool.Query(ctx,
 		`SELECT role, content FROM ai_messages
 		 WHERE conversation_id = $1
-		 ORDER BY created_at ASC`,
+		 ORDER BY created_at ASC
+		 LIMIT 200`,
 		conversationID,
 	)
 	if err != nil {
@@ -709,6 +814,9 @@ func NewProviderEmbedder(s *Service) *ProviderEmbedder {
 // EmbedTexts implements rag.Embedder.
 func (pe *ProviderEmbedder) EmbedTexts(ctx context.Context, input []string) ([][]float32, error) {
 	provider, _ := pe.service.Snapshot()
+	if provider == nil {
+		return nil, fmt.Errorf("ai embedder: no LLM provider configured")
+	}
 	resp, err := provider.Embed(ctx, EmbedRequest{Input: input})
 	if err != nil {
 		return nil, err

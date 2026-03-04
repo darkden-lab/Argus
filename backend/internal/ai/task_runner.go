@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"strconv"
 	"sync"
 	"time"
 
@@ -27,9 +28,27 @@ func NewTaskRunner(service *Service, agentStore *AgentStore) *TaskRunner {
 	}
 }
 
+// TaskProgressFunc is called when a task makes progress.
+type TaskProgressFunc func(taskID string, progress int, step string, completedSteps int)
+
+// TaskCompleteFunc is called when a task completes successfully.
+type TaskCompleteFunc func(taskID string, result string)
+
+// TaskFailFunc is called when a task fails.
+type TaskFailFunc func(taskID string, errMsg string)
+
+// RunTaskWithCallbacks executes an agent task with Socket.IO event callbacks.
+func (tr *TaskRunner) RunTaskWithCallbacks(parentCtx context.Context, task *AgentTask, agent *Agent, userID string, onProgress TaskProgressFunc, onComplete TaskCompleteFunc, onFail TaskFailFunc) {
+	tr.runTaskInternal(parentCtx, task, agent, userID, onProgress, onComplete, onFail)
+}
+
 // RunTask executes an agent task autonomously. It should be called in a goroutine.
 func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent *Agent, userID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	tr.runTaskInternal(parentCtx, task, agent, userID, nil, nil, nil)
+}
+
+func (tr *TaskRunner) runTaskInternal(parentCtx context.Context, task *AgentTask, agent *Agent, userID string, onProgress TaskProgressFunc, onComplete TaskCompleteFunc, onFail TaskFailFunc) {
+	ctx, cancel := context.WithTimeout(parentCtx, 10*time.Minute)
 	defer cancel()
 
 	tr.mu.Lock()
@@ -54,7 +73,9 @@ func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent 
 	// Determine workflow steps from agent
 	var steps []map[string]string
 	if len(agent.WorkflowSteps) > 0 {
-		_ = json.Unmarshal(agent.WorkflowSteps, &steps)
+		if err := json.Unmarshal(agent.WorkflowSteps, &steps); err != nil {
+			log.Printf("ai/task_runner: failed to parse workflow steps for agent %s: %v", agent.ID, err)
+		}
 	}
 	task.TotalSteps = len(steps)
 	task.Steps = agent.WorkflowSteps
@@ -62,9 +83,9 @@ func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent 
 	// Resolve tools for the agent — only read-only tools in autonomous mode for safety
 	agentTools := tr.resolveAgentTools(agent, "read_only")
 
-	// Build initial messages
+	// Build initial messages — use BuildAgentSystemPrompt to inject memories + context
 	messages := []Message{
-		{Role: RoleSystem, Content: agent.SystemPrompt},
+		{Role: RoleSystem, Content: tr.service.BuildAgentSystemPrompt(ctx, userID, agent, ChatContext{})},
 	}
 
 	// Add task context
@@ -86,6 +107,9 @@ func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent 
 		completedAt := time.Now()
 		task.CompletedAt = &completedAt
 		_ = tr.agentStore.UpdateTask(ctx, task)
+		if onFail != nil {
+			onFail(task.ID, errMsg)
+		}
 		return
 	}
 
@@ -98,7 +122,10 @@ func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent 
 			task.Error = &errMsg
 			completedAt := time.Now()
 			task.CompletedAt = &completedAt
-			_ = tr.agentStore.UpdateTask(ctx, task)
+			_ = tr.agentStore.UpdateTask(context.Background(), task)
+			if onFail != nil {
+				onFail(task.ID, errMsg)
+			}
 			return
 		default:
 		}
@@ -108,11 +135,14 @@ func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent 
 		task.CompletedSteps = i
 		task.Progress = (i * 100) / max(len(steps), 1)
 		_ = tr.agentStore.UpdateTask(ctx, task)
+		if onProgress != nil {
+			onProgress(task.ID, task.Progress, stepName, i)
+		}
 
 		// Add step instruction
 		stepMsg := Message{
 			Role:    RoleUser,
-			Content: "Execute step " + string(rune('1'+i)) + ": " + stepName + ". " + step["description"],
+			Content: "Execute step " + strconv.Itoa(i+1) + ": " + stepName + ". " + step["description"],
 		}
 		messages = append(messages, stepMsg)
 
@@ -133,6 +163,9 @@ func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent 
 			completedAt := time.Now()
 			task.CompletedAt = &completedAt
 			_ = tr.agentStore.UpdateTask(ctx, task)
+			if onFail != nil {
+				onFail(task.ID, errMsg)
+			}
 			return
 		}
 
@@ -140,7 +173,7 @@ func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent 
 		if resp.FinishReason == "tool_calls" && len(resp.Message.ToolCalls) > 0 {
 			messages = append(messages, resp.Message)
 			for _, call := range resp.Message.ToolCalls {
-				result := tr.service.executor.Execute(ctx, call)
+				result := tr.service.executor.ExecuteForUser(ctx, call, userID)
 				messages = append(messages, Message{
 					Role:       RoleTool,
 					Content:    result.Content,
@@ -179,6 +212,14 @@ func (tr *TaskRunner) RunTask(parentCtx context.Context, task *AgentTask, agent 
 	if err := tr.agentStore.UpdateTask(ctx, task); err != nil {
 		log.Printf("task runner: failed to update completed task: %v", err)
 	}
+
+	if onComplete != nil {
+		result := ""
+		if task.Result != nil {
+			result = *task.Result
+		}
+		onComplete(task.ID, result)
+	}
 }
 
 // CancelTask cancels a running task.
@@ -215,11 +256,4 @@ func (tr *TaskRunner) resolveAgentTools(agent *Agent, levelOverride string) []To
 		}
 	}
 	return filtered
-}
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
 }

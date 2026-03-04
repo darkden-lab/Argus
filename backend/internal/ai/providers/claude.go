@@ -1,6 +1,7 @@
 package providers
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -8,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/darkden-lab/argus/backend/internal/ai"
 )
@@ -39,7 +41,7 @@ func NewClaude(apiKey, model, baseURL string, customHeaders map[string]string) *
 		model:         model,
 		baseURL:       strings.TrimRight(baseURL, "/"),
 		customHeaders: customHeaders,
-		client:        &http.Client{},
+		client:        &http.Client{Timeout: 5 * time.Minute},
 	}
 }
 
@@ -116,7 +118,7 @@ func (c *Claude) Chat(ctx context.Context, req ai.ChatRequest) (*ai.ChatResponse
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		return nil, fmt.Errorf("claude: API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -152,12 +154,12 @@ func (c *Claude) ChatStream(ctx context.Context, req ai.ChatRequest) (ai.StreamR
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(resp.Body)
+		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		resp.Body.Close()
 		return nil, fmt.Errorf("claude: API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
-	return &claudeStreamReader{body: resp.Body, decoder: json.NewDecoder(resp.Body)}, nil
+	return &claudeStreamReader{body: resp.Body, scanner: bufio.NewScanner(resp.Body)}, nil
 }
 
 func (c *Claude) Embed(_ context.Context, _ ai.EmbedRequest) (*ai.EmbedResponse, error) {
@@ -281,7 +283,7 @@ func (c *Claude) toResponse(cr claudeResponse) *ai.ChatResponse {
 // claudeStreamReader implements ai.StreamReader for SSE streams.
 type claudeStreamReader struct {
 	body            io.ReadCloser
-	decoder         *json.Decoder
+	scanner         *bufio.Scanner
 	currentToolID   string
 	currentToolName string
 	toolArgs        strings.Builder
@@ -289,27 +291,15 @@ type claudeStreamReader struct {
 
 func (r *claudeStreamReader) Next() (*ai.StreamDelta, error) {
 	// Claude SSE format: "event: ...\ndata: {...}\n\n"
-	buf := make([]byte, 0, 4096)
-	single := make([]byte, 1)
-
 	for {
-		// Read a line
-		buf = buf[:0]
-		for {
-			_, err := r.body.Read(single)
-			if err != nil {
-				if err == io.EOF {
-					return nil, io.EOF
-				}
+		if !r.scanner.Scan() {
+			if err := r.scanner.Err(); err != nil {
 				return nil, err
 			}
-			if single[0] == '\n' {
-				break
-			}
-			buf = append(buf, single[0])
+			return nil, io.EOF
 		}
 
-		line := strings.TrimSpace(string(buf))
+		line := strings.TrimSpace(r.scanner.Text())
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}

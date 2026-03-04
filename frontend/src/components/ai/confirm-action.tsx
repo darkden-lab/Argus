@@ -46,7 +46,9 @@ export function ConfirmAction({ confirmAction, onConfirm }: ConfirmActionProps) 
                 size="sm"
                 variant="default"
                 className="h-7 gap-1.5 text-xs"
+                disabled={!isPending}
                 onClick={() => onConfirm(confirmAction.id, true)}
+                aria-label="Approve action"
               >
                 <Check className="h-3 w-3" />
                 Approve
@@ -55,7 +57,9 @@ export function ConfirmAction({ confirmAction, onConfirm }: ConfirmActionProps) 
                 size="sm"
                 variant="outline"
                 className="h-7 gap-1.5 text-xs"
+                disabled={!isPending}
                 onClick={() => onConfirm(confirmAction.id, false)}
+                aria-label="Reject action"
               >
                 <X className="h-3 w-3" />
                 Reject

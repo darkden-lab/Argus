@@ -8,6 +8,28 @@ import { ChatCodeBlock } from "./chat-code-block";
 import type { ChatMessage as ChatMessageType } from "@/stores/ai-chat";
 import type { Components } from "react-markdown";
 
+// Error boundary to catch ReactMarkdown rendering failures
+class MarkdownErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: string },
+  { hasError: boolean }
+> {
+  constructor(props: { children: React.ReactNode; fallback: string }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <p className="text-sm whitespace-pre-wrap">{this.props.fallback}</p>;
+    }
+    return this.props.children;
+  }
+}
+
 interface ChatMessageProps {
   message: ChatMessageType;
 }
@@ -138,12 +160,14 @@ export function ChatMessage({ message }: ChatMessageProps) {
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm prose-sm">
-            <ReactMarkdown
-              remarkPlugins={[remarkGfm]}
-              components={markdownComponents}
-            >
-              {message.content}
-            </ReactMarkdown>
+            <MarkdownErrorBoundary fallback={message.content}>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm]}
+                components={markdownComponents}
+              >
+                {message.content}
+              </ReactMarkdown>
+            </MarkdownErrorBoundary>
             {message.isStreaming && (
               <span className="inline-block w-1.5 h-4 bg-primary animate-cursor-blink rounded-sm ml-0.5 align-text-bottom" />
             )}

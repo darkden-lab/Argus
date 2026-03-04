@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Argus - Multi-cluster Kubernetes admin dashboard with plugin-based architecture. Go backend (REST + gRPC + WebSocket) + Next.js 16 frontend + PostgreSQL. Includes AI chat assistant, cluster agent system, web terminal, and async notification system with Kafka.
+Argus - Multi-cluster Kubernetes admin dashboard with plugin-based architecture. Go backend (REST + gRPC + Socket.IO + WebSocket) + Next.js 16 frontend + PostgreSQL. Includes AI chat assistant, cluster agent system, web terminal, and async notification system with Kafka.
 
 ## Build & Run Commands
 
@@ -83,15 +83,20 @@ Key internal packages:
 | `cluster` | ClusterManager (multi-cluster), AgentServer (gRPC), encrypted kubeconfig storage |
 | `core` | Generic K8s resource CRUD handler, convenience handlers (namespaces, nodes, events) |
 | `plugin` | Plugin interface, Engine (register/enable/disable), per-cluster plugin config |
-| `ws` | WebSocket Hub (pub/sub), K8s watch event multiplexing |
+| `socketio` | Socket.IO server with namespaces: `/k8s`, `/ai`, `/terminal`, `/notifications` |
+| `ws` | WebSocket Hub (pub/sub), K8s watch event multiplexing (legacy, used by Socket.IO k8s namespace) |
 | `rbac` | RBAC engine with per-cluster/namespace granularity, in-memory cache |
 | `audit` | Audit log store + middleware (auto-logs all mutating API calls) |
 | `notifications` | MessageBroker interface, KafkaBroker, InMemoryBroker, channels (email, Slack, Teams, Telegram, webhook) |
 | `terminal` | WebSocket terminal handler, smart mode (kubectl parser), raw shell (SPDY exec) |
 | `ai` | LLM providers (Claude, OpenAI, Ollama), RAG with pgvector, tool-use with confirmation flow |
+| `setup` | First-run setup wizard: checks if initial admin exists, handles onboarding |
+| `settings` | System settings key-value store (admin-only) |
 | `proxy` | K8s reverse proxy for kubectl auth |
 | `crypto` | AES-256-GCM encrypt/decrypt for kubeconfig and API keys |
-| `agentpb` | Generated protobuf/gRPC code for cluster agent |
+| `agentpb` | Generated protobuf/gRPC code for cluster agent (in `pkg/agentpb`) |
+
+**API docs**: OpenAPI spec at `backend/docs/openapi.yaml`, served via Swagger handler in `backend/docs/handler.go`
 
 ### Frontend (`frontend/`)
 
@@ -177,7 +182,7 @@ See `.env.example` for a complete list with descriptions.
 - Backend routes follow REST pattern: `/api/<resource>` with gorilla/mux
 - Frontend API client in `src/lib/api.ts` — wraps fetch with JWT auto-refresh, retry logic (408/429/5xx), and error toasts
 - Frontend state via Zustand stores — each store exports a `use<Name>Store` hook with `create<Name>Store` pattern
-- WebSocket connections at `/ws` (events) and `/ws/terminal` (terminal)
+- Real-time connections via Socket.IO at `/socket.io/` with namespaces (`/k8s`, `/ai`, `/terminal`, `/notifications`). Auth via handshake `{ auth: { token: "jwt" } }`
 - Migrations numbered sequentially: `00N_description.{up,down}.sql`
 - Plugins registered in `main.go` `registerPlugins()` — use `registerPluginWithError` generic helper for constructors that return errors
 - All encrypted secrets use AES-256-GCM via `internal/crypto`
@@ -199,3 +204,5 @@ See `.env.example` for a complete list with descriptions.
 - **React Compiler lint rules**: Disabled in `eslint.config.mjs` (set-state-in-effect, static-components, refs, purity, immutability) — re-enable only when adopting React Compiler
 - **Frontend path alias**: `@/*` maps to `./src/*` — use `@/` imports in all frontend code
 - **golangci-lint exclusions**: `pkg/agentpb` is excluded (generated code); errcheck and gocritic relaxed in `_test.go`
+- **Socket.IO + WebSocket coexistence**: The `ws` package (Hub) still exists as the internal event bus, but clients connect via Socket.IO namespaces in `socketio` package. Legacy `/ws` WebSocket endpoint is still wired for backward compat but new features should use Socket.IO namespaces
+- **Go module paths**: Three separate Go modules — `backend/`, `agent/`, `cli/` — each with their own `go.mod`. The CI lints and tests `backend` and `agent` separately

@@ -266,7 +266,7 @@ func (h *AdminHandlers) triggerReindex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	go h.indexer.RunOnce(r.Context())
+	go h.indexer.RunOnce(context.Background())
 	writeAIJSON(w, http.StatusAccepted, map[string]string{"status": "reindex_started"})
 }
 

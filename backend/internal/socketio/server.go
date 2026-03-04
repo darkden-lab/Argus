@@ -24,12 +24,16 @@ type Server struct {
 
 // Deps holds all dependencies needed by the Socket.IO namespaces.
 type Deps struct {
-	JWTService    *auth.JWTService
-	Hub           *ws.Hub
-	AIService     *ai.Service
-	ClusterMgr    *cluster.Manager
-	NotifWSHandler *notifications.WSHandler
+	JWTService      *auth.JWTService
+	Hub             *ws.Hub
+	AIService       *ai.Service
+	ClusterMgr      *cluster.Manager
+	NotifWSHandler  *notifications.WSHandler
 	TerminalHandler *terminal.Handler
+	HistoryStore    *ai.HistoryStore
+	AgentStore      *ai.AgentStore
+	TaskRunner      *ai.TaskRunner
+	MemoryStore     *ai.MemoryStore
 }
 
 // NewServer creates and configures the Socket.IO server with all namespaces.
@@ -46,7 +50,7 @@ func NewServer(deps Deps) *Server {
 
 	// Register namespaces
 	registerK8sNamespace(io, deps.JWTService, deps.Hub)
-	registerAINamespace(io, deps.JWTService, deps.AIService)
+	registerAINamespace(io, deps.JWTService, deps.AIService, deps.HistoryStore, deps.TaskRunner)
 	registerTerminalNamespace(io, deps.JWTService, deps.ClusterMgr)
 	registerNotificationsNamespace(io, deps.JWTService, deps.NotifWSHandler)
 

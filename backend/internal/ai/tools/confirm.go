@@ -128,6 +128,56 @@ func (m *ConfirmationManager) GetPending(requestID string) (*ConfirmationRequest
 	return &pc.request, true
 }
 
+// CreateRequest creates a confirmation request and registers it, without blocking.
+// Call WaitForRequest to block until the user responds.
+func (m *ConfirmationManager) CreateRequest(userID string, call ToolCall) *ConfirmationRequest {
+	reqID := uuid.New().String()
+
+	pc := &pendingConfirmation{
+		request: ConfirmationRequest{
+			ID:        reqID,
+			ToolCall:  call,
+			Status:    ConfirmationPending,
+			UserID:    userID,
+			CreatedAt: time.Now(),
+		},
+		resultCh: make(chan ConfirmationStatus, 1),
+	}
+
+	m.mu.Lock()
+	m.pending[reqID] = pc
+	m.mu.Unlock()
+
+	log.Printf("ai: confirmation created for tool %s (id=%s, user=%s)", call.Name, reqID, userID)
+	return &pc.request
+}
+
+// WaitForRequest blocks until the confirmation is resolved or the timeout/context expires.
+func (m *ConfirmationManager) WaitForRequest(ctx context.Context, reqID string) (ConfirmationStatus, error) {
+	m.mu.Lock()
+	pc, ok := m.pending[reqID]
+	m.mu.Unlock()
+
+	if !ok {
+		return ConfirmationTimedOut, fmt.Errorf("confirmation %s not found", reqID)
+	}
+
+	defer func() {
+		m.mu.Lock()
+		delete(m.pending, reqID)
+		m.mu.Unlock()
+	}()
+
+	select {
+	case status := <-pc.resultCh:
+		return status, nil
+	case <-time.After(confirmationTimeout):
+		return ConfirmationTimedOut, nil
+	case <-ctx.Done():
+		return ConfirmationTimedOut, ctx.Err()
+	}
+}
+
 // GetPendingForUser returns all pending confirmations for a user.
 func (m *ConfirmationManager) GetPendingForUser(userID string) []ConfirmationRequest {
 	m.mu.Lock()

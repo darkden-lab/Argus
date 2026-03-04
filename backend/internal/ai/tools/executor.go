@@ -27,11 +27,20 @@ type ToolResult struct {
 	IsError    bool   `json:"is_error"`
 }
 
+// MemoryOps provides memory operations for AI tools.
+// Implemented by ai.MemoryStore to avoid import cycles.
+type MemoryOps interface {
+	CreateForTool(ctx context.Context, userID, content, category string) (string, error)
+	SearchForTool(ctx context.Context, userID, query string) (string, error)
+	DeleteForTool(ctx context.Context, id, userID string) error
+}
+
 // Executor runs AI tool calls against Kubernetes clusters.
 type Executor struct {
 	clusterMgr   *cluster.Manager
 	pluginEngine *plugin.Engine
 	pool         *pgxpool.Pool
+	memoryOps    MemoryOps
 }
 
 // NewExecutor creates a tool executor.
@@ -54,6 +63,91 @@ func (e *Executor) Execute(ctx context.Context, call ToolCall) ToolResult {
 		ToolCallID: call.ID,
 		Content:    result,
 	}
+}
+
+// SetMemoryOps sets the memory operations provider on the executor.
+func (e *Executor) SetMemoryOps(ops MemoryOps) {
+	e.memoryOps = ops
+}
+
+// ExecuteForUser runs a tool call with a user ID context, enabling memory tools.
+// Falls back to Execute for non-memory tools.
+func (e *Executor) ExecuteForUser(ctx context.Context, call ToolCall, userID string) ToolResult {
+	if e.memoryOps != nil && isMemoryTool(call.Name) {
+		result, err := e.dispatchMemory(ctx, call, userID)
+		if err != nil {
+			return ToolResult{
+				ToolCallID: call.ID,
+				Content:    fmt.Sprintf("Error: %s", err.Error()),
+				IsError:    true,
+			}
+		}
+		return ToolResult{
+			ToolCallID: call.ID,
+			Content:    result,
+		}
+	}
+	return e.Execute(ctx, call)
+}
+
+func (e *Executor) dispatchMemory(ctx context.Context, call ToolCall, userID string) (string, error) {
+	var args map[string]string
+	if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
+		return "", fmt.Errorf("invalid tool arguments: %w", err)
+	}
+
+	switch call.Name {
+	case "save_memory":
+		content := args["content"]
+		if content == "" {
+			return "", fmt.Errorf("content is required")
+		}
+		category := args["category"]
+		result, err := e.memoryOps.CreateForTool(ctx, userID, content, category)
+		if err != nil {
+			return "", fmt.Errorf("failed to save memory: %w", err)
+		}
+		return fmt.Sprintf("Memory saved successfully: %s", result), nil
+
+	case "recall_memory":
+		query := args["query"]
+		if query == "" {
+			return "", fmt.Errorf("query is required")
+		}
+		result, err := e.memoryOps.SearchForTool(ctx, userID, query)
+		if err != nil {
+			return "", fmt.Errorf("failed to search memories: %w", err)
+		}
+		return result, nil
+
+	case "delete_memory":
+		memoryID := args["memory_id"]
+		if memoryID == "" {
+			return "", fmt.Errorf("memory_id is required")
+		}
+		if err := e.memoryOps.DeleteForTool(ctx, memoryID, userID); err != nil {
+			return "", fmt.Errorf("failed to delete memory: %w", err)
+		}
+		return "Memory deleted successfully", nil
+
+	default:
+		return "", fmt.Errorf("unknown memory tool: %s", call.Name)
+	}
+}
+
+// isMemoryTool returns true if the tool name is a memory-related tool.
+func isMemoryTool(name string) bool {
+	switch name {
+	case "save_memory", "recall_memory", "delete_memory":
+		return true
+	default:
+		return false
+	}
+}
+
+// IsMemoryTool returns true if the tool name is a memory-related tool (exported).
+func IsMemoryTool(name string) bool {
+	return isMemoryTool(name)
 }
 
 func (e *Executor) dispatch(ctx context.Context, call ToolCall) (string, error) {
