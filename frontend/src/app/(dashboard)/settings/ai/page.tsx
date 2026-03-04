@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Bot, RefreshCw, CheckCircle2, XCircle, Loader2, Plus, Trash2 } from "lucide-react";
+import { Bot, Brain, RefreshCw, CheckCircle2, XCircle, Loader2, Plus, Trash2, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
+import Link from "next/link";
 
 interface AiConfig {
   enabled: boolean;
@@ -33,7 +34,7 @@ interface AiConfig {
   model: string;
   api_key: string;
   base_url: string;
-  tools_enabled: boolean;
+  tool_permission_level: string;
   max_tokens: number;
   custom_headers: Record<string, string>;
 }
@@ -102,7 +103,7 @@ export default function AiSettingsPage() {
     model: "claude-sonnet-4-6",
     api_key: "",
     base_url: "",
-    tools_enabled: true,
+    tool_permission_level: "all",
     max_tokens: 4096,
     custom_headers: {},
   });
@@ -368,19 +369,32 @@ export default function AiSettingsPage() {
 
           <Separator />
 
-          <div className="flex items-center justify-between">
-            <div className="space-y-0.5">
-              <Label>Tool Use</Label>
-              <p className="text-xs text-muted-foreground">
-                Allow AI to read and modify Kubernetes resources
-              </p>
-            </div>
-            <Switch
-              checked={config.tools_enabled}
-              onCheckedChange={(checked) =>
-                setConfig({ ...config, tools_enabled: checked })
+          <div className="space-y-2">
+            <Label>Tool Permission Level</Label>
+            <p className="text-xs text-muted-foreground">
+              Control what the AI assistant can do with cluster resources
+            </p>
+            <Select
+              value={config.tool_permission_level}
+              onValueChange={(value) =>
+                setConfig({ ...config, tool_permission_level: value })
               }
-            />
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="disabled">
+                  Disabled — Chat only, no tools
+                </SelectItem>
+                <SelectItem value="read_only">
+                  Read Only — Can query resources, logs, events
+                </SelectItem>
+                <SelectItem value="all">
+                  Full Access — Can also modify resources (with confirmation)
+                </SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <Separator />
@@ -462,6 +476,27 @@ export default function AiSettingsPage() {
               RAG status unavailable. Configure a provider first.
             </p>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Manage Memories */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <Brain className="h-5 w-5" />
+            AI Memories
+          </CardTitle>
+          <CardDescription>
+            Manage persistent memories that the AI assistant uses across conversations.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button variant="outline" asChild>
+            <Link href="/settings/ai/memories">
+              Manage Memories
+              <ChevronRight className="ml-1.5 h-4 w-4" />
+            </Link>
+          </Button>
         </CardContent>
       </Card>
     </div>

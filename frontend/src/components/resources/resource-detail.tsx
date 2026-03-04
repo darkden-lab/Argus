@@ -61,8 +61,8 @@ export function ResourceDetail({
 
   const handleAskAi = () => {
     setPageContext({
-      resourceKind: kind,
-      resourceName: name,
+      resource: kind,
+      name,
       namespace,
     });
     setInputValue(`Tell me about this ${kind} "${name}"${namespace ? ` in namespace "${namespace}"` : ""}`);

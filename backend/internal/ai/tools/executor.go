@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/darkden-lab/argus/backend/internal/cluster"
+	"github.com/darkden-lab/argus/backend/internal/plugin"
+	"github.com/jackc/pgx/v5/pgxpool"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -27,12 +29,14 @@ type ToolResult struct {
 
 // Executor runs AI tool calls against Kubernetes clusters.
 type Executor struct {
-	clusterMgr *cluster.Manager
+	clusterMgr   *cluster.Manager
+	pluginEngine *plugin.Engine
+	pool         *pgxpool.Pool
 }
 
 // NewExecutor creates a tool executor.
-func NewExecutor(clusterMgr *cluster.Manager) *Executor {
-	return &Executor{clusterMgr: clusterMgr}
+func NewExecutor(clusterMgr *cluster.Manager, pluginEngine *plugin.Engine, pool *pgxpool.Pool) *Executor {
+	return &Executor{clusterMgr: clusterMgr, pluginEngine: pluginEngine, pool: pool}
 }
 
 // Execute runs a single tool call and returns the result. Write operations
@@ -79,6 +83,30 @@ func (e *Executor) dispatch(ctx context.Context, call ToolCall) (string, error) 
 		return e.scaleResource(ctx, args)
 	case "restart_resource":
 		return e.restartResource(ctx, args)
+	case "get_network_policies":
+		return e.getNetworkPolicies(ctx, args)
+	case "analyze_rbac":
+		return e.analyzeRBAC(ctx, args)
+	case "get_pod_exec":
+		return e.getPodExec(ctx, args)
+	case "port_forward_info":
+		return e.portForwardInfo(ctx, args)
+	case "cluster_health_check":
+		return e.clusterHealthCheck(ctx, args)
+	case "security_scan":
+		return e.securityScan(ctx, args)
+	case "resource_usage_report":
+		return e.resourceUsageReport(ctx, args)
+	case "compare_clusters":
+		return e.compareClusters(ctx, args)
+	case "query_prometheus":
+		return e.queryPrometheus(ctx, args)
+	case "get_alerts":
+		return e.getAlerts(ctx, args)
+	case "get_helm_releases":
+		return e.getHelmReleases(ctx, args)
+	case "rollback_deployment":
+		return e.rollbackDeployment(ctx, args)
 	default:
 		return "", fmt.Errorf("unknown tool: %s", call.Name)
 	}

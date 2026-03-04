@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Check, X } from "lucide-react";
+import { AlertTriangle, Check, X, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { ChatMessage } from "@/stores/ai-chat";
 
@@ -15,7 +15,7 @@ export function ConfirmAction({ confirmAction, onConfirm }: ConfirmActionProps) 
   const isRejected = confirmAction.status === "rejected";
 
   return (
-    <div className="mx-4 my-2 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+    <div className="mx-4 my-2 rounded-lg border border-yellow-500/30 border-l-4 border-l-yellow-500 bg-yellow-500/5 p-3">
       <div className="flex items-start gap-2">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-yellow-500" />
         <div className="flex-1 min-w-0">
@@ -27,6 +27,18 @@ export function ConfirmAction({ confirmAction, onConfirm }: ConfirmActionProps) 
             {" - "}
             {confirmAction.description}
           </p>
+
+          {confirmAction.args && Object.keys(confirmAction.args).length > 0 && (
+            <details className="mt-2 group">
+              <summary className="flex cursor-pointer items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground">
+                <ChevronDown className="h-3 w-3 transition-transform group-open:rotate-180" />
+                Arguments
+              </summary>
+              <pre className="mt-1 overflow-x-auto rounded bg-muted/50 p-2 text-[11px] text-muted-foreground">
+                {JSON.stringify(confirmAction.args, null, 2)}
+              </pre>
+            </details>
+          )}
 
           {isPending && (
             <div className="mt-3 flex gap-2">

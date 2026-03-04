@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	pgvector "github.com/pgvector/pgvector-go"
 )
 
 // Embedding represents a stored vector embedding chunk.
@@ -40,7 +41,7 @@ func (s *Store) InsertEmbedding(ctx context.Context, e Embedding) error {
 	query := `
 		INSERT INTO ai_embeddings (source_type, source_id, chunk_index, content, embedding, metadata)
 		VALUES ($1, $2, $3, $4, $5, $6)
-		ON CONFLICT (id) DO UPDATE SET
+		ON CONFLICT (source_type, source_id, chunk_index) DO UPDATE SET
 			content = EXCLUDED.content,
 			embedding = EXCLUDED.embedding,
 			metadata = EXCLUDED.metadata,
@@ -48,7 +49,7 @@ func (s *Store) InsertEmbedding(ctx context.Context, e Embedding) error {
 	`
 
 	_, err := s.pool.Exec(ctx, query,
-		e.SourceType, e.SourceID, e.ChunkIndex, e.Content, e.Embedding, e.Metadata,
+		e.SourceType, e.SourceID, e.ChunkIndex, e.Content, pgvector.NewVector(e.Embedding), e.Metadata,
 	)
 	if err != nil {
 		return fmt.Errorf("rag store: insert embedding: %w", err)
@@ -68,7 +69,7 @@ func (s *Store) InsertBatch(ctx context.Context, embeddings []Embedding) error {
 		_, err := tx.Exec(ctx,
 			`INSERT INTO ai_embeddings (source_type, source_id, chunk_index, content, embedding, metadata)
 			 VALUES ($1, $2, $3, $4, $5, $6)`,
-			e.SourceType, e.SourceID, e.ChunkIndex, e.Content, e.Embedding, e.Metadata,
+			e.SourceType, e.SourceID, e.ChunkIndex, e.Content, pgvector.NewVector(e.Embedding), e.Metadata,
 		)
 		if err != nil {
 			return fmt.Errorf("rag store: batch insert: %w", err)
@@ -94,7 +95,7 @@ func (s *Store) Search(ctx context.Context, queryVec []float32, topK int, source
 		LIMIT $3
 	`
 
-	rows, err := s.pool.Query(ctx, query, queryVec, sourceType, topK)
+	rows, err := s.pool.Query(ctx, query, pgvector.NewVector(queryVec), sourceType, topK)
 	if err != nil {
 		return nil, fmt.Errorf("rag store: search: %w", err)
 	}

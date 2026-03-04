@@ -287,7 +287,7 @@ export default function ClusterDetailPage() {
   };
 
   const handleAskAi = () => {
-    setPageContext({ cluster: clusterId });
+    setPageContext({ cluster_id: clusterId });
     openChat();
   };
 

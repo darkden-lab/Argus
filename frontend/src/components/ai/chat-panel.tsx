@@ -1,68 +1,35 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import {
   MessageSquare,
   X,
   Plus,
   PanelLeftOpen,
   PanelLeftClose,
-  Send,
-  Loader2,
   GripVertical,
-  Server,
-  FolderOpen,
-  AlertTriangle,
-  Settings,
-  WifiOff,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
 import { useAiChatStore } from "@/stores/ai-chat";
 import { useAiChat } from "@/hooks/use-ai-chat";
-import { ChatMessage } from "./chat-message";
-import { ConfirmAction } from "./confirm-action";
+import { ChatInterface } from "./chat-interface";
 
 const MIN_WIDTH = 320;
 const MAX_WIDTH = 700;
 const DEFAULT_WIDTH = 420;
 
-const suggestedPrompts = [
-  { label: "What pods are failing?", icon: "alert" },
-  { label: "Show resource usage", icon: "chart" },
-  { label: "Help me scale my deployment", icon: "scale" },
-  { label: "Explain this error", icon: "help" },
-];
-
 export function ChatPanel() {
   const {
     isOpen,
     close,
-    messages,
-    isStreaming,
-    inputValue,
-    setInputValue,
-    conversations,
-    activeConversationId,
     showSidebar,
     toggleSidebar,
-    pageContext,
-    aiStatus,
     connectionState,
-    connectionError,
   } = useAiChatStore();
 
-  const {
-    sendMessage,
-    confirmAction,
-    startNewConversation,
-    loadConversation,
-  } = useAiChat();
+  const { startNewConversation } = useAiChat();
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const panelRef = useRef<HTMLDivElement>(null);
   const isDraggingRef = useRef(false);
   const startXRef = useRef(0);
@@ -75,18 +42,6 @@ export function ChatPanel() {
     }
     return DEFAULT_WIDTH;
   });
-
-  // Auto-scroll to bottom on new messages
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Focus input when panel opens
-  useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => inputRef.current?.focus(), 300);
-    }
-  }, [isOpen]);
 
   // Save width to localStorage
   useEffect(() => {
@@ -106,7 +61,6 @@ export function ChatPanel() {
 
       function handleMouseMove(ev: MouseEvent) {
         if (!isDraggingRef.current) return;
-        // Dragging left edge means positive delta = increase width
         const delta = startXRef.current - ev.clientX;
         const newWidth = Math.min(
           Math.max(startWidthRef.current + delta, MIN_WIDTH),
@@ -129,28 +83,10 @@ export function ChatPanel() {
     [panelWidth]
   );
 
-  const handleSubmit = () => {
-    const trimmed = inputValue.trim();
-    if (!trimmed || isStreaming) return;
-    sendMessage(trimmed);
-    setInputValue("");
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      handleSubmit();
-    }
-  };
-
-  const handleSuggestedPrompt = (prompt: string) => {
-    if (isStreaming) return;
-    sendMessage(prompt);
-  };
-
   if (!isOpen) return null;
 
-  const hasContext = pageContext.cluster || pageContext.namespace;
+  const connected = connectionState === "connected";
+  const connecting = connectionState === "connecting";
 
   return (
     <div
@@ -184,6 +120,17 @@ export function ChatPanel() {
             )}
           </Button>
           <h2 className="text-sm font-semibold">AI Assistant</h2>
+          <span
+            className={cn(
+              "h-1.5 w-1.5 rounded-full",
+              connected
+                ? "bg-green-500"
+                : connecting
+                  ? "bg-yellow-500 animate-pulse"
+                  : "bg-red-500"
+            )}
+            title={connected ? "Connected" : connecting ? "Connecting..." : "Disconnected"}
+          />
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -206,214 +153,7 @@ export function ChatPanel() {
         </div>
       </div>
 
-      {/* Context bar */}
-      {hasContext && (
-        <div className="flex items-center gap-3 border-b border-border px-4 py-1.5 bg-muted/30">
-          {pageContext.cluster && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Server className="h-3 w-3" />
-              <span>Cluster: <span className="font-medium text-foreground">{pageContext.cluster}</span></span>
-            </div>
-          )}
-          {pageContext.namespace && (
-            <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <FolderOpen className="h-3 w-3" />
-              <span>Namespace: <span className="font-medium text-foreground">{pageContext.namespace}</span></span>
-            </div>
-          )}
-        </div>
-      )}
-
-      <div className="flex flex-1 min-h-0">
-        {/* Conversation sidebar */}
-        {showSidebar && (
-          <div className="w-48 shrink-0 border-r border-border">
-            <ScrollArea className="h-full">
-              <div className="p-2 space-y-0.5">
-                {conversations.length === 0 ? (
-                  <p className="px-2 py-4 text-center text-xs text-muted-foreground">
-                    No conversations yet
-                  </p>
-                ) : (
-                  conversations.map((conv) => (
-                    <button
-                      key={conv.id}
-                      className={cn(
-                        "w-full rounded-md px-2 py-1.5 text-left text-xs transition-colors",
-                        conv.id === activeConversationId
-                          ? "bg-accent text-accent-foreground"
-                          : "text-muted-foreground hover:bg-accent/50"
-                      )}
-                      onClick={() => loadConversation(conv.id)}
-                    >
-                      <p className="truncate font-medium">{conv.title}</p>
-                      <p className="mt-0.5 text-[10px] opacity-60">
-                        {new Date(conv.updatedAt).toLocaleDateString()}
-                      </p>
-                    </button>
-                  ))
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-        )}
-
-        {/* Main chat area */}
-        <div className="flex flex-1 flex-col min-w-0">
-          {/* Connection / configuration warnings */}
-          {connectionState === "error" && connectionError && (
-            <div className="mx-3 mt-2 flex items-start gap-2 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs text-destructive">
-              <WifiOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <span>{connectionError}</span>
-            </div>
-          )}
-          {connectionState === "connecting" && (
-            <div className="mx-3 mt-2 flex items-center gap-2 rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
-              <Loader2 className="h-3.5 w-3.5 animate-spin shrink-0" />
-              <span>Connecting to AI assistant...</span>
-            </div>
-          )}
-          {aiStatus && !aiStatus.configured && connectionState !== "connecting" && (
-            <div className="mx-3 mt-2 flex items-start gap-2 rounded-md border border-yellow-500/50 bg-yellow-500/10 p-3 text-xs text-yellow-700 dark:text-yellow-400">
-              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-              <div>
-                <p className="font-medium">AI assistant requires configuration</p>
-                <p className="mt-0.5 opacity-80">{aiStatus.message}</p>
-                <a
-                  href="/settings/ai"
-                  className="mt-1 inline-flex items-center gap-1 text-xs font-medium underline underline-offset-2 hover:opacity-80"
-                >
-                  <Settings className="h-3 w-3" />
-                  Go to AI Settings
-                </a>
-              </div>
-            </div>
-          )}
-
-          {/* Messages */}
-          <ScrollArea className="flex-1">
-            <div className="py-4">
-              {messages.length === 0 ? (
-                <div className="flex flex-col items-center justify-center px-6 py-8 text-center">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted">
-                    <MessageSquare className="h-6 w-6 text-muted-foreground" />
-                  </div>
-                  {aiStatus && !aiStatus.configured ? (
-                    <>
-                      <h3 className="mt-4 text-sm font-medium">
-                        AI Assistant Not Configured
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {aiStatus.message || "Set up an AI provider in Settings to start using the assistant."}
-                      </p>
-                      <a
-                        href="/settings/ai"
-                        className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 transition-colors"
-                      >
-                        <Settings className="h-3.5 w-3.5" />
-                        Configure AI Provider
-                      </a>
-                    </>
-                  ) : (
-                    <>
-                      <h3 className="mt-4 text-sm font-medium">
-                        How can I help?
-                      </h3>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Ask questions about your Kubernetes clusters, get
-                        troubleshooting help, or manage resources.
-                      </p>
-
-                      {/* Suggested prompts */}
-                      <div className="mt-6 grid w-full grid-cols-2 gap-2 px-2">
-                        {suggestedPrompts.map((prompt) => (
-                          <button
-                            key={prompt.label}
-                            className={cn(
-                              "rounded-lg border border-border px-3 py-2.5 text-left text-xs transition-colors",
-                              "hover:bg-accent hover:text-accent-foreground hover:border-primary/30",
-                              "text-muted-foreground"
-                            )}
-                            onClick={() => handleSuggestedPrompt(prompt.label)}
-                            disabled={isStreaming}
-                          >
-                            {prompt.label}
-                          </button>
-                        ))}
-                      </div>
-                    </>
-                  )}
-                </div>
-              ) : (
-                messages.map((msg) => (
-                  <div key={msg.id}>
-                    <ChatMessage message={msg} />
-                    {msg.confirmAction && (
-                      <ConfirmAction
-                        confirmAction={msg.confirmAction}
-                        onConfirm={confirmAction}
-                      />
-                    )}
-                  </div>
-                ))
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-          </ScrollArea>
-
-          <Separator />
-
-          {/* Input */}
-          <div className="p-3">
-            <div className={cn(
-              "flex items-end gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2",
-              (aiStatus && !aiStatus.configured) && "opacity-50"
-            )}>
-              <textarea
-                ref={inputRef}
-                value={inputValue}
-                onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={handleKeyDown}
-                placeholder={
-                  aiStatus && !aiStatus.configured
-                    ? "AI assistant is not configured..."
-                    : connectionState !== "connected"
-                      ? "Connecting to AI assistant..."
-                      : "Ask about your clusters..."
-                }
-                rows={1}
-                disabled={!!(aiStatus && !aiStatus.configured)}
-                className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
-                style={{
-                  minHeight: "20px",
-                  maxHeight: "120px",
-                  height: "auto",
-                }}
-                onInput={(e) => {
-                  const target = e.target as HTMLTextAreaElement;
-                  target.style.height = "auto";
-                  target.style.height = `${target.scrollHeight}px`;
-                }}
-              />
-              <Button
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                disabled={!inputValue.trim() || isStreaming || !!(aiStatus && !aiStatus.configured)}
-                onClick={handleSubmit}
-              >
-                {isStreaming ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <Send className="h-3.5 w-3.5" />
-                )}
-              </Button>
-            </div>
-            <p className="mt-1.5 text-center text-[10px] text-muted-foreground">
-              AI can make mistakes. Verify actions before approving.
-            </p>
-          </div>
-        </div>
-      </div>
+      <ChatInterface mode="panel" />
     </div>
   );
 }

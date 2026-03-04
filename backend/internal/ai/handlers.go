@@ -39,17 +39,20 @@ func (h *ChatHandler) RegisterRoutes(r *mux.Router) {
 
 // ChatWSMessage is the JSON envelope for AI chat WebSocket messages.
 type ChatWSMessage struct {
-	Type           string      `json:"type"`            // "user_message", "confirm_action", "new_conversation", "load_history", "context_update"
+	Type           string      `json:"type"`            // "user_message", "confirm_action", "new_conversation", "load_history", "context_update", "select_agent", "start_task", "cancel_task"
 	Content        string      `json:"content,omitempty"`
 	ConversationID string      `json:"conversation_id,omitempty"`
 	ConfirmationID string      `json:"confirmation_id,omitempty"`
 	Approved       bool        `json:"approved,omitempty"`
 	Context        ChatContext `json:"context,omitempty"`
+	AgentID        string      `json:"agent_id,omitempty"`
+	TaskID         string      `json:"task_id,omitempty"`
+	TaskTitle      string      `json:"task_title,omitempty"`
 }
 
 // ChatWSResponse is sent from server to client.
 type ChatWSResponse struct {
-	Type           string `json:"type"`            // "assistant_message", "stream_delta", "stream_end", "confirm_request", "error", "conversation_created", "history_message", "history_end"
+	Type           string `json:"type"`            // "assistant_message", "stream_delta", "stream_end", "confirm_request", "error", "conversation_created", "history_message", "history_end", "agent_selected", "task_created", "task_progress", "task_completed", "task_failed"
 	Content        string `json:"content,omitempty"`
 	Role           string `json:"role,omitempty"`
 	Error          string `json:"error,omitempty"`
@@ -57,6 +60,11 @@ type ChatWSResponse struct {
 	ConfirmationID string `json:"confirmation_id,omitempty"`
 	ToolName       string `json:"tool_name,omitempty"`
 	ToolArgs       string `json:"tool_args,omitempty"`
+	AgentID        string `json:"agent_id,omitempty"`
+	AgentName      string `json:"agent_name,omitempty"`
+	TaskID         string `json:"task_id,omitempty"`
+	Progress       int    `json:"progress,omitempty"`
+	CurrentStep    string `json:"current_step,omitempty"`
 }
 
 // ServeChat upgrades to WebSocket for AI chat streaming.
@@ -112,6 +120,7 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 
 	var currentConversation string
 	var currentContext ChatContext
+	var currentAgent *Agent
 
 	for {
 		_, msg, err := conn.ReadMessage()
@@ -136,7 +145,20 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 				currentConversation = wsMsg.ConversationID
 			}
 
-			// Stream response
+			// Allow selecting agent inline with the message
+			if wsMsg.AgentID != "" && h.service.agentStore != nil {
+				agent, agentErr := h.service.agentStore.GetByID(r.Context(), wsMsg.AgentID)
+				if agentErr == nil {
+					currentAgent = agent
+				}
+			}
+
+			// Update context from user message if provided
+			if wsMsg.Context.ClusterID != "" || wsMsg.Context.Namespace != "" {
+				currentContext = wsMsg.Context
+			}
+
+			// Stream response, handling tool call loops
 			stream, err := h.service.ProcessMessageStream(
 				r.Context(), claims.UserID, currentConversation, wsMsg.Content, currentContext,
 			)
@@ -145,24 +167,123 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 
+			// Consume stream, accumulating content and tool calls
+			var contentBuf string
+			var accToolCalls []ToolCall
+			var finishReason string
 			for {
 				delta, err := stream.Next()
 				if err != nil {
 					break
 				}
 				if delta.Content != "" {
+					contentBuf += delta.Content
 					writeWSJSON(conn, ChatWSResponse{
 						Type:    "stream_delta",
 						Content: delta.Content,
 					})
 				}
+				if len(delta.ToolCalls) > 0 {
+					accToolCalls = append(accToolCalls, delta.ToolCalls...)
+				}
 				if delta.FinishReason != "" {
+					finishReason = delta.FinishReason
 					break
 				}
 			}
 			stream.Close()
 
+			// If the LLM wants to call tools, execute them and re-invoke
+			if finishReason == "tool_calls" && len(accToolCalls) > 0 {
+				resp, err := h.service.ExecuteToolsAndRespond(
+					r.Context(), claims.UserID, currentConversation, wsMsg.Content, currentContext, contentBuf, accToolCalls,
+				)
+				if err != nil {
+					writeWSJSON(conn, ChatWSResponse{Type: "error", Content: err.Error(), Error: err.Error()})
+				} else {
+					writeWSJSON(conn, ChatWSResponse{
+						Type:    "stream_delta",
+						Content: resp.Message.Content,
+					})
+				}
+			}
+
 			writeWSJSON(conn, ChatWSResponse{Type: "stream_end"})
+
+		case "select_agent":
+			if wsMsg.AgentID == "" {
+				// Deselect agent — return to default assistant
+				currentAgent = nil
+				currentConversation = ""
+				writeWSJSON(conn, ChatWSResponse{
+					Type:    "agent_selected",
+					AgentID: "",
+				})
+				break
+			}
+			if h.service.agentStore == nil {
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "agent system not available", Error: "agent system not available"})
+				break
+			}
+			agent, agentErr := h.service.agentStore.GetByID(r.Context(), wsMsg.AgentID)
+			if agentErr != nil {
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "agent not found", Error: "agent not found"})
+				break
+			}
+			currentAgent = agent
+			currentConversation = "" // start fresh conversation with this agent
+			writeWSJSON(conn, ChatWSResponse{
+				Type:      "agent_selected",
+				AgentID:   agent.ID,
+				AgentName: agent.Name,
+			})
+
+		case "start_task":
+			if h.service.agentStore == nil {
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "agent system not available", Error: "agent system not available"})
+				break
+			}
+			agentID := wsMsg.AgentID
+			if agentID == "" && currentAgent != nil {
+				agentID = currentAgent.ID
+			}
+			if agentID == "" {
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "no agent selected for task", Error: "no agent"})
+				break
+			}
+			agent, agentErr := h.service.agentStore.GetByID(r.Context(), agentID)
+			if agentErr != nil {
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "agent not found", Error: "agent not found"})
+				break
+			}
+			task := &AgentTask{
+				UserID:  claims.UserID,
+				AgentID: agentID,
+				Title:   wsMsg.TaskTitle,
+				Status:  "pending",
+			}
+			if task.Title == "" {
+				task.Title = wsMsg.Content
+			}
+			if createErr := h.service.agentStore.CreateTask(r.Context(), task); createErr != nil {
+				writeWSJSON(conn, ChatWSResponse{Type: "error", Content: "failed to create task: " + createErr.Error(), Error: createErr.Error()})
+				break
+			}
+			writeWSJSON(conn, ChatWSResponse{
+				Type:      "task_created",
+				TaskID:    task.ID,
+				AgentID:   agent.ID,
+				AgentName: agent.Name,
+			})
+
+		case "cancel_task":
+			writeWSJSON(conn, ChatWSResponse{
+				Type:   "task_completed",
+				TaskID: wsMsg.TaskID,
+			})
+
+			// Suppress unused variable warning for currentAgent
+			_ = currentAgent
 
 		case "confirm_action":
 			mgr := h.service.GetConfirmationManager()

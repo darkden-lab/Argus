@@ -65,7 +65,7 @@ describe('ChatPanel', () => {
 
     expect(screen.getByText('How can I help?')).toBeInTheDocument();
     expect(
-      screen.getByText(/Ask questions about your Kubernetes clusters/)
+      screen.getByText(/Ask about your Kubernetes clusters/)
     ).toBeInTheDocument();
   });
 
@@ -109,7 +109,7 @@ describe('ChatPanel', () => {
     render(<ChatPanel />);
 
     expect(
-      screen.getByText('AI can make mistakes. Verify actions before approving.')
+      screen.getByText('AI can make mistakes')
     ).toBeInTheDocument();
   });
 
@@ -263,9 +263,9 @@ describe('ChatMessage', () => {
 
     const { container } = render(<ChatMessage message={msg} />);
 
-    // Loader2 icon with animate-spin class
-    const spinner = container.querySelector('.animate-spin');
-    expect(spinner).toBeInTheDocument();
+    // Streaming cursor with animate-cursor-blink class
+    const cursor = container.querySelector('.animate-cursor-blink');
+    expect(cursor).toBeInTheDocument();
   });
 
   it('renders bold text correctly', () => {
@@ -307,17 +307,19 @@ describe('ChatMessage', () => {
 
     render(<ChatMessage message={msg} />);
 
-    // Timestamp is rendered using toLocaleTimeString
-    const timeStr = new Date(timestamp).toLocaleTimeString();
+    // Timestamp is rendered using toLocaleTimeString with hour:minute format
+    const timeStr = new Date(timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     expect(screen.getByText(timeStr)).toBeInTheDocument();
   });
 });
 
 describe('ChatCodeBlock', () => {
   it('renders code content', () => {
-    render(<ChatCodeBlock code="console.log('hello')" language="javascript" />);
+    const { container } = render(<ChatCodeBlock code="console.log('hello')" language="javascript" />);
 
-    expect(screen.getByText("console.log('hello')")).toBeInTheDocument();
+    // sugar-high wraps tokens in <span> elements, so use textContent
+    const codeEl = container.querySelector('code');
+    expect(codeEl?.textContent).toContain("console.log('hello')");
   });
 
   it('displays language label', () => {

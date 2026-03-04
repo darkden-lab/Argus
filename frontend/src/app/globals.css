@@ -102,6 +102,17 @@
   --shadow-glow: 0 0 15px oklch(0.55 0.22 260 / 30%);
   --transition-fast: 150ms ease;
   --transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* sugar-high syntax highlighting tokens */
+  --sh-class: #2d5e9d;
+  --sh-identifier: #354150;
+  --sh-sign: #8996a3;
+  --sh-string: #007f7a;
+  --sh-keyword: #7c3aed;
+  --sh-comment: #a0adb8;
+  --sh-jsxliterals: #6266d1;
+  --sh-property: #e25a1c;
+  --sh-entity: #e25a1c;
 }
 
 /* ========================================
@@ -152,6 +163,17 @@
   --shadow-glow: 0 0 20px oklch(0.65 0.24 260 / 25%);
   --transition-fast: 150ms ease;
   --transition-spring: 300ms cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  /* sugar-high syntax highlighting tokens */
+  --sh-class: #4ec9b0;
+  --sh-identifier: #d4d4d4;
+  --sh-sign: #8996a3;
+  --sh-string: #ce9178;
+  --sh-keyword: #c586c0;
+  --sh-comment: #6a9955;
+  --sh-jsxliterals: #9cdcfe;
+  --sh-property: #dcdcaa;
+  --sh-entity: #569cd6;
 }
 
 @layer base {
@@ -216,6 +238,22 @@
     opacity: 0.6;
     transform: scale(1.8);
   }
+}
+
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.animate-cursor-blink {
+  animation: cursor-blink 1s steps(1) infinite;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up {
+  animation: fade-up 0.4s ease-out forwards;
 }
 
 @keyframes glow-shift {

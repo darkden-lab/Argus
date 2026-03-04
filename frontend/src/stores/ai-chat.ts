@@ -14,6 +14,7 @@ export interface ChatMessage {
     id: string;
     tool: string;
     description: string;
+    args?: Record<string, unknown>;
     status: "pending" | "approved" | "rejected";
   };
   isStreaming?: boolean;
@@ -28,11 +29,10 @@ export interface Conversation {
 }
 
 export interface PageContext {
-  cluster?: string;
+  cluster_id?: string;
   namespace?: string;
   resource?: string;
-  resourceKind?: string;
-  resourceName?: string;
+  name?: string;
 }
 
 export interface AiStatus {
@@ -44,6 +44,36 @@ export interface AiStatus {
 }
 
 export type ConnectionState = "disconnected" | "connecting" | "connected" | "error";
+
+export interface Agent {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  icon: string;
+  category: string;
+  system_prompt?: string;
+  allowed_tools?: string[];
+  tool_permission_level?: string;
+  workflow_steps?: Array<{ step: number; name: string; description: string }>;
+  workflow_mode?: string;
+  is_builtin: boolean;
+  owner_user_id?: string;
+  is_public: boolean;
+}
+
+export interface AgentTask {
+  id: string;
+  agent_id: string;
+  title: string;
+  status: "pending" | "running" | "completed" | "failed" | "cancelled";
+  progress: number;
+  current_step: string;
+  total_steps: number;
+  completed_steps: number;
+  result?: string;
+  error?: string;
+}
 
 interface AiChatState {
   // Panel state
@@ -91,6 +121,21 @@ interface AiChatState {
   // Sidebar
   showSidebar: boolean;
   toggleSidebar: () => void;
+
+  // Full page mode
+  isFullPage: boolean;
+  setIsFullPage: (v: boolean) => void;
+
+  // Agents
+  agents: Agent[];
+  setAgents: (agents: Agent[]) => void;
+  activeAgentId: string | null;
+  setActiveAgent: (id: string | null) => void;
+
+  // Tasks
+  tasks: AgentTask[];
+  setTasks: (tasks: AgentTask[]) => void;
+  updateTask: (id: string, updates: Partial<AgentTask>) => void;
 }
 
 export const useAiChatStore = create<AiChatState>((set) => ({
@@ -152,4 +197,24 @@ export const useAiChatStore = create<AiChatState>((set) => ({
   // Sidebar
   showSidebar: false,
   toggleSidebar: () => set((s) => ({ showSidebar: !s.showSidebar })),
+
+  // Full page mode
+  isFullPage: false,
+  setIsFullPage: (v) => set({ isFullPage: v }),
+
+  // Agents
+  agents: [],
+  setAgents: (agents) => set({ agents }),
+  activeAgentId: null,
+  setActiveAgent: (id) => set({ activeAgentId: id }),
+
+  // Tasks
+  tasks: [],
+  setTasks: (tasks) => set({ tasks }),
+  updateTask: (id, updates) =>
+    set((s) => ({
+      tasks: s.tasks.map((t) =>
+        t.id === id ? { ...t, ...updates } : t
+      ),
+    })),
 }));

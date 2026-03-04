@@ -302,8 +302,14 @@ func main() {
 
 	aiProvider := aiProviderFactory(aiCfg)
 
+	// Create memory store for AI personalization
+	var aiMemoryStore *ai.MemoryStore
+	if pool != nil {
+		aiMemoryStore = ai.NewMemoryStore(pool)
+	}
+
 	// Create Service first so the embedder can track its active provider.
-	aiService := ai.NewService(aiProvider, nil, clusterMgr, pool, aiCfg)
+	aiService := ai.NewService(aiProvider, nil, clusterMgr, pluginEngine, pool, aiCfg, aiMemoryStore)
 
 	var aiIndexer *rag.Indexer
 	if pool != nil {
@@ -320,6 +326,21 @@ func main() {
 
 	aiAdminHandlers := ai.NewAdminHandlers(pool, aiIndexer, aiCfg, aiWriteGuard, aiService, aiProviderFactory, cfg.EncryptionKey)
 	aiAdminHandlers.RegisterRoutes(protected)
+
+	// AI Memory endpoints (user-scoped, no admin RBAC needed)
+	if pool != nil {
+		aiMemoryHandlers := ai.NewMemoryHandlers(pool)
+		aiMemoryHandlers.RegisterRoutes(protected)
+	}
+
+	// AI Agent system (agents CRUD + task runner)
+	if pool != nil {
+		aiAgentStore := ai.NewAgentStore(pool)
+		aiService.SetAgentStore(aiAgentStore)
+		aiTaskRunner := ai.NewTaskRunner(aiService, aiAgentStore)
+		aiAgentHandlers := ai.NewAgentHandlers(aiAgentStore, aiTaskRunner)
+		aiAgentHandlers.RegisterRoutes(protected)
+	}
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)
 
