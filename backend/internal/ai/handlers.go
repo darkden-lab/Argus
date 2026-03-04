@@ -184,19 +184,16 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 					})
 				}
 				for _, tc := range delta.ToolCalls {
-					merged := false
-					for i := range accToolCalls {
-						if accToolCalls[i].ID != "" && tc.ID == accToolCalls[i].ID {
-							accToolCalls[i].Arguments += tc.Arguments
-							if tc.Name != "" {
-								accToolCalls[i].Name = tc.Name
-							}
-							merged = true
-							break
-						}
-					}
-					if !merged && tc.ID != "" {
+					if tc.ID != "" {
+						// New tool call — append to accumulator
 						accToolCalls = append(accToolCalls, tc)
+					} else if len(accToolCalls) > 0 {
+						// Continuation of the last tool call — merge arguments
+						last := &accToolCalls[len(accToolCalls)-1]
+						last.Arguments += tc.Arguments
+						if tc.Name != "" {
+							last.Name = tc.Name
+						}
 					}
 				}
 				if delta.FinishReason != "" {

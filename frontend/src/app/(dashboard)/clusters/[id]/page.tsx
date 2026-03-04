@@ -12,9 +12,9 @@ import { Separator } from "@/components/ui/separator";
 import { StatusDot } from "@/components/ui/status-dot";
 import { useAiChatStore } from "@/stores/ai-chat";
 import { LiveIndicator } from "@/components/ui/live-indicator";
-import { useK8sWildcard } from "@/hooks/use-k8s-websocket";
+import { useK8sWildcard } from "@/hooks/use-k8s-socket";
 import { cn } from "@/lib/utils";
-import type { WatchEvent } from "@/lib/ws";
+import type { WatchEvent } from "@/lib/socket";
 import {
   compositeApps,
   compositeDatabases,

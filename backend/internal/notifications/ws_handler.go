@@ -19,11 +19,19 @@ var notifUpgrader = websocket.Upgrader{
 	CheckOrigin:     ws.CheckOrigin,
 }
 
-// WSHandler manages real-time notification delivery via WebSocket.
+// SocketIOBroadcastFunc sends data to a specific user via Socket.IO.
+type SocketIOBroadcastFunc func(userID string, data []byte)
+
+// SocketIOBroadcastAllFunc sends data to all connected Socket.IO clients.
+type SocketIOBroadcastAllFunc func(data []byte)
+
+// WSHandler manages real-time notification delivery via WebSocket and Socket.IO.
 type WSHandler struct {
-	jwtService *auth.JWTService
-	mu         sync.RWMutex
-	clients    map[string]map[*websocket.Conn]struct{} // userID -> set of connections
+	jwtService          *auth.JWTService
+	mu                  sync.RWMutex
+	clients             map[string]map[*websocket.Conn]struct{} // userID -> set of connections
+	sioBroadcast        SocketIOBroadcastFunc
+	sioBroadcastAll     SocketIOBroadcastAllFunc
 }
 
 // NewWSHandler creates a new notifications WebSocket handler.
@@ -90,7 +98,21 @@ func (h *WSHandler) ServeWS(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
-// Broadcast sends a notification to all WebSocket connections for a given user.
+// SetSocketIOBroadcast sets the Socket.IO broadcast function for targeted user notifications.
+func (h *WSHandler) SetSocketIOBroadcast(fn SocketIOBroadcastFunc) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.sioBroadcast = fn
+}
+
+// SetSocketIOBroadcastAll sets the Socket.IO broadcast-all function for system-wide notifications.
+func (h *WSHandler) SetSocketIOBroadcastAll(fn SocketIOBroadcastAllFunc) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.sioBroadcastAll = fn
+}
+
+// Broadcast sends a notification to all connections (WebSocket + Socket.IO) for a given user.
 func (h *WSHandler) Broadcast(userID string, notification Notification) {
 	data, err := json.Marshal(notification)
 	if err != nil {
@@ -99,14 +121,21 @@ func (h *WSHandler) Broadcast(userID string, notification Notification) {
 
 	h.mu.RLock()
 	conns := h.clients[userID]
+	sioBroadcast := h.sioBroadcast
 	h.mu.RUnlock()
 
+	// Legacy WebSocket clients
 	for conn := range conns {
 		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 			log.Printf("notifications ws: write error for user %s: %v", userID, err)
 			h.removeClient(userID, conn)
 			conn.Close()
 		}
+	}
+
+	// Socket.IO clients
+	if sioBroadcast != nil {
+		sioBroadcast(userID, data)
 	}
 }
 
@@ -118,14 +147,23 @@ func (h *WSHandler) BroadcastAll(notification Notification) {
 	}
 
 	h.mu.RLock()
-	defer h.mu.RUnlock()
+	sioBroadcastAll := h.sioBroadcastAll
+	h.mu.RUnlock()
 
+	// Legacy WebSocket clients
+	h.mu.RLock()
 	for _, conns := range h.clients {
 		for conn := range conns {
 			if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 				conn.Close()
 			}
 		}
+	}
+	h.mu.RUnlock()
+
+	// Socket.IO clients
+	if sioBroadcastAll != nil {
+		sioBroadcastAll(data)
 	}
 }
 

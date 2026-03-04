@@ -32,6 +32,7 @@ import (
 	"github.com/darkden-lab/argus/backend/internal/proxy"
 	"github.com/darkden-lab/argus/backend/internal/rbac"
 	"github.com/darkden-lab/argus/backend/internal/settings"
+	sio "github.com/darkden-lab/argus/backend/internal/socketio"
 	"github.com/darkden-lab/argus/backend/internal/setup"
 	"github.com/darkden-lab/argus/backend/internal/terminal"
 	"github.com/darkden-lab/argus/backend/internal/ws"
@@ -275,10 +276,10 @@ func main() {
 	k8sProxy := proxy.NewK8sProxy(clusterMgr, rbacEngine)
 	k8sProxy.RegisterRoutes(protected)
 
-	// WebSocket
+	// Legacy WebSocket (kept for backwards compatibility during migration)
 	wsHandler.RegisterRoutes(r)
 
-	// Terminal WebSocket (auth handled inside handler)
+	// Legacy Terminal WebSocket
 	terminalHandler := terminal.NewHandler(jwtService, clusterMgr)
 	terminalHandler.RegisterRoutes(r)
 
@@ -343,6 +344,19 @@ func main() {
 	}
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)
+
+	// Socket.IO server (new transport layer alongside legacy WebSockets)
+	sioServer := sio.NewServer(sio.Deps{
+		JWTService:      jwtService,
+		Hub:             hub,
+		AIService:       aiService,
+		ClusterMgr:      clusterMgr,
+		NotifWSHandler:  notifWSHandler,
+		TerminalHandler: terminalHandler,
+	})
+	defer sioServer.Close()
+	r.PathPrefix("/socket.io/").Handler(sioServer.Handler())
+	log.Println("Socket.IO server mounted at /socket.io/")
 
 	// Start health check ticker
 	go func() {

@@ -1,64 +1,54 @@
 /**
  * Tests for the terminal line-buffering logic in use-terminal.ts.
  *
- * Because the hook relies on WebSocket + React refs, we test the core logic
- * by rendering the hook via renderHook and inspecting the handleInput behavior.
+ * The hook now uses Socket.IO via getSocket/disconnectSocket.
+ * We mock those to test the core smart-mode line buffer and raw-mode behavior.
  */
 import { renderHook, act } from '@testing-library/react';
 import { useTerminal, type TerminalMode } from '@/hooks/use-terminal';
 
-// Mock WebSocket
-class MockWebSocket {
-  static OPEN = 1;
-  readyState = MockWebSocket.OPEN;
-  sent: string[] = [];
-  onopen: (() => void) | null = null;
-  onmessage: ((e: { data: string }) => void) | null = null;
-  onclose: (() => void) | null = null;
-  onerror: (() => void) | null = null;
+// Mock socket.io-client via our socket lib
+const mockEmit = jest.fn();
+const mockOn = jest.fn();
+const mockOff = jest.fn();
 
-  send(data: string) {
-    this.sent.push(data);
-  }
-  close() {
-    this.readyState = 3;
-    // Simulate async onclose like real WebSocket
-    setTimeout(() => this.onclose?.(), 0);
-  }
-}
+let connectHandler: (() => void) | undefined;
 
-let mockWsInstance: MockWebSocket;
-let wsInstanceCount = 0;
-const allWsInstances: MockWebSocket[] = [];
-
-function setMockWsInstance(instance: MockWebSocket) {
-  mockWsInstance = instance;
-  wsInstanceCount++;
-  allWsInstances.push(instance);
-}
-
-// Override global WebSocket
-beforeAll(() => {
-  (global as Record<string, unknown>).WebSocket = class extends MockWebSocket {
-    constructor() {
-      super();
-      setMockWsInstance(this);
-      // Simulate connection in next tick
-      setTimeout(() => this.onopen?.(), 0);
+const mockSocket = {
+  on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
+    mockOn(event, handler);
+    if (event === 'connect') {
+      connectHandler = handler as () => void;
     }
-  };
-  // Make OPEN accessible as static
-  (global as Record<string, unknown>).WebSocket = Object.assign(
-    (global as Record<string, unknown>).WebSocket as object,
-    { OPEN: 1 }
-  );
-});
+  }),
+  off: jest.fn(),
+  emit: mockEmit,
+  disconnect: jest.fn(),
+  connected: false,
+};
+
+const mockGetSocket = jest.fn(() => mockSocket);
+const mockDisconnectSocket = jest.fn();
+
+jest.mock('@/lib/socket', () => ({
+  getSocket: (...args: unknown[]) => mockGetSocket(...args),
+  disconnectSocket: (...args: unknown[]) => mockDisconnectSocket(...args),
+}));
 
 // Provide a token so the hook connects
 beforeEach(() => {
   localStorage.setItem('access_token', 'test-token');
-  wsInstanceCount = 0;
-  allWsInstances.length = 0;
+  mockEmit.mockReset();
+  mockOn.mockReset();
+  mockSocket.on.mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
+    mockOn(event, handler);
+    if (event === 'connect') {
+      connectHandler = handler as () => void;
+    }
+  });
+  mockGetSocket.mockReturnValue(mockSocket);
+  mockDisconnectSocket.mockReset();
+  connectHandler = undefined;
 });
 
 afterEach(() => {
@@ -83,7 +73,7 @@ describe('handleInput - smart mode', () => {
     return { result, writes, writeFn };
   }
 
-  it('accumulates printable characters without sending WS messages', () => {
+  it('accumulates printable characters without sending messages', () => {
     const { result, writes, writeFn } = setup();
 
     act(() => {
@@ -97,17 +87,11 @@ describe('handleInput - smart mode', () => {
     // Characters should be echoed locally
     expect(writes).toEqual(['h', 'e', 'l', 'l', 'o']);
 
-    // No WS messages should have been sent (command not submitted yet)
-    if (mockWsInstance) {
-      const inputMessages = mockWsInstance.sent.filter((s) => {
-        try {
-          return JSON.parse(s).type === 'input';
-        } catch {
-          return false;
-        }
-      });
-      expect(inputMessages).toHaveLength(0);
-    }
+    // No input messages should have been emitted (command not submitted yet)
+    const inputCalls = mockEmit.mock.calls.filter(
+      ([event]: string[]) => event === 'input'
+    );
+    expect(inputCalls).toHaveLength(0);
   });
 
   it('sends complete command on Enter', () => {
@@ -123,25 +107,16 @@ describe('handleInput - smart mode', () => {
       result.current.handleInput('\r', writeFn, 'smart');
     });
 
-    // Should have echoed \\r\\n
+    // Should have echoed \r\n
     expect(writes).toContain('\r\n');
 
-    // WS should have received input message with "ls"
-    if (mockWsInstance) {
-      const inputMessages = mockWsInstance.sent
-        .map((s) => {
-          try {
-            return JSON.parse(s);
-          } catch {
-            return null;
-          }
-        })
-        .filter((m) => m?.type === 'input');
-
-      expect(inputMessages.length).toBeGreaterThanOrEqual(1);
-      const lastInput = inputMessages[inputMessages.length - 1];
-      expect(lastInput.data).toBe('ls');
-    }
+    // Socket should have emitted input with "ls"
+    const inputCalls = mockEmit.mock.calls.filter(
+      ([event]: string[]) => event === 'input'
+    );
+    expect(inputCalls.length).toBeGreaterThanOrEqual(1);
+    const lastInput = inputCalls[inputCalls.length - 1];
+    expect(lastInput[1]).toEqual({ data: 'ls' });
   });
 
   it('handles backspace by removing last character', () => {
@@ -154,20 +129,13 @@ describe('handleInput - smart mode', () => {
     });
 
     // After 'a', 'b', backspace: buffer should have 'a'
-    // Echo should include: 'a', 'b', then backspace sequence
     expect(writes.length).toBeGreaterThanOrEqual(3);
 
-    // No WS input messages should be sent
-    if (mockWsInstance) {
-      const inputMessages = mockWsInstance.sent.filter((s) => {
-        try {
-          return JSON.parse(s).type === 'input';
-        } catch {
-          return false;
-        }
-      });
-      expect(inputMessages).toHaveLength(0);
-    }
+    // No input messages should be emitted
+    const inputCalls = mockEmit.mock.calls.filter(
+      ([event]: string[]) => event === 'input'
+    );
+    expect(inputCalls).toHaveLength(0);
   });
 
   it('handles Ctrl+C by cancelling current line', () => {
@@ -183,7 +151,7 @@ describe('handleInput - smart mode', () => {
     expect(writes).toContain('^C\r\n$ ');
   });
 
-  it('empty Enter shows new prompt without sending WS', () => {
+  it('empty Enter shows new prompt without sending input', () => {
     const { result, writes, writeFn } = setup();
 
     act(() => {
@@ -193,17 +161,11 @@ describe('handleInput - smart mode', () => {
     expect(writes).toContain('\r\n');
     expect(writes).toContain('$ ');
 
-    // No input message sent
-    if (mockWsInstance) {
-      const inputMessages = mockWsInstance.sent.filter((s) => {
-        try {
-          return JSON.parse(s).type === 'input';
-        } catch {
-          return false;
-        }
-      });
-      expect(inputMessages).toHaveLength(0);
-    }
+    // No input message emitted
+    const inputCalls = mockEmit.mock.calls.filter(
+      ([event]: string[]) => event === 'input'
+    );
+    expect(inputCalls).toHaveLength(0);
   });
 });
 
@@ -227,21 +189,12 @@ describe('handleInput - raw mode', () => {
     // In raw mode, nothing should be written locally (terminal handles echo)
     expect(writes).toHaveLength(0);
 
-    // WS should have received the character
-    if (mockWsInstance) {
-      const inputMessages = mockWsInstance.sent
-        .map((s) => {
-          try {
-            return JSON.parse(s);
-          } catch {
-            return null;
-          }
-        })
-        .filter((m) => m?.type === 'input');
-
-      expect(inputMessages.length).toBeGreaterThanOrEqual(1);
-      expect(inputMessages[inputMessages.length - 1].data).toBe('h');
-    }
+    // Socket should have emitted the character
+    const inputCalls = mockEmit.mock.calls.filter(
+      ([event]: string[]) => event === 'input'
+    );
+    expect(inputCalls.length).toBeGreaterThanOrEqual(1);
+    expect(inputCalls[inputCalls.length - 1][1]).toEqual({ data: 'h' });
   });
 });
 
@@ -279,7 +232,6 @@ describe('handleInput - history navigation', () => {
       result.current.handleInput('\x1b[A', writeFn, 'smart');
     });
 
-    // The write should contain "bar" (the last command)
     const upOutput = writes.join('');
     expect(upOutput).toContain('bar');
 
@@ -303,62 +255,71 @@ describe('handleInput - history navigation', () => {
   });
 });
 
-describe('WebSocket lifecycle - regression tests', () => {
-  it('namespace change does NOT create a new WebSocket', async () => {
-    jest.useFakeTimers();
-
-    const { result, rerender } = renderHook(
-      ({ cluster, namespace, mode }: { cluster: string; namespace: string; mode: TerminalMode }) =>
-        useTerminal({ cluster, namespace, mode }),
-      { initialProps: { cluster: 'c1', namespace: 'default', mode: 'smart' as TerminalMode } }
+describe('Socket.IO lifecycle', () => {
+  it('creates socket with /terminal namespace on mount', () => {
+    renderHook(() =>
+      useTerminal({
+        cluster: 'c1',
+        namespace: 'default',
+        mode: 'smart' as TerminalMode,
+      })
     );
 
-    // Let the initial WS connect
-    await act(async () => {
-      jest.runAllTimers();
-    });
-
-    const countAfterInit = wsInstanceCount;
-
-    // Change namespace — should NOT create new WS
-    rerender({ cluster: 'c1', namespace: 'kube-system', mode: 'smart' as TerminalMode });
-
-    await act(async () => {
-      jest.runAllTimers();
-    });
-
-    expect(wsInstanceCount).toBe(countAfterInit);
-    expect(result.current.isConnected).toBeDefined();
+    expect(mockGetSocket).toHaveBeenCalledWith('/terminal');
   });
 
-  it('cluster change DOES create a new WebSocket', async () => {
-    jest.useFakeTimers();
+  it('emits set_context on connect', () => {
+    renderHook(() =>
+      useTerminal({
+        cluster: 'c1',
+        namespace: 'default',
+        mode: 'smart' as TerminalMode,
+      })
+    );
 
+    // Simulate socket connect
+    act(() => {
+      connectHandler?.();
+    });
+
+    expect(mockEmit).toHaveBeenCalledWith('set_context', {
+      cluster_id: 'c1',
+      namespace: 'default',
+    });
+  });
+
+  it('disconnects socket on unmount', () => {
+    const { unmount } = renderHook(() =>
+      useTerminal({
+        cluster: 'c1',
+        namespace: 'default',
+        mode: 'smart' as TerminalMode,
+      })
+    );
+
+    unmount();
+
+    expect(mockDisconnectSocket).toHaveBeenCalledWith('/terminal');
+  });
+
+  it('cluster change reconnects with new socket', () => {
     const { rerender } = renderHook(
       ({ cluster, namespace, mode }: { cluster: string; namespace: string; mode: TerminalMode }) =>
         useTerminal({ cluster, namespace, mode }),
       { initialProps: { cluster: 'c1', namespace: 'default', mode: 'smart' as TerminalMode } }
     );
 
-    await act(async () => {
-      jest.runAllTimers();
-    });
+    const initialCallCount = mockGetSocket.mock.calls.length;
 
-    const countAfterInit = wsInstanceCount;
-
-    // Change cluster — SHOULD create new WS
+    // Change cluster — SHOULD reconnect
     rerender({ cluster: 'c2', namespace: 'default', mode: 'smart' as TerminalMode });
 
-    await act(async () => {
-      jest.runAllTimers();
-    });
-
-    expect(wsInstanceCount).toBe(countAfterInit + 1);
+    // Should have disconnected old and created new
+    expect(mockDisconnectSocket).toHaveBeenCalledWith('/terminal');
+    expect(mockGetSocket.mock.calls.length).toBeGreaterThan(initialCallCount);
   });
 
-  it('intentional disconnect does NOT trigger auto-reconnect', async () => {
-    jest.useFakeTimers();
-
+  it('intentional disconnect does not auto-reconnect', () => {
     const { result } = renderHook(() =>
       useTerminal({
         cluster: 'c1',
@@ -367,23 +328,15 @@ describe('WebSocket lifecycle - regression tests', () => {
       })
     );
 
-    await act(async () => {
-      jest.runAllTimers();
-    });
+    const callCountBefore = mockGetSocket.mock.calls.length;
 
-    const countAfterInit = wsInstanceCount;
-
-    // Disconnect intentionally
     act(() => {
       result.current.disconnect();
     });
 
-    // Advance timers well past any reconnect delay
-    await act(async () => {
-      jest.advanceTimersByTime(60000);
-    });
+    expect(mockDisconnectSocket).toHaveBeenCalledWith('/terminal');
 
-    // No new WS should have been created
-    expect(wsInstanceCount).toBe(countAfterInit);
+    // No new socket should have been created after disconnect
+    expect(mockGetSocket.mock.calls.length).toBe(callCountBefore);
   });
 });

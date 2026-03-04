@@ -7,7 +7,7 @@ import { MainContent } from "@/components/layout/main-content";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import { usePermissionsStore } from "@/stores/permissions";
 import { useAuthStore } from "@/stores/auth";
-import { k8sWs } from "@/lib/ws";
+import { getSocket, disconnectSocket } from "@/lib/socket";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ToastContainer } from "@/components/ui/toast";
 import { ChatPanel, ChatToggleButton } from "@/components/ai/chat-panel";
@@ -28,19 +28,22 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (!isAuthenticated) return;
     const token = localStorage.getItem("access_token");
     if (token) {
-      k8sWs.connect(token);
+      // Pre-connect the K8s Socket.IO namespace so watch events are ready
+      getSocket("/k8s");
     }
 
     const handleStorage = (e: StorageEvent) => {
       if (e.key === "access_token" && e.newValue) {
-        k8sWs.connect(e.newValue);
+        // Reconnect with new token
+        disconnectSocket("/k8s");
+        getSocket("/k8s");
       }
     };
     window.addEventListener("storage", handleStorage);
 
     return () => {
       window.removeEventListener("storage", handleStorage);
-      k8sWs.disconnect();
+      disconnectSocket("/k8s");
     };
   }, [isAuthenticated]);
 
