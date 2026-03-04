@@ -39,6 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
+import { ManifestPreview } from "@/components/ui/manifest-preview";
 
 interface CreateNetworkPolicyWizardProps {
   open: boolean;
@@ -647,9 +648,6 @@ export function CreateNetworkPolicyWizard({
     }
   }
 
-  const manifest = buildManifest(form);
-  const yamlPreview = JSON.stringify(manifest, null, 2);
-
   return (
     <Dialog
       open={open}
@@ -902,14 +900,7 @@ export function CreateNetworkPolicyWizard({
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">
-                Generated Manifest (JSON)
-              </Label>
-              <pre className="rounded-md bg-muted p-3 text-xs font-mono overflow-auto max-h-[300px] whitespace-pre-wrap">
-                {yamlPreview}
-              </pre>
-            </div>
+            <ManifestPreview manifest={buildManifest(form)} maxHeight="400px" />
           </div>
         )}
 
