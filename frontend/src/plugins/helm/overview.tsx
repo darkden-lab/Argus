@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PluginOverviewSkeleton } from "@/components/skeletons";
 import { StatusBadge } from "@/components/resources/resource-table";
+import { useClusterStore } from "@/stores/cluster";
 
 interface HelmRelease {
   metadata: { name: string; namespace: string; labels?: Record<string, string> };
@@ -15,15 +17,17 @@ interface NamespaceSummary { namespace: string; count: number }
 export function HelmOverview() {
   const [releases, setReleases] = useState<HelmRelease[]>([]);
   const [loading, setLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) { setLoading(false); return; }
-    api.get<{ items: HelmRelease[] }>(`/api/plugins/helm/helmreleases?clusterID=${clusterID}`)
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
+    api.get<{ items: HelmRelease[] }>(`/api/plugins/helm/helmreleases?clusterID=${clusterID}${nsParam}`)
       .then((d) => setReleases(d.items ?? []))
       .catch(() => setReleases([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [namespace]);
 
   const byNamespace = releases.reduce<Record<string, number>>((acc, r) => {
     const ns = r.metadata.namespace;
@@ -40,7 +44,7 @@ export function HelmOverview() {
     .slice(0, 5);
 
   if (loading) {
-    return <div className="py-12 text-center text-muted-foreground">Loading...</div>;
+    return <PluginOverviewSkeleton />;
   }
 
   return (

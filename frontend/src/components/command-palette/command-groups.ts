@@ -15,6 +15,9 @@ import {
   Bell,
   Shield,
   Users,
+  FolderOpen,
+  Globe,
+  X,
   type LucideIcon,
 } from "lucide-react";
 
@@ -104,12 +107,41 @@ export const navigationCommands: CommandGroup = {
       keywords: ["metrics", "prometheus", "alerts", "grafana"],
     },
     {
+      id: "nav-projects",
+      label: "Projects",
+      description: "Namespace-based project groups",
+      icon: FolderOpen,
+      href: "/projects",
+      keywords: ["project", "namespace", "group", "organize"],
+    },
+    {
       id: "nav-terminal",
       label: "Terminal",
       description: "kubectl terminal",
       icon: Terminal,
       href: "/terminal",
       keywords: ["shell", "kubectl", "exec", "console"],
+    },
+  ],
+};
+
+export const filterCommands: CommandGroup = {
+  id: "filters",
+  label: "Filters",
+  items: [
+    {
+      id: "filter-all-namespaces",
+      label: "All Namespaces",
+      description: "Remove namespace filter",
+      icon: Globe,
+      keywords: ["namespace", "filter", "clear", "all"],
+    },
+    {
+      id: "filter-clear-project",
+      label: "Clear Project Filter",
+      description: "Stop filtering by project",
+      icon: X,
+      keywords: ["project", "filter", "clear", "remove"],
     },
   ],
 };
@@ -185,6 +217,7 @@ export const settingsCommands: CommandGroup = {
 
 export const allCommandGroups: CommandGroup[] = [
   navigationCommands,
+  filterCommands,
   actionCommands,
   settingsCommands,
 ];

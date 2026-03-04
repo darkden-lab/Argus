@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useClusterStore } from "@/stores/cluster";
 
 function CountCard({ label, count }: { label: string; count: number }) {
   return (
@@ -14,15 +15,17 @@ function CountCard({ label, count }: { label: string; count: number }) {
 
 export function KedaOverview() {
   const [counts, setCounts] = useState({ scaledObjects: 0, scaledJobs: 0, triggerAuths: 0 });
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) return;
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
 
     Promise.allSettled([
-      api.get<{ items: unknown[] }>(`/api/plugins/keda/scaledobjects?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/keda/scaledjobs?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/keda/triggerauthentications?clusterID=${clusterID}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/keda/scaledobjects?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/keda/scaledjobs?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/keda/triggerauthentications?clusterID=${clusterID}${nsParam}`),
     ]).then(([so, sj, ta]) => {
       setCounts({
         scaledObjects: so.status === "fulfilled" ? (so.value.items?.length ?? 0) : 0,
@@ -30,7 +33,7 @@ export function KedaOverview() {
         triggerAuths:  ta.status === "fulfilled" ? (ta.value.items?.length ?? 0) : 0,
       });
     });
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-6">

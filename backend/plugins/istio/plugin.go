@@ -81,8 +81,15 @@ func (p *IstioPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 	gw.HandleFunc("/{name}", h.GetGateway).Methods("GET")
 	gw.HandleFunc("/{name}", h.DeleteGateway).Methods("DELETE")
 
-	r.HandleFunc("/api/plugins/istio/destinationrules", h.ListDestinationRules).Methods("GET")
-	r.HandleFunc("/api/plugins/istio/serviceentries", h.ListServiceEntries).Methods("GET")
+	dr := r.PathPrefix("/api/plugins/istio/destinationrules").Subrouter()
+	dr.HandleFunc("", h.ListDestinationRules).Methods("GET")
+	dr.HandleFunc("/{name}", h.GetDestinationRule).Methods("GET")
+	dr.HandleFunc("/{name}", h.DeleteDestinationRule).Methods("DELETE")
+
+	se := r.PathPrefix("/api/plugins/istio/serviceentries").Subrouter()
+	se.HandleFunc("", h.ListServiceEntries).Methods("GET")
+	se.HandleFunc("/{name}", h.GetServiceEntry).Methods("GET")
+	se.HandleFunc("/{name}", h.DeleteServiceEntry).Methods("DELETE")
 
 	// Topology endpoint
 	topo := newTopologyHandler(cm)

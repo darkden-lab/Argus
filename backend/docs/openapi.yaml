@@ -257,10 +257,68 @@ paths:
         "204":
           description: Cluster removed
 
+  /api/clusters/{id}/projects:
+    get:
+      tags: [Resources]
+      summary: List projects aggregated by argus.darkden.net/projects label
+      description: |
+        Scans namespaces and workloads for the `argus.darkden.net/projects` label
+        (comma-separated multi-value) and aggregates them into project summaries
+        with health status.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterId"
+      responses:
+        "200":
+          description: Project list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/ProjectSummary"
+        "502":
+          description: Cluster not available
+
+  /api/clusters/{id}/projects/{project}:
+    get:
+      tags: [Resources]
+      summary: Get project detail including all resources
+      description: |
+        Returns all namespaces and resources (Deployments, StatefulSets, Services)
+        that belong to the specified project via the `argus.darkden.net/projects` label.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterId"
+        - name: project
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Project detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProjectDetail"
+        "400":
+          description: Project name required
+        "502":
+          description: Cluster not available
+
   /api/clusters/{id}/resources/{group}/{version}/{resource}:
     get:
       tags: [Resources]
       summary: List Kubernetes resources
+      description: |
+        Most resource list endpoints accept an optional `namespace` query parameter
+        to filter results to a specific Kubernetes namespace.
       security:
         - bearerAuth: []
       parameters:
@@ -284,6 +342,7 @@ paths:
           in: query
           schema:
             type: string
+          description: Filter results to a specific Kubernetes namespace
       responses:
         "200":
           description: Resource list
@@ -736,6 +795,46 @@ components:
           type: object
         repo_url:
           type: string
+
+    ProjectSummary:
+      type: object
+      properties:
+        name:
+          type: string
+        namespaces:
+          type: array
+          items:
+            type: string
+        workloads:
+          type: integer
+        podsRunning:
+          type: integer
+        podsTotal:
+          type: integer
+        health:
+          type: string
+          enum: [healthy, degraded, unknown]
+
+    ProjectDetail:
+      type: object
+      properties:
+        name:
+          type: string
+        namespaces:
+          type: array
+          items:
+            type: string
+        resources:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+              name:
+                type: string
+              namespace:
+                type: string
 
     AuditEntry:
       type: object

@@ -1,4 +1,5 @@
 import { io, Socket } from "socket.io-client";
+import { useUIStore } from "@/stores/ui";
 
 function resolveBaseUrl(): string {
   const apiUrl = process.env.NEXT_PUBLIC_API_URL;
@@ -18,9 +19,25 @@ export type Namespace = "/k8s" | "/ai" | "/terminal" | "/notifications";
 
 const sockets = new Map<Namespace, Socket>();
 
+function updateSocketStatus(): void {
+  const allSockets = Array.from(sockets.values());
+  if (allSockets.length === 0) {
+    useUIStore.getState().setSocketStatus("disconnected");
+    return;
+  }
+  if (allSockets.some((s) => s.connected)) {
+    useUIStore.getState().setSocketStatus("connected");
+  } else if (allSockets.some((s) => s.active && !s.connected)) {
+    useUIStore.getState().setSocketStatus("reconnecting");
+  } else {
+    useUIStore.getState().setSocketStatus("disconnected");
+  }
+}
+
 /**
  * Get or create a Socket.IO connection for a given namespace.
  * Auth token is passed in the handshake `auth` object (not in the URL).
+ * Uses exponential backoff: 1s → ~1.5s → ~2.3s → ... → 30s max (with jitter).
  */
 export function getSocket(namespace: Namespace): Socket {
   const existing = sockets.get(namespace);
@@ -37,10 +54,17 @@ export function getSocket(namespace: Namespace): Socket {
     auth: { token: token || "" },
     transports: ["websocket", "polling"],
     reconnection: true,
-    reconnectionAttempts: 10,
+    reconnectionAttempts: Infinity,
     reconnectionDelay: 1000,
     reconnectionDelayMax: 30000,
+    randomizationFactor: 0.5,
     autoConnect: true,
+  });
+
+  socket.on("connect", updateSocketStatus);
+  socket.on("disconnect", updateSocketStatus);
+  socket.io.on("reconnect_attempt", () => {
+    useUIStore.getState().setSocketStatus("reconnecting");
   });
 
   sockets.set(namespace, socket);

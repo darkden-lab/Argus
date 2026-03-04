@@ -48,6 +48,10 @@ func (h *handlers) ListBackups(w http.ResponseWriter, r *http.Request) {
 	h.list(w, r, gvrBackups)
 }
 
+func (h *handlers) GetBackup(w http.ResponseWriter, r *http.Request) {
+	h.get(w, r, gvrBackups)
+}
+
 func (h *handlers) CreateBackup(w http.ResponseWriter, r *http.Request) {
 	h.create(w, r, gvrBackups)
 }
@@ -62,6 +66,10 @@ func (h *handlers) ListScheduledBackups(w http.ResponseWriter, r *http.Request) 
 	h.list(w, r, gvrScheduledBackups)
 }
 
+func (h *handlers) GetScheduledBackup(w http.ResponseWriter, r *http.Request) {
+	h.get(w, r, gvrScheduledBackups)
+}
+
 func (h *handlers) CreateScheduledBackup(w http.ResponseWriter, r *http.Request) {
 	h.create(w, r, gvrScheduledBackups)
 }
@@ -74,6 +82,10 @@ func (h *handlers) DeleteScheduledBackup(w http.ResponseWriter, r *http.Request)
 
 func (h *handlers) ListPoolers(w http.ResponseWriter, r *http.Request) {
 	h.list(w, r, gvrPoolers)
+}
+
+func (h *handlers) GetPooler(w http.ResponseWriter, r *http.Request) {
+	h.get(w, r, gvrPoolers)
 }
 
 func (h *handlers) CreatePooler(w http.ResponseWriter, r *http.Request) {
@@ -193,7 +205,7 @@ func (h *handlers) del(w http.ResponseWriter, r *http.Request, gvr schema.GroupV
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	json.NewEncoder(w).Encode(data) //nolint:errcheck
 }
 
 func errMsg(msg string) map[string]string {

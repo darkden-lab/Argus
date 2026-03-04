@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PluginTableSkeleton } from "@/components/skeletons";
+import { useClusterStore } from "@/stores/cluster";
 
 interface NetworkPolicy {
   metadata: { name: string; namespace: string };
@@ -15,25 +17,26 @@ interface NetworkPolicy {
 export function NetworkPolicyList() {
   const [items, setItems] = useState<NetworkPolicy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) { setIsLoading(false); return; }
-
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
     api
       .get<{ items: NetworkPolicy[] }>(
-        `/api/plugins/calico/networkpolicies?clusterID=${clusterID}`
+        `/api/plugins/calico/networkpolicies?clusterID=${clusterID}${nsParam}`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Network Policies</h1>
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <PluginTableSkeleton />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No network policies found.</p>
       ) : (

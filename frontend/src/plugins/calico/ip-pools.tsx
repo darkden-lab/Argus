@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PluginTableSkeleton } from "@/components/skeletons";
 
 interface IPPool {
   metadata: { name: string };
@@ -34,7 +35,7 @@ export function IPPoolList() {
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">IP Pools</h1>
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <PluginTableSkeleton />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No IP pools found.</p>
       ) : (

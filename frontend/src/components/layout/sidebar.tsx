@@ -8,6 +8,7 @@ import {
   Rocket,
   Database,
   Timer,
+  FolderOpen,
   Network,
   Wifi,
   HardDrive,
@@ -44,6 +45,8 @@ import { useUIStore } from "@/stores/ui";
 import { useAuthStore } from "@/stores/auth";
 import { usePluginStore } from "@/stores/plugins";
 import { useClusterStore } from "@/stores/cluster";
+import { NamespaceSelector } from "@/components/layout/namespace-selector";
+import { SidebarProjects } from "@/components/layout/sidebar-projects";
 import type { LucideIcon } from "lucide-react";
 
 // --- Types ---
@@ -68,6 +71,7 @@ const mainSection: NavSection = {
     { label: "Apps", href: "/apps", icon: Rocket },
     { label: "Databases", href: "/databases", icon: Database },
     { label: "Jobs", href: "/jobs", icon: Timer },
+    { label: "Projects", href: "/projects", icon: FolderOpen },
   ],
 };
 
@@ -206,6 +210,9 @@ export function Sidebar() {
             </div>
           ))}
 
+          {/* Projects sub-list */}
+          <SidebarProjects collapsed={collapsed} />
+
           {/* Tools section: Terminal + AI Assistant */}
           <div className="mb-3">
             {!collapsed && (
@@ -335,6 +342,16 @@ export function Sidebar() {
               )}
             </DropdownMenuContent>
           </DropdownMenu>
+
+          {/* Namespace selector */}
+          {!collapsed && selectedClusterId && (
+            <div className="mt-2">
+              <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
+                Namespace
+              </p>
+              <NamespaceSelector />
+            </div>
+          )}
         </div>
 
         <Separator className="bg-sidebar-border" />

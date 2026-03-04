@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, X, Play, Pause, AlertCircle } from "lucide-react";
+import { Loader2, X, Play, Pause, AlertCircle, Search, Download } from "lucide-react";
 
 interface LogViewerProps {
   clusterID: string;
@@ -144,13 +144,29 @@ function normalizeLogData(data: unknown): string {
   return String(data);
 }
 
-function LogLine({ parsed }: { parsed: ParsedLogLine }) {
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query) return text;
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+  const parts = text.split(regex);
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <mark key={i} className="bg-yellow-200/30 text-inherit rounded-sm px-0.5">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+}
+
+function LogLine({ parsed, searchQuery }: { parsed: ParsedLogLine; searchQuery?: string }) {
   if (!parsed.isJson) {
-    return <span>{parsed.raw}</span>;
+    return <span>{highlightText(parsed.raw, searchQuery ?? "")}</span>;
   }
 
   const colorClass = getLevelColorClass(parsed.level);
   const badgeClass = getLevelBadgeClass(parsed.level);
+  const displayText = parsed.message ?? parsed.raw;
 
   return (
     <span className={colorClass}>
@@ -164,16 +180,22 @@ function LogLine({ parsed }: { parsed: ParsedLogLine }) {
           {parsed.level}
         </span>
       )}
-      {parsed.message ?? parsed.raw}
+      {highlightText(displayText, searchQuery ?? "")}
     </span>
   );
 }
 
-function LogOutput({ logs }: { logs: string }) {
+function LogOutput({ logs, searchQuery }: { logs: string; searchQuery?: string }) {
   const parsedLines = useMemo(() => {
     if (!logs) return [];
     return logs.split("\n").map((line) => parseLine(line));
   }, [logs]);
+
+  const matchCount = useMemo(() => {
+    if (!searchQuery) return 0;
+    const q = searchQuery.toLowerCase();
+    return parsedLines.filter((p) => p.raw.toLowerCase().includes(q)).length;
+  }, [parsedLines, searchQuery]);
 
   if (parsedLines.length === 0) {
     return <span className="text-zinc-500">No logs available.</span>;
@@ -181,11 +203,26 @@ function LogOutput({ logs }: { logs: string }) {
 
   return (
     <>
-      {parsedLines.map((parsed, i) => (
-        <div key={i} className="hover:bg-zinc-900/50 px-1 -mx-1 rounded">
-          <LogLine parsed={parsed} />
+      {searchQuery && (
+        <div className="sticky top-0 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 -mx-4 px-4 py-1.5 mb-2 text-[10px] text-zinc-400">
+          {matchCount} {matchCount === 1 ? "match" : "matches"}
         </div>
-      ))}
+      )}
+      {parsedLines.map((parsed, i) => {
+        const matches = searchQuery
+          ? parsed.raw.toLowerCase().includes(searchQuery.toLowerCase())
+          : true;
+        return (
+          <div
+            key={i}
+            className={`hover:bg-zinc-900/50 px-1 -mx-1 rounded ${
+              searchQuery && !matches ? "opacity-30" : ""
+            }`}
+          >
+            <LogLine parsed={parsed} searchQuery={searchQuery} />
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -209,6 +246,8 @@ export function LogViewer({
   const [following, setFollowing] = useState(false);
   const [followError, setFollowError] = useState<string | null>(null);
   const [followMode, setFollowMode] = useState<"sse" | "polling" | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -480,6 +519,40 @@ export function LogViewer({
           </span>
         )}
 
+        <Button
+          variant={showSearch ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => {
+            setShowSearch(!showSearch);
+            if (showSearch) setSearchQuery("");
+          }}
+          aria-label="Toggle search"
+        >
+          <Search className="mr-1 h-3 w-3" />
+          Search
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          disabled={!logs}
+          onClick={() => {
+            const blob = new Blob([logs], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${podName}${selectedContainer ? `-${selectedContainer}` : ""}-logs.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          aria-label="Download logs"
+        >
+          <Download className="mr-1 h-3 w-3" />
+          Download
+        </Button>
+
         {onClose && (
           <Button
             variant="ghost"
@@ -491,6 +564,30 @@ export function LogViewer({
           </Button>
         )}
       </div>
+
+      {/* Search bar */}
+      {showSearch && (
+        <div className="flex items-center gap-2">
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Input
+            placeholder="Filter logs..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-8 text-xs flex-1"
+            autoFocus
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Follow status message */}
       {followError && following && (
@@ -512,7 +609,7 @@ export function LogViewer({
             Loading logs...
           </span>
         ) : logs ? (
-          <LogOutput logs={logs} />
+          <LogOutput logs={logs} searchQuery={searchQuery || undefined} />
         ) : (
           <span className="text-zinc-500">No logs available.</span>
         )}

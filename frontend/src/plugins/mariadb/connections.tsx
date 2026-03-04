@@ -1,0 +1,69 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { api } from "@/lib/api";
+import { ResourceTable, StatusBadge, type Column } from "@/components/resources/resource-table";
+import { useClusterStore } from "@/stores/cluster";
+
+interface MariaDBConnection {
+  metadata: { name: string; namespace: string; creationTimestamp?: string };
+  spec?: {
+    mariaDbRef?: { name?: string };
+    database?: string;
+    username?: string;
+    host?: string;
+    port?: number;
+    secretName?: string;
+  };
+  status?: { conditions?: { type: string; status: string }[] };
+}
+
+function connectionStatus(r: MariaDBConnection): string {
+  const ready = r.status?.conditions?.find((c) => c.type === "Ready");
+  return ready?.status === "True" ? "Ready" : "Not Ready";
+}
+
+function age(ts?: string): string {
+  if (!ts) return "-";
+  const ms = Date.now() - new Date(ts).getTime();
+  const d = Math.floor(ms / 86400000);
+  if (d > 0) return `${d}d`;
+  const h = Math.floor(ms / 3600000);
+  if (h > 0) return `${h}h`;
+  return `${Math.floor(ms / 60000)}m`;
+}
+
+const columns: Column<MariaDBConnection>[] = [
+  { key: "metadata.name",        label: "Name" },
+  { key: "metadata.namespace",   label: "Namespace" },
+  { key: "spec.mariaDbRef.name", label: "Instance", render: (r) => r.spec?.mariaDbRef?.name ?? "-" },
+  { key: "spec.host",            label: "Host",     render: (r) => r.spec?.host ?? "-" },
+  { key: "spec.port",            label: "Port",     render: (r) => String(r.spec?.port ?? 3306) },
+  { key: "spec.database",        label: "Database", render: (r) => r.spec?.database ?? "-" },
+  { key: "spec.username",        label: "Username", render: (r) => r.spec?.username ?? "-" },
+  { key: "metadata.creationTimestamp", label: "Age", render: (r) => age(r.metadata.creationTimestamp) },
+  { key: "status",               label: "Status",   render: (r) => <StatusBadge status={connectionStatus(r)} />, sortable: false },
+];
+
+export function MariadbConnectionList() {
+  const [items, setItems] = useState<MariaDBConnection[]>([]);
+  const [loading, setLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
+
+  useEffect(() => {
+    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    if (!clusterID) { setLoading(false); return; }
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
+    api.get<{ items: MariaDBConnection[] }>(`/api/plugins/mariadb/connections?clusterID=${clusterID}${nsParam}`)
+      .then((d) => setItems(d.items ?? []))
+      .catch(() => setItems([]))
+      .finally(() => setLoading(false));
+  }, [namespace]);
+
+  return (
+    <div className="space-y-4">
+      <h1 className="text-2xl font-bold tracking-tight">Connections</h1>
+      <ResourceTable data={items} columns={columns} loading={loading} searchPlaceholder="Filter connections..." />
+    </div>
+  );
+}

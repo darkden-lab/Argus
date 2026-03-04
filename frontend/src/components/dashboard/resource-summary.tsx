@@ -1,7 +1,9 @@
 "use client";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import { Box, Layers, Globe, Container } from "lucide-react";
+import { useClusterStore } from "@/stores/cluster";
 
 export interface ResourceCounts {
   pods: number;
@@ -22,10 +24,19 @@ const resourceItems = [
 ];
 
 export function ResourceSummary({ resources }: ResourceSummaryProps) {
+  const selectedNamespace = useClusterStore((s) => s.selectedNamespace);
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-sm font-medium">Resource Summary</CardTitle>
+        <div className="flex items-center gap-2">
+          <CardTitle className="text-sm font-medium">Resource Summary</CardTitle>
+          {selectedNamespace && (
+            <Badge variant="outline" className="text-[10px]">
+              in {selectedNamespace}
+            </Badge>
+          )}
+        </div>
       </CardHeader>
       <CardContent>
         <div className="grid grid-cols-2 gap-4">

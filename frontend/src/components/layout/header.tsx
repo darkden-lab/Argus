@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, LogOut, Settings, User, ChevronRight } from "lucide-react";
+import { Search, LogOut, Settings, User, ChevronRight, Wifi, WifiOff } from "lucide-react";
 import { NotificationBell } from "@/components/notifications/notification-bell";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -95,6 +95,7 @@ export function Header() {
   const fetchUser = useAuthStore((s) => s.fetchUser);
   const logout = useAuthStore((s) => s.logout);
   const setCommandPaletteOpen = useUIStore((s) => s.setCommandPaletteOpen);
+  const socketStatus = useUIStore((s) => s.socketStatus);
 
   useEffect(() => {
     if (!user) {
@@ -128,8 +129,20 @@ export function Header() {
         </kbd>
       </button>
 
-      {/* Right: Notifications + User avatar */}
+      {/* Right: Socket status + Notifications + User avatar */}
       <div className="flex items-center gap-2">
+        {socketStatus === "reconnecting" && (
+          <div className="flex items-center gap-1 text-xs text-yellow-500">
+            <Wifi className="h-3.5 w-3.5 animate-pulse" />
+            <span className="hidden sm:inline">Reconnecting...</span>
+          </div>
+        )}
+        {socketStatus === "disconnected" && (
+          <div className="flex items-center gap-1 text-xs text-red-500">
+            <WifiOff className="h-3.5 w-3.5" />
+            <span className="hidden sm:inline">Disconnected</span>
+          </div>
+        )}
         <NotificationBell />
 
         <DropdownMenu>

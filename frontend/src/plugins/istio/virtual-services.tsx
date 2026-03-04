@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PluginTableSkeleton } from "@/components/skeletons";
+import { useClusterStore } from "@/stores/cluster";
 
 interface VirtualService {
   metadata: { name: string; namespace: string };
@@ -14,25 +16,26 @@ interface VirtualService {
 export function VirtualServiceList() {
   const [items, setItems] = useState<VirtualService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) { setIsLoading(false); return; }
-
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
     api
       .get<{ items: VirtualService[] }>(
-        `/api/plugins/istio/virtualservices?clusterID=${clusterID}`
+        `/api/plugins/istio/virtualservices?clusterID=${clusterID}${nsParam}`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Virtual Services</h1>
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <PluginTableSkeleton />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No virtual services found.</p>
       ) : (
