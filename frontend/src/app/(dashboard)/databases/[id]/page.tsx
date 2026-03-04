@@ -27,9 +27,19 @@ import {
   HardDrive,
   Loader2,
   Network,
+  Pencil,
   RefreshCw,
   Server,
+  Trash2,
 } from "lucide-react";
+import { toast } from "@/stores/toast";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { EditDatabaseDialog } from "@/components/databases/edit-database-dialog";
+import { DatabaseBackupsTab } from "@/components/databases/database-backups-tab";
+import { DatabaseUsersTab } from "@/components/databases/database-users-tab";
+import { DatabaseConnectionTab } from "@/components/databases/database-connection-tab";
+import { DatabaseLogsTab } from "@/components/databases/database-logs-tab";
+import { DatabaseMonitoringTab } from "@/components/databases/database-monitoring-tab";
 
 export default function DatabaseDetailPage() {
   const params = useParams();
@@ -44,6 +54,9 @@ export default function DatabaseDetailPage() {
   const [cnpgCluster, setCnpgCluster] = useState<CNPGCluster | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
 
   const fetchDatabase = useCallback(async () => {
     if (!clusterId) return;
@@ -128,6 +141,27 @@ export default function DatabaseDetailPage() {
     fetchDatabase();
   }, [fetchDatabase]);
 
+  async function handleDelete() {
+    if (!database) return;
+    setDeleting(true);
+    try {
+      if (database.isCNPG) {
+        await api.del(`/api/clusters/${clusterId}/resources/postgresql.cnpg.io/v1/clusters/${dbName}?namespace=${namespace}`);
+      } else if (database.isMariaDB) {
+        await api.del(`/api/clusters/${clusterId}/resources/k8s.mariadb.com/v1alpha1/mariadbs/${dbName}?namespace=${namespace}`);
+      } else if (database.statefulSet) {
+        await api.del(`/api/clusters/${clusterId}/resources/apps/v1/statefulsets/${database.statefulSet.metadata.name}?namespace=${namespace}`);
+      }
+      toast("Database deleted", { description: `${dbName} has been deleted`, variant: "success" });
+      router.push("/databases");
+    } catch {
+      // Handled by api client
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -197,9 +231,19 @@ export default function DatabaseDetailPage() {
             {database.status}
           </Badge>
         </div>
-        <Button variant="ghost" size="icon" onClick={fetchDatabase}>
-          <RefreshCw className="h-4 w-4" />
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
+            <Pencil className="mr-1.5 h-4 w-4" />
+            Edit
+          </Button>
+          <Button variant="destructive" size="sm" onClick={() => setDeleteOpen(true)}>
+            <Trash2 className="mr-1.5 h-4 w-4" />
+            Delete
+          </Button>
+          <Button variant="ghost" size="icon" onClick={fetchDatabase}>
+            <RefreshCw className="h-4 w-4" />
+          </Button>
+        </div>
       </div>
 
       {/* Tabs */}
@@ -207,6 +251,11 @@ export default function DatabaseDetailPage() {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="resources">Resources</TabsTrigger>
+          <TabsTrigger value="backups">Backups</TabsTrigger>
+          <TabsTrigger value="users">Users &amp; Access</TabsTrigger>
+          <TabsTrigger value="connection">Connection</TabsTrigger>
+          <TabsTrigger value="logs">Logs</TabsTrigger>
+          <TabsTrigger value="monitoring">Monitoring</TabsTrigger>
         </TabsList>
 
         {/* Overview tab */}
@@ -520,7 +569,83 @@ export default function DatabaseDetailPage() {
             </Card>
           )}
         </TabsContent>
+
+        <TabsContent value="backups">
+          <DatabaseBackupsTab
+            clusterId={clusterId}
+            dbName={dbName}
+            namespace={namespace}
+            engine={database.engine}
+            isCNPG={database.isCNPG}
+            isMariaDB={database.isMariaDB}
+          />
+        </TabsContent>
+
+        <TabsContent value="users">
+          <DatabaseUsersTab
+            clusterId={clusterId}
+            dbName={dbName}
+            namespace={namespace}
+            engine={database.engine}
+            isCNPG={database.isCNPG}
+            isMariaDB={database.isMariaDB}
+          />
+        </TabsContent>
+
+        <TabsContent value="connection">
+          <DatabaseConnectionTab
+            clusterId={clusterId}
+            dbName={dbName}
+            namespace={namespace}
+            engine={database.engine}
+            services={database.services}
+          />
+        </TabsContent>
+
+        <TabsContent value="logs">
+          <DatabaseLogsTab
+            clusterId={clusterId}
+            dbName={dbName}
+            namespace={namespace}
+          />
+        </TabsContent>
+
+        <TabsContent value="monitoring">
+          <DatabaseMonitoringTab
+            clusterId={clusterId}
+            dbName={dbName}
+            namespace={namespace}
+            engine={database.engine}
+            isCNPG={database.isCNPG}
+          />
+        </TabsContent>
       </Tabs>
+
+      <EditDatabaseDialog
+        open={editOpen}
+        onOpenChange={setEditOpen}
+        clusterId={clusterId}
+        dbName={dbName}
+        namespace={namespace}
+        engine={database.engine}
+        isCNPG={database.isCNPG}
+        isMariaDB={database.isMariaDB}
+        currentReplicas={database.replicas.desired}
+        currentStorage={database.storage}
+        onSaved={fetchDatabase}
+      />
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete Database"
+        description={`This will permanently delete the database "${dbName}" and all its data. This action cannot be undone.`}
+        confirmLabel={deleting ? "Deleting..." : "Delete"}
+        variant="destructive"
+        loading={deleting}
+        onConfirm={handleDelete}
+        requireTypedConfirmation={dbName}
+      />
     </div>
   );
 }
