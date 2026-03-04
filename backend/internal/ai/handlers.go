@@ -183,8 +183,21 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 						Content: delta.Content,
 					})
 				}
-				if len(delta.ToolCalls) > 0 {
-					accToolCalls = append(accToolCalls, delta.ToolCalls...)
+				for _, tc := range delta.ToolCalls {
+					merged := false
+					for i := range accToolCalls {
+						if accToolCalls[i].ID != "" && tc.ID == accToolCalls[i].ID {
+							accToolCalls[i].Arguments += tc.Arguments
+							if tc.Name != "" {
+								accToolCalls[i].Name = tc.Name
+							}
+							merged = true
+							break
+						}
+					}
+					if !merged && tc.ID != "" {
+						accToolCalls = append(accToolCalls, tc)
+					}
 				}
 				if delta.FinishReason != "" {
 					finishReason = delta.FinishReason
@@ -193,10 +206,18 @@ func (h *ChatHandler) ServeChat(w http.ResponseWriter, r *http.Request) {
 			}
 			stream.Close()
 
+			// Filter out tool calls with empty name or ID (streaming artifacts)
+			var validToolCalls []ToolCall
+			for _, tc := range accToolCalls {
+				if tc.Name != "" && tc.ID != "" {
+					validToolCalls = append(validToolCalls, tc)
+				}
+			}
+
 			// If the LLM wants to call tools, execute them and re-invoke
-			if finishReason == "tool_calls" && len(accToolCalls) > 0 {
+			if finishReason == "tool_calls" && len(validToolCalls) > 0 {
 				resp, err := h.service.ExecuteToolsAndRespond(
-					r.Context(), claims.UserID, currentConversation, wsMsg.Content, currentContext, contentBuf, accToolCalls,
+					r.Context(), claims.UserID, currentConversation, wsMsg.Content, currentContext, contentBuf, validToolCalls,
 				)
 				if err != nil {
 					writeWSJSON(conn, ChatWSResponse{Type: "error", Content: err.Error(), Error: err.Error()})

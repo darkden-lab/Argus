@@ -25,6 +25,7 @@ interface SubscribeMessage {
 }
 
 type EventCallback = (event: WatchEvent) => void;
+type ConnectionCallback = (connected: boolean) => void;
 
 class K8sWebSocket {
   private ws: WebSocket | null = null;
@@ -33,11 +34,16 @@ class K8sWebSocket {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectDelay = 1000;
   private maxReconnectDelay = 30000;
+  private maxRetries = 10;
+  private retryCount = 0;
   private token: string | null = null;
+  private _isConnected = false;
+  private connectionListeners: Set<ConnectionCallback> = new Set();
 
   connect(token: string): void {
     this.token = token;
     this.reconnectDelay = 1000;
+    this.retryCount = 0;
 
     if (this.ws) {
       this.ws.close();
@@ -46,6 +52,11 @@ class K8sWebSocket {
     this.ws = new WebSocket(`${WS_URL}/ws?token=${token}`);
 
     this.ws.onopen = () => {
+      this.retryCount = 0;
+      this.reconnectDelay = 1000;
+      this._isConnected = true;
+      this.notifyConnectionChange(true);
+
       // Re-subscribe to all active subscriptions
       for (const sub of this.subscriptions) {
         const [cluster, resource, namespace] = sub.split('/');
@@ -78,6 +89,8 @@ class K8sWebSocket {
     };
 
     this.ws.onclose = () => {
+      this._isConnected = false;
+      this.notifyConnectionChange(false);
       this.reconnect();
     };
 
@@ -92,6 +105,9 @@ class K8sWebSocket {
       this.reconnectTimer = null;
     }
     this.token = null;
+    this.retryCount = 0;
+    this._isConnected = false;
+    this.notifyConnectionChange(false);
     if (this.ws) {
       this.ws.close();
       this.ws = null;
@@ -133,6 +149,17 @@ class K8sWebSocket {
     };
   }
 
+  onConnectionChange(callback: ConnectionCallback): () => void {
+    this.connectionListeners.add(callback);
+    return () => {
+      this.connectionListeners.delete(callback);
+    };
+  }
+
+  get isConnected(): boolean {
+    return this._isConnected;
+  }
+
   private sendSubscribe(cluster: string, resource: string, namespace?: string): void {
     const msg: SubscribeMessage = {
       action: 'subscribe',
@@ -146,12 +173,30 @@ class K8sWebSocket {
   private reconnect(): void {
     if (!this.token) return;
 
+    if (this.retryCount >= this.maxRetries) {
+      console.warn('K8sWebSocket: max retries reached, stopping reconnection');
+      return;
+    }
+
     this.reconnectTimer = setTimeout(() => {
+      this.retryCount++;
       this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
-      if (this.token) {
-        this.connect(this.token);
+
+      // Read fresh token from localStorage in case it was refreshed
+      const freshToken = typeof window !== 'undefined'
+        ? localStorage.getItem('access_token')
+        : null;
+      if (freshToken) {
+        this.token = freshToken;
+        this.connect(freshToken);
       }
     }, this.reconnectDelay);
+  }
+
+  private notifyConnectionChange(connected: boolean): void {
+    for (const cb of this.connectionListeners) {
+      cb(connected);
+    }
   }
 }
 

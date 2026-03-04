@@ -30,7 +30,16 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
     if (token) {
       k8sWs.connect(token);
     }
+
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key === "access_token" && e.newValue) {
+        k8sWs.connect(e.newValue);
+      }
+    };
+    window.addEventListener("storage", handleStorage);
+
     return () => {
+      window.removeEventListener("storage", handleStorage);
       k8sWs.disconnect();
     };
   }, [isAuthenticated]);
