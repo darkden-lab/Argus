@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Combobox, type ComboboxOption } from "@/components/ui/combobox";
+import { ManifestPreview } from "@/components/ui/manifest-preview";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
 
@@ -338,6 +339,29 @@ export function CreateConfigMapWizard({
             </div>
           </div>
         </div>
+
+        {/* Preview */}
+        {form.name && (
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground">Preview</Label>
+            <ManifestPreview
+              manifest={{
+                apiVersion: "v1",
+                kind: "ConfigMap",
+                metadata: {
+                  name: form.name,
+                  namespace: form.namespace || "default",
+                },
+                data: Object.fromEntries(
+                  form.entries
+                    .filter((e) => e.key.trim())
+                    .map((e) => [e.key, e.value])
+                ),
+              }}
+              maxHeight="200px"
+            />
+          </div>
+        )}
 
         {/* Actions */}
         <div className="flex justify-end gap-2 pt-2">
