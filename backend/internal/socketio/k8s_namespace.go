@@ -24,16 +24,16 @@ func registerK8sNamespace(io *socket.Server, jwtService *auth.JWTService, hub *w
 			return
 		}
 		var raw map[string]interface{}
-		json.Unmarshal(data, &raw)
-		nsp.To(socket.Room(roomKey)).Emit("watch_event", raw)
+		_ = json.Unmarshal(data, &raw)
+		_ = nsp.To(socket.Room(roomKey)).Emit("watch_event", raw)
 	})
 
-	nsp.On("connection", func(clients ...interface{}) {
+	_ = nsp.On("connection", func(clients ...interface{}) {
 		client := clients[0].(*socket.Socket)
 		userID := getUserID(client)
 		log.Printf("socketio/k8s: user %s connected", userID)
 
-		client.On("subscribe", func(args ...interface{}) {
+		_ = client.On("subscribe", func(args ...interface{}) {
 			if len(args) == 0 {
 				return
 			}
@@ -55,7 +55,7 @@ func registerK8sNamespace(io *socket.Server, jwtService *auth.JWTService, hub *w
 			log.Printf("socketio/k8s: user %s subscribed to %s", userID, roomKey)
 		})
 
-		client.On("unsubscribe", func(args ...interface{}) {
+		_ = client.On("unsubscribe", func(args ...interface{}) {
 			if len(args) == 0 {
 				return
 			}
@@ -72,7 +72,7 @@ func registerK8sNamespace(io *socket.Server, jwtService *auth.JWTService, hub *w
 			log.Printf("socketio/k8s: user %s unsubscribed from %s", userID, roomKey)
 		})
 
-		client.On("disconnect", func(...interface{}) {
+		_ = client.On("disconnect", func(...interface{}) {
 			log.Printf("socketio/k8s: user %s disconnected", userID)
 		})
 	})

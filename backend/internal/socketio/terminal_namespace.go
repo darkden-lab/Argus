@@ -27,7 +27,7 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 	nsp := io.Of("/terminal", nil)
 	nsp.Use(authMiddleware(jwtService))
 
-	nsp.On("connection", func(clients ...interface{}) {
+	_ = nsp.On("connection", func(clients ...interface{}) {
 		client := clients[0].(*socket.Socket)
 		userID := getUserID(client)
 		log.Printf("socketio/terminal: user %s connected", userID)
@@ -38,9 +38,9 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 		}
 
 		// Send connected confirmation
-		client.Emit("connected", map[string]string{"data": "Terminal session established"})
+		_ = client.Emit("connected", map[string]string{"data": "Terminal session established"})
 
-		client.On("set_context", func(args ...interface{}) {
+		_ = client.On("set_context", func(args ...interface{}) {
 			if len(args) == 0 {
 				return
 			}
@@ -56,7 +56,7 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 			sess.namespace = namespace
 			sess.mu.Unlock()
 
-			client.Emit("output", map[string]string{
+			_ = client.Emit("output", map[string]string{
 				"type":       "output",
 				"data":       "Context set to cluster=" + clusterID + " namespace=" + namespace + "\r\n",
 				"cluster_id": clusterID,
@@ -65,7 +65,7 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 			log.Printf("socketio/terminal: user %s context set cluster=%s namespace=%s", userID, clusterID, namespace)
 		})
 
-		client.On("input", func(args ...interface{}) {
+		_ = client.On("input", func(args ...interface{}) {
 			if len(args) == 0 {
 				return
 			}
@@ -85,7 +85,7 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 			sess.mu.RUnlock()
 
 			if clusterID == "" {
-				client.Emit("error", map[string]string{
+				_ = client.Emit("error", map[string]string{
 					"type": "error",
 					"data": "No cluster selected. Use set_context to select a cluster.\r\n",
 				})
@@ -94,7 +94,7 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 
 			_, err := clusterMgr.GetClient(clusterID)
 			if err != nil {
-				client.Emit("error", map[string]string{
+				_ = client.Emit("error", map[string]string{
 					"type": "error",
 					"data": "Cluster not available: " + err.Error() + "\r\n",
 				})
@@ -107,7 +107,7 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 			case terminal.ModeSmart:
 				cmd, err := sess.smartParser.Parse(input)
 				if err != nil {
-					client.Emit("error", map[string]string{"type": "error", "data": "Parse error: " + err.Error() + "\r\n"})
+					_ = client.Emit("error", map[string]string{"type": "error", "data": "Parse error: " + err.Error() + "\r\n"})
 					return
 				}
 				if cmd.Namespace == "" {
@@ -115,10 +115,10 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 				}
 				result, err := sess.smartParser.Execute(ctx, clusterID, cmd)
 				if err != nil {
-					client.Emit("error", map[string]string{"type": "error", "data": "Error: " + err.Error() + "\r\n"})
+					_ = client.Emit("error", map[string]string{"type": "error", "data": "Error: " + err.Error() + "\r\n"})
 					return
 				}
-				client.Emit("output", map[string]string{
+				_ = client.Emit("output", map[string]string{
 					"type":       "output",
 					"data":       result + "\r\n",
 					"cluster_id": clusterID,
@@ -129,20 +129,20 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 				exec := terminal.NewExecSession(clusterMgr, clusterID, namespace)
 				_, err := exec.FindOrCreateToolsPod(ctx)
 				if err != nil {
-					client.Emit("error", map[string]string{"type": "error", "data": "Error: " + err.Error() + "\r\n"})
+					_ = client.Emit("error", map[string]string{"type": "error", "data": "Error: " + err.Error() + "\r\n"})
 					return
 				}
 				var stdout, stderr bytes.Buffer
 				err = exec.Exec(ctx, []string{"sh", "-c", input}, nil, &stdout, &stderr)
 				if err != nil {
-					client.Emit("error", map[string]string{"type": "error", "data": "Exec error: " + err.Error() + "\r\n"})
+					_ = client.Emit("error", map[string]string{"type": "error", "data": "Exec error: " + err.Error() + "\r\n"})
 					return
 				}
 				output := stdout.String()
 				if errOut := stderr.String(); errOut != "" {
 					output += errOut
 				}
-				client.Emit("output", map[string]string{
+				_ = client.Emit("output", map[string]string{
 					"type":       "output",
 					"data":       output + "\r\n",
 					"cluster_id": clusterID,
@@ -151,11 +151,11 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 			}
 		})
 
-		client.On("resize", func(args ...interface{}) {
+		_ = client.On("resize", func(args ...interface{}) {
 			// Terminal resize — currently no-op for smart mode
 		})
 
-		client.On("mode", func(args ...interface{}) {
+		_ = client.On("mode", func(args ...interface{}) {
 			if len(args) == 0 {
 				return
 			}
@@ -166,17 +166,17 @@ func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, c
 			modeStr, _ := data["mode"].(string)
 			newMode := terminal.Mode(modeStr)
 			if newMode != terminal.ModeSmart && newMode != terminal.ModeRaw {
-				client.Emit("error", map[string]string{"type": "error", "data": "invalid mode: " + modeStr})
+				_ = client.Emit("error", map[string]string{"type": "error", "data": "invalid mode: " + modeStr})
 				return
 			}
 			sess.mu.Lock()
 			sess.mode = newMode
 			sess.mu.Unlock()
-			client.Emit("mode_changed", map[string]string{"mode": modeStr})
+			_ = client.Emit("mode_changed", map[string]string{"mode": modeStr})
 			log.Printf("socketio/terminal: user %s mode changed to %s", userID, modeStr)
 		})
 
-		client.On("disconnect", func(...interface{}) {
+		_ = client.On("disconnect", func(...interface{}) {
 			log.Printf("socketio/terminal: user %s disconnected", userID)
 		})
 	})

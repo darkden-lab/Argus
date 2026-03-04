@@ -120,5 +120,5 @@ func getClaims(s *socket.Socket) *auth.Claims {
 
 // emitError sends an error event to the socket.
 func emitError(s *socket.Socket, msg string) {
-	s.Emit("error", fmt.Sprintf(`{"error":"%s"}`, msg))
+	_ = s.Emit("error", fmt.Sprintf(`{"error":"%s"}`, msg))
 }
