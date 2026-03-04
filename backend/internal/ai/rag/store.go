@@ -68,7 +68,12 @@ func (s *Store) InsertBatch(ctx context.Context, embeddings []Embedding) error {
 	for _, e := range embeddings {
 		_, err := tx.Exec(ctx,
 			`INSERT INTO ai_embeddings (source_type, source_id, chunk_index, content, embedding, metadata)
-			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			 VALUES ($1, $2, $3, $4, $5, $6)
+			 ON CONFLICT (source_type, source_id, chunk_index) DO UPDATE SET
+			     content = EXCLUDED.content,
+			     embedding = EXCLUDED.embedding,
+			     metadata = EXCLUDED.metadata,
+			     updated_at = NOW()`,
 			e.SourceType, e.SourceID, e.ChunkIndex, e.Content, pgvector.NewVector(e.Embedding), e.Metadata,
 		)
 		if err != nil {

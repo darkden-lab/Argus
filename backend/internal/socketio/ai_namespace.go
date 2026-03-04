@@ -34,7 +34,7 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 		// Check AI config on connect
 		_, config := aiService.Snapshot()
 		if !config.Enabled {
-			_ = client.Emit("error", map[string]string{
+			_ = client.Emit("ai_error", map[string]string{
 				"error":   "not configured",
 				"content": "AI assistant is not enabled. Please enable it in Settings > AI Configuration.",
 			})
@@ -42,7 +42,7 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 			return
 		}
 		if validErr := config.Validate(); validErr != nil {
-			_ = client.Emit("error", map[string]string{
+			_ = client.Emit("ai_error", map[string]string{
 				"error":   "not configured",
 				"content": "AI provider is not fully configured: " + validErr.Error() + ". Update the configuration in Settings > AI Configuration.",
 			})
@@ -91,7 +91,7 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 				ctx, userID, currentConversation, content, currentContext,
 			)
 			if err != nil {
-				_ = client.Emit("error", map[string]string{"error": err.Error(), "content": err.Error()})
+				_ = client.Emit("ai_error", map[string]string{"error": err.Error(), "content": err.Error()})
 				return
 			}
 
@@ -140,7 +140,7 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 					ctx, userID, currentConversation, content, currentContext, contentBuf, validToolCalls,
 				)
 				if err != nil {
-					_ = client.Emit("error", map[string]string{"error": err.Error(), "content": err.Error()})
+					_ = client.Emit("ai_error", map[string]string{"error": err.Error(), "content": err.Error()})
 				} else {
 					_ = client.Emit("stream_delta", map[string]string{"content": resp.Message.Content})
 				}
@@ -169,13 +169,13 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 			}
 
 			if !aiService.HasAgentStore() {
-				_ = client.Emit("error", map[string]string{"error": "agent system not available"})
+				_ = client.Emit("ai_error", map[string]string{"error": "agent system not available"})
 				return
 			}
 
 			agent, err := aiService.GetAgent(ctx, agentID)
 			if err != nil {
-				_ = client.Emit("error", map[string]string{"error": "agent not found"})
+				_ = client.Emit("ai_error", map[string]string{"error": "agent not found"})
 				return
 			}
 			currentAgent = agent
@@ -196,7 +196,7 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 			}
 
 			if !aiService.HasAgentStore() {
-				_ = client.Emit("error", map[string]string{"error": "agent system not available"})
+				_ = client.Emit("ai_error", map[string]string{"error": "agent system not available"})
 				return
 			}
 
@@ -205,13 +205,13 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 				agentID = currentAgent.ID
 			}
 			if agentID == "" {
-				_ = client.Emit("error", map[string]string{"error": "no agent selected for task"})
+				_ = client.Emit("ai_error", map[string]string{"error": "no agent selected for task"})
 				return
 			}
 
 			agent, err := aiService.GetAgent(ctx, agentID)
 			if err != nil {
-				_ = client.Emit("error", map[string]string{"error": "agent not found"})
+				_ = client.Emit("ai_error", map[string]string{"error": "agent not found"})
 				return
 			}
 
@@ -228,7 +228,7 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 				Status:  "pending",
 			}
 			if createErr := aiService.CreateTask(ctx, task); createErr != nil {
-				_ = client.Emit("error", map[string]string{"error": "failed to create task: " + createErr.Error()})
+				_ = client.Emit("ai_error", map[string]string{"error": "failed to create task: " + createErr.Error()})
 				return
 			}
 
@@ -309,13 +309,13 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiServi
 				convID = currentConversation
 			}
 			if convID == "" {
-				_ = client.Emit("error", map[string]string{"error": "no conversation_id provided"})
+				_ = client.Emit("ai_error", map[string]string{"error": "no conversation_id provided"})
 				return
 			}
 
 			history, err := aiService.LoadHistory(ctx, convID)
 			if err != nil {
-				_ = client.Emit("error", map[string]string{"error": "failed to load history: " + err.Error()})
+				_ = client.Emit("ai_error", map[string]string{"error": "failed to load history: " + err.Error()})
 				return
 			}
 

@@ -246,7 +246,7 @@ export function useAiChat() {
       }
     });
 
-    socket.on("error", (msg: { error?: string; content?: string } | string) => {
+    socket.on("ai_error", (msg: { error?: string; content?: string } | string) => {
       const store = storeRef.current;
       store.setIsStreaming(false);
       const errorText = typeof msg === "string" ? msg : (msg.error || msg.content || "Unknown error");
@@ -279,17 +279,34 @@ export function useAiChat() {
     socketRef.current = null;
   }, []);
 
-  // Connect when panel opens or full page is active, fetch AI status
+  // Connect when panel opens or full page is active, fetch AI status first
   useEffect(() => {
     if (isOpen || isFullPage) {
-      fetchAiStatus();
       fetchAgents();
-      connect();
+      // Check AI status before attempting Socket.IO connection
+      api
+        .get<AiStatus>("/api/ai/status")
+        .then((status) => {
+          storeRef.current.setAiStatus(status);
+          if (status?.enabled && status?.configured) {
+            connect();
+          } else {
+            storeRef.current.setConnectionState("error");
+            storeRef.current.setConnectionError(
+              "AI assistant is not configured. Please set up an AI provider in Settings > AI Configuration."
+            );
+          }
+        })
+        .catch(() => {
+          storeRef.current.setAiStatus(null);
+          // Still try to connect — the server will report the actual error
+          connect();
+        });
     } else {
       disconnect();
     }
     return () => disconnect();
-  }, [isOpen, isFullPage, connect, disconnect, fetchAiStatus, fetchAgents]);
+  }, [isOpen, isFullPage, connect, disconnect, fetchAgents]);
 
   const sendMessage = useCallback(
     (content: string) => {
