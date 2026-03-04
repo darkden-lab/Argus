@@ -280,13 +280,15 @@ func (c *Claude) toResponse(cr claudeResponse) *ai.ChatResponse {
 
 // claudeStreamReader implements ai.StreamReader for SSE streams.
 type claudeStreamReader struct {
-	body    io.ReadCloser
-	decoder *json.Decoder
+	body            io.ReadCloser
+	decoder         *json.Decoder
+	currentToolID   string
+	currentToolName string
+	toolArgs        strings.Builder
 }
 
 func (r *claudeStreamReader) Next() (*ai.StreamDelta, error) {
 	// Claude SSE format: "event: ...\ndata: {...}\n\n"
-	// Simplified: read line-by-line looking for data events
 	buf := make([]byte, 0, 4096)
 	single := make([]byte, 1)
 
@@ -319,15 +321,18 @@ func (r *claudeStreamReader) Next() (*ai.StreamDelta, error) {
 
 		var event struct {
 			Type  string `json:"type"`
+			Index int    `json:"index"`
 			Delta struct {
-				Type       string `json:"type"`
-				Text       string `json:"text"`
-				StopReason string `json:"stop_reason"`
+				Type        string `json:"type"`
+				Text        string `json:"text"`
+				PartialJSON string `json:"partial_json"`
+				StopReason  string `json:"stop_reason"`
 			} `json:"delta"`
 			ContentBlock struct {
-				Type string `json:"type"`
-				ID   string `json:"id"`
-				Name string `json:"name"`
+				Type  string `json:"type"`
+				ID    string `json:"id"`
+				Name  string `json:"name"`
+				Input any    `json:"input"`
 			} `json:"content_block"`
 		}
 
@@ -336,9 +341,30 @@ func (r *claudeStreamReader) Next() (*ai.StreamDelta, error) {
 		}
 
 		switch event.Type {
+		case "content_block_start":
+			if event.ContentBlock.Type == "tool_use" {
+				r.currentToolID = event.ContentBlock.ID
+				r.currentToolName = event.ContentBlock.Name
+				r.toolArgs.Reset()
+			}
 		case "content_block_delta":
 			if event.Delta.Type == "text_delta" {
 				return &ai.StreamDelta{Content: event.Delta.Text}, nil
+			}
+			if event.Delta.Type == "input_json_delta" {
+				r.toolArgs.WriteString(event.Delta.PartialJSON)
+			}
+		case "content_block_stop":
+			if r.currentToolID != "" {
+				tc := ai.ToolCall{
+					ID:        r.currentToolID,
+					Name:      r.currentToolName,
+					Arguments: r.toolArgs.String(),
+				}
+				r.currentToolID = ""
+				r.currentToolName = ""
+				r.toolArgs.Reset()
+				return &ai.StreamDelta{ToolCalls: []ai.ToolCall{tc}}, nil
 			}
 		case "message_delta":
 			if event.Delta.StopReason != "" {

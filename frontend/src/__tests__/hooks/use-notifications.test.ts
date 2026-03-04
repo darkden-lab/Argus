@@ -10,37 +10,26 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
-// Mock WebSocket
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  url: string;
-  onopen: (() => void) | null = null;
-  onclose: (() => void) | null = null;
-  onmessage: ((event: { data: string }) => void) | null = null;
-  onerror: (() => void) | null = null;
-  close = jest.fn(() => {
-    // Trigger onclose when close is called
-    if (this.onerror === null && this.onclose) {
-      this.onclose();
-    }
-  });
-  send = jest.fn();
+// Mock socket.io-client via our socket lib
+const mockOn = jest.fn();
+const mockOff = jest.fn();
+const mockDisconnect = jest.fn();
 
-  constructor(url: string) {
-    this.url = url;
-    MockWebSocket.instances.push(this);
-  }
-}
+const mockSocket = {
+  on: mockOn,
+  off: mockOff,
+  emit: jest.fn(),
+  disconnect: mockDisconnect,
+  connected: true,
+};
 
-const originalWebSocket = global.WebSocket;
+const mockGetSocket = jest.fn(() => mockSocket);
+const mockDisconnectSocket = jest.fn();
 
-beforeAll(() => {
-  global.WebSocket = MockWebSocket as unknown as typeof WebSocket;
-});
-
-afterAll(() => {
-  global.WebSocket = originalWebSocket;
-});
+jest.mock('@/lib/socket', () => ({
+  getSocket: (...args: unknown[]) => mockGetSocket(...args),
+  disconnectSocket: (...args: unknown[]) => mockDisconnectSocket(...args),
+}));
 
 const sampleNotification: Notification = {
   id: 'ws-notif-1',
@@ -54,8 +43,11 @@ const sampleNotification: Notification = {
 
 describe('useNotifications', () => {
   beforeEach(() => {
-    jest.useFakeTimers();
-    MockWebSocket.instances = [];
+    mockOn.mockReset();
+    mockOff.mockReset();
+    mockDisconnect.mockReset();
+    mockGetSocket.mockReturnValue(mockSocket);
+    mockDisconnectSocket.mockReset();
     useNotificationStore.setState({
       notifications: [],
       unreadCount: 0,
@@ -66,10 +58,6 @@ describe('useNotifications', () => {
     });
     localStorage.clear();
     jest.clearAllMocks();
-  });
-
-  afterEach(() => {
-    jest.useRealTimers();
   });
 
   it('calls fetchNotifications and fetchUnreadCount on mount', () => {
@@ -110,33 +98,38 @@ describe('useNotifications', () => {
     expect(result.current.fetchNotifications).toBe(fetchNotifications);
   });
 
-  it('does not create a WebSocket when there is no access token', () => {
+  it('does not create a socket when there is no access token', () => {
     // No token in localStorage
     renderHook(() => useNotifications());
 
-    expect(MockWebSocket.instances).toHaveLength(0);
+    expect(mockGetSocket).not.toHaveBeenCalled();
   });
 
-  it('creates a WebSocket connection when an access token exists', () => {
+  it('creates a socket connection when an access token exists', () => {
     localStorage.setItem('access_token', 'test-jwt-token');
 
     renderHook(() => useNotifications());
 
-    expect(MockWebSocket.instances).toHaveLength(1);
-    expect(MockWebSocket.instances[0].url).toContain(
-      '/ws/notifications?token=test-jwt-token'
-    );
+    expect(mockGetSocket).toHaveBeenCalledWith('/notifications');
   });
 
-  it('adds realtime notification when WebSocket receives a valid message', () => {
+  it('adds realtime notification when socket receives a valid message', () => {
     localStorage.setItem('access_token', 'test-jwt-token');
+
+    // Capture the "notification" event handler
+    let notificationHandler: ((data: unknown) => void) | undefined;
+    mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
+      if (event === 'notification') {
+        notificationHandler = handler;
+      }
+    });
 
     renderHook(() => useNotifications());
 
-    const ws = MockWebSocket.instances[0];
+    expect(notificationHandler).toBeDefined();
 
     act(() => {
-      ws.onmessage?.({ data: JSON.stringify(sampleNotification) });
+      notificationHandler!(sampleNotification);
     });
 
     const state = useNotificationStore.getState();
@@ -145,73 +138,55 @@ describe('useNotifications', () => {
     expect(state.unreadCount).toBe(1);
   });
 
-  it('ignores malformed WebSocket messages without crashing', () => {
+  it('handles string notification data (JSON)', () => {
     localStorage.setItem('access_token', 'test-jwt-token');
+
+    let notificationHandler: ((data: unknown) => void) | undefined;
+    mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
+      if (event === 'notification') {
+        notificationHandler = handler;
+      }
+    });
 
     renderHook(() => useNotifications());
 
-    const ws = MockWebSocket.instances[0];
+    act(() => {
+      notificationHandler!(JSON.stringify(sampleNotification));
+    });
+
+    const state = useNotificationStore.getState();
+    expect(state.notifications).toHaveLength(1);
+    expect(state.notifications[0].id).toBe('ws-notif-1');
+  });
+
+  it('ignores malformed messages without crashing', () => {
+    localStorage.setItem('access_token', 'test-jwt-token');
+
+    let notificationHandler: ((data: unknown) => void) | undefined;
+    mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
+      if (event === 'notification') {
+        notificationHandler = handler;
+      }
+    });
+
+    renderHook(() => useNotifications());
 
     // Should not throw
     act(() => {
-      ws.onmessage?.({ data: 'not valid json{{{' });
+      notificationHandler!('not valid json{{{');
     });
 
     const state = useNotificationStore.getState();
     expect(state.notifications).toHaveLength(0);
   });
 
-  it('resets reconnect delay on successful connection', () => {
-    localStorage.setItem('access_token', 'test-jwt-token');
-
-    renderHook(() => useNotifications());
-
-    const ws = MockWebSocket.instances[0];
-
-    // Simulate a successful open
-    act(() => {
-      ws.onopen?.();
-    });
-
-    // Now simulate the connection closing
-    act(() => {
-      ws.onclose?.();
-    });
-
-    // Advance timers by the base reconnect delay (1000ms)
-    act(() => {
-      jest.advanceTimersByTime(1000);
-    });
-
-    // A new WebSocket should have been created for the reconnect
-    expect(MockWebSocket.instances.length).toBe(2);
-  });
-
-  it('cleans up WebSocket on unmount', () => {
+  it('disconnects socket on unmount', () => {
     localStorage.setItem('access_token', 'test-jwt-token');
 
     const { unmount } = renderHook(() => useNotifications());
 
-    expect(MockWebSocket.instances).toHaveLength(1);
-    const ws = MockWebSocket.instances[0];
-
     unmount();
 
-    expect(ws.close).toHaveBeenCalled();
-  });
-
-  it('closes WebSocket on error and triggers reconnect', () => {
-    localStorage.setItem('access_token', 'test-jwt-token');
-
-    renderHook(() => useNotifications());
-
-    const ws = MockWebSocket.instances[0];
-
-    // Simulate an error which should call ws.close()
-    act(() => {
-      ws.onerror?.();
-    });
-
-    expect(ws.close).toHaveBeenCalled();
+    expect(mockDisconnectSocket).toHaveBeenCalledWith('/notifications');
   });
 });

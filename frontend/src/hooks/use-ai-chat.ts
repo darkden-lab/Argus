@@ -3,62 +3,11 @@
 import { useEffect, useRef, useCallback } from "react";
 import { useAiChatStore, type ChatMessage, type PageContext, type AiStatus, type Agent } from "@/stores/ai-chat";
 import { api } from "@/lib/api";
-import { WS_URL } from "@/lib/ws";
-
-interface ChatWsMessage {
-  type:
-    | "user_message"
-    | "confirm_action"
-    | "new_conversation"
-    | "load_history"
-    | "context_update"
-    | "select_agent";
-  content?: string;
-  conversation_id?: string;
-  confirmation_id?: string;
-  approved?: boolean;
-  context?: PageContext;
-  agent_id?: string | null;
-}
-
-interface ChatServerMessage {
-  type:
-    | "assistant_message"
-    | "stream_delta"
-    | "stream_end"
-    | "tool_use"
-    | "confirm_request"
-    | "conversation_created"
-    | "history"
-    | "history_message"
-    | "history_end"
-    | "task_created"
-    | "task_progress"
-    | "task_completed"
-    | "task_failed"
-    | "error";
-  content?: string;
-  role?: string;
-  conversation_id?: string;
-  confirmation_id?: string;
-  tool_name?: string;
-  tool_args?: string;
-  title?: string;
-  messages?: ChatMessage[];
-  error?: string;
-  task_id?: string;
-  agent_id?: string;
-  progress?: number;
-  current_step?: string;
-  total_steps?: number;
-  completed_steps?: number;
-  result?: string;
-}
+import { getSocket, disconnectSocket } from "@/lib/socket";
+import type { Socket } from "socket.io-client";
 
 export function useAiChat() {
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectDelayRef = useRef(1000);
+  const socketRef = useRef<Socket | null>(null);
 
   const {
     isOpen,
@@ -151,233 +100,183 @@ export function useAiChat() {
       return;
     }
 
-    if (wsRef.current) {
-      wsRef.current.close();
-    }
-
     storeRef.current.setConnectionState("connecting");
     storeRef.current.setConnectionError(null);
 
-    const ws = new WebSocket(
-      `${WS_URL}/ws/ai/chat?token=${encodeURIComponent(token)}`
-    );
-    wsRef.current = ws;
+    const socket = getSocket("/ai");
+    socketRef.current = socket;
 
-    ws.onopen = () => {
-      reconnectDelayRef.current = 1000;
+    socket.on("connect", () => {
       storeRef.current.setConnectionState("connected");
       storeRef.current.setConnectionError(null);
-    };
+    });
 
-    ws.onmessage = (event) => {
-      try {
-        const msg: ChatServerMessage = JSON.parse(event.data);
-        const store = storeRef.current;
+    socket.on("stream_delta", (msg: { content?: string }) => {
+      const store = storeRef.current;
+      const state = useAiChatStore.getState();
+      const lastMsg = state.messages[state.messages.length - 1];
+      if (!lastMsg || !lastMsg.isStreaming) {
+        store.setIsStreaming(true);
+        const newId = crypto.randomUUID();
+        store.addMessage({
+          id: newId,
+          role: "assistant",
+          content: msg.content || "",
+          timestamp: new Date().toISOString(),
+          isStreaming: true,
+        });
+      } else if (msg.content) {
+        store.appendToMessage(lastMsg.id, msg.content);
+      }
+    });
 
-        switch (msg.type) {
-          case "stream_delta": {
-            // If not already streaming, start a new assistant message
-            const state = useAiChatStore.getState();
-            const lastMsg = state.messages[state.messages.length - 1];
-            if (!lastMsg || !lastMsg.isStreaming) {
-              store.setIsStreaming(true);
-              const newId = crypto.randomUUID();
-              store.addMessage({
-                id: newId,
-                role: "assistant",
-                content: msg.content || "",
-                timestamp: new Date().toISOString(),
-                isStreaming: true,
-              });
-            } else if (msg.content) {
-              store.appendToMessage(lastMsg.id, msg.content);
-            }
-            break;
-          }
+    socket.on("stream_end", () => {
+      const store = storeRef.current;
+      const state = useAiChatStore.getState();
+      const streamingMsg = state.messages.findLast((m) => m.isStreaming);
+      if (streamingMsg) {
+        store.updateMessage(streamingMsg.id, { isStreaming: false });
+      }
+      store.setIsStreaming(false);
+    });
 
-          case "stream_end": {
-            const state = useAiChatStore.getState();
-            const streamingMsg = state.messages.findLast((m) => m.isStreaming);
-            if (streamingMsg) {
-              store.updateMessage(streamingMsg.id, { isStreaming: false });
-            }
-            store.setIsStreaming(false);
-            break;
-          }
-
-          case "assistant_message":
-            store.addMessage({
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: msg.content || "",
-              timestamp: new Date().toISOString(),
-            });
-            break;
-
-          case "confirm_request":
-            if (msg.confirmation_id) {
-              let parsedArgs: Record<string, unknown> | undefined;
-              if (msg.tool_args) {
-                try {
-                  parsedArgs = JSON.parse(msg.tool_args);
-                } catch {
-                  // Ignore malformed args
-                }
-              }
-              store.addMessage({
-                id: crypto.randomUUID(),
-                role: "assistant",
-                content: msg.content || "Action requires confirmation",
-                timestamp: new Date().toISOString(),
-                confirmAction: {
-                  id: msg.confirmation_id,
-                  tool: msg.tool_name || "",
-                  description: msg.content || "",
-                  args: parsedArgs,
-                  status: "pending" as const,
-                },
-              });
-            }
-            break;
-
-          case "conversation_created":
-            if (msg.conversation_id) {
-              store.addConversation({
-                id: msg.conversation_id,
-                title: msg.title || "New conversation",
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-                messageCount: 0,
-              });
-              store.setActiveConversation(msg.conversation_id);
-            }
-            break;
-
-          case "history":
-            if (msg.messages) {
-              store.setMessages(msg.messages);
-            }
-            break;
-
-          case "history_message":
-            store.addMessage({
-              id: crypto.randomUUID(),
-              role: (msg.role === "user" ? "user" : "assistant") as "user" | "assistant",
-              content: msg.content || "",
-              timestamp: new Date().toISOString(),
-            });
-            break;
-
-          case "history_end":
-            // History loading complete — no action needed
-            break;
-
-          case "task_created": {
-            if (msg.task_id) {
-              const state = useAiChatStore.getState();
-              store.setTasks([
-                ...state.tasks,
-                {
-                  id: msg.task_id,
-                  agent_id: msg.agent_id || "",
-                  title: msg.title || "Task",
-                  status: "running",
-                  progress: 0,
-                  current_step: msg.current_step || "",
-                  total_steps: msg.total_steps || 0,
-                  completed_steps: 0,
-                },
-              ]);
-            }
-            break;
-          }
-
-          case "task_progress": {
-            if (msg.task_id) {
-              store.updateTask(msg.task_id, {
-                progress: msg.progress ?? 0,
-                current_step: msg.current_step || "",
-                completed_steps: msg.completed_steps ?? 0,
-              });
-            }
-            break;
-          }
-
-          case "task_completed": {
-            if (msg.task_id) {
-              store.updateTask(msg.task_id, {
-                status: "completed",
-                progress: 100,
-                result: msg.result || msg.content,
-              });
-            }
-            break;
-          }
-
-          case "task_failed": {
-            if (msg.task_id) {
-              store.updateTask(msg.task_id, {
-                status: "failed",
-                error: msg.error || msg.content || "Task failed",
-              });
-            }
-            break;
-          }
-
-          case "error": {
-            store.setIsStreaming(false);
-            const errorText = msg.error || msg.content || "Unknown error";
-            const isNotConfigured =
-              /not configured|no provider/i.test(errorText);
-            const friendlyError = isNotConfigured
-              ? "AI assistant is not configured. Please set up an AI provider in Settings."
-              : errorText;
-            store.addMessage({
-              id: crypto.randomUUID(),
-              role: "assistant",
-              content: `Error: ${friendlyError}`,
-              timestamp: new Date().toISOString(),
-            });
-            break;
+    socket.on("confirm_request", (msg: { confirmation_id?: string; tool_name?: string; tool_args?: string; content?: string }) => {
+      const store = storeRef.current;
+      if (msg.confirmation_id) {
+        let parsedArgs: Record<string, unknown> | undefined;
+        if (msg.tool_args) {
+          try {
+            parsedArgs = JSON.parse(msg.tool_args);
+          } catch {
+            // Ignore malformed args
           }
         }
-      } catch {
-        // Ignore malformed messages
+        store.addMessage({
+          id: crypto.randomUUID(),
+          role: "assistant",
+          content: msg.content || "Action requires confirmation",
+          timestamp: new Date().toISOString(),
+          confirmAction: {
+            id: msg.confirmation_id,
+            tool: msg.tool_name || "",
+            description: msg.content || "",
+            args: parsedArgs,
+            status: "pending" as const,
+          },
+        });
       }
-    };
+    });
 
-    ws.onclose = (event) => {
+    socket.on("conversation_created", (msg: { conversation_id?: string; title?: string }) => {
+      const store = storeRef.current;
+      if (msg.conversation_id) {
+        store.addConversation({
+          id: msg.conversation_id,
+          title: msg.title || "New conversation",
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          messageCount: 0,
+        });
+        store.setActiveConversation(msg.conversation_id);
+      }
+    });
+
+    socket.on("history_message", (msg: { content?: string; role?: string; conversation_id?: string }) => {
+      storeRef.current.addMessage({
+        id: crypto.randomUUID(),
+        role: (msg.role === "user" ? "user" : "assistant") as "user" | "assistant",
+        content: msg.content || "",
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    socket.on("history_end", () => {
+      // History loading complete
+    });
+
+    socket.on("agent_selected", (msg: { agent_id?: string; agent_name?: string }) => {
+      storeRef.current.setActiveAgent(msg.agent_id || null);
+    });
+
+    socket.on("task_created", (msg: { task_id?: string; agent_id?: string; title?: string; current_step?: string; total_steps?: number }) => {
+      if (msg.task_id) {
+        const state = useAiChatStore.getState();
+        storeRef.current.setTasks([
+          ...state.tasks,
+          {
+            id: msg.task_id,
+            agent_id: msg.agent_id || "",
+            title: msg.title || "Task",
+            status: "running",
+            progress: 0,
+            current_step: msg.current_step || "",
+            total_steps: msg.total_steps || 0,
+            completed_steps: 0,
+          },
+        ]);
+      }
+    });
+
+    socket.on("task_progress", (msg: { task_id?: string; progress?: number; current_step?: string; completed_steps?: number }) => {
+      if (msg.task_id) {
+        storeRef.current.updateTask(msg.task_id, {
+          progress: msg.progress ?? 0,
+          current_step: msg.current_step || "",
+          completed_steps: msg.completed_steps ?? 0,
+        });
+      }
+    });
+
+    socket.on("task_completed", (msg: { task_id?: string; result?: string; content?: string }) => {
+      if (msg.task_id) {
+        storeRef.current.updateTask(msg.task_id, {
+          status: "completed",
+          progress: 100,
+          result: msg.result || msg.content,
+        });
+      }
+    });
+
+    socket.on("task_failed", (msg: { task_id?: string; error?: string; content?: string }) => {
+      if (msg.task_id) {
+        storeRef.current.updateTask(msg.task_id, {
+          status: "failed",
+          error: msg.error || msg.content || "Task failed",
+        });
+      }
+    });
+
+    socket.on("error", (msg: { error?: string; content?: string } | string) => {
+      const store = storeRef.current;
+      store.setIsStreaming(false);
+      const errorText = typeof msg === "string" ? msg : (msg.error || msg.content || "Unknown error");
+      const isNotConfigured = /not configured|no provider/i.test(errorText);
+      const friendlyError = isNotConfigured
+        ? "AI assistant is not configured. Please set up an AI provider in Settings."
+        : errorText;
+      store.addMessage({
+        id: crypto.randomUUID(),
+        role: "assistant",
+        content: `Error: ${friendlyError}`,
+        timestamp: new Date().toISOString(),
+      });
+    });
+
+    socket.on("disconnect", () => {
       storeRef.current.setConnectionState("disconnected");
-      // Only reconnect if the panel is still open and it wasn't a clean close
-      if (event.code !== 1000) {
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectDelayRef.current = Math.min(
-            reconnectDelayRef.current * 2,
-            30000
-          );
-          connect();
-        }, reconnectDelayRef.current);
-      }
-    };
+    });
 
-    ws.onerror = () => {
+    socket.on("connect_error", () => {
       storeRef.current.setConnectionState("error");
       storeRef.current.setConnectionError(
         "Failed to connect to AI assistant. The server may be unavailable."
       );
-      ws.close();
-    };
+    });
   }, []);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    disconnectSocket("/ai");
+    socketRef.current = null;
   }, []);
 
   // Connect when panel opens or full page is active, fetch AI status
@@ -394,7 +293,8 @@ export function useAiChat() {
 
   const sendMessage = useCallback(
     (content: string) => {
-      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+      const socket = socketRef.current;
+      if (!socket?.connected) {
         storeRef.current.addMessage({
           id: crypto.randomUUID(),
           role: "user",
@@ -420,71 +320,44 @@ export function useAiChat() {
       storeRef.current.addMessage(userMessage);
 
       const state = useAiChatStore.getState();
-      const msg: ChatWsMessage = {
-        type: "user_message",
+      socket.emit("user_message", {
         content,
         conversation_id: state.activeConversationId || undefined,
         context: pageContext,
         agent_id: state.activeAgentId,
-      };
-      wsRef.current.send(JSON.stringify(msg));
+      });
     },
     [pageContext]
   );
 
   const confirmAction = useCallback((confirmId: string, approved: boolean) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    const msg: ChatWsMessage = {
-      type: "confirm_action",
+    socketRef.current?.emit("confirm_action", {
       confirmation_id: confirmId,
       approved,
-    };
-    wsRef.current.send(JSON.stringify(msg));
+    });
   }, []);
 
   const startNewConversation = useCallback(() => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
     storeRef.current.setMessages([]);
     storeRef.current.setActiveConversation(null);
-
-    const msg: ChatWsMessage = { type: "new_conversation" };
-    wsRef.current.send(JSON.stringify(msg));
+    socketRef.current?.emit("new_conversation");
   }, []);
 
   const loadConversation = useCallback((conversationId: string) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
     storeRef.current.setActiveConversation(conversationId);
     storeRef.current.setMessages([]);
-
-    const msg: ChatWsMessage = {
-      type: "load_history",
+    socketRef.current?.emit("load_history", {
       conversation_id: conversationId,
-    };
-    wsRef.current.send(JSON.stringify(msg));
+    });
   }, []);
 
   const updateContext = useCallback((context: PageContext) => {
-    if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    const msg: ChatWsMessage = {
-      type: "context_update",
-      context,
-    };
-    wsRef.current.send(JSON.stringify(msg));
+    socketRef.current?.emit("context_update", context);
   }, []);
 
   const selectAgent = useCallback((agentId: string | null) => {
     storeRef.current.setActiveAgent(agentId);
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      const msg: ChatWsMessage = {
-        type: "select_agent",
-        agent_id: agentId,
-      };
-      wsRef.current.send(JSON.stringify(msg));
-    }
+    socketRef.current?.emit("select_agent", { agent_id: agentId });
   }, []);
 
   return {

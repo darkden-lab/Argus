@@ -331,8 +331,16 @@ func (r *openaiStreamReader) Next() (*ai.StreamDelta, error) {
 		var chunk struct {
 			Choices []struct {
 				Delta struct {
-					Content   string           `json:"content"`
-					ToolCalls []openaiToolCall  `json:"tool_calls"`
+					Content   string `json:"content"`
+					ToolCalls []struct {
+						Index    int    `json:"index"`
+						ID       string `json:"id"`
+						Type     string `json:"type"`
+						Function struct {
+							Name      string `json:"name"`
+							Arguments string `json:"arguments"`
+						} `json:"function"`
+					} `json:"tool_calls"`
 				} `json:"delta"`
 				FinishReason *string `json:"finish_reason"`
 			} `json:"choices"`

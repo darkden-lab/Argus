@@ -79,6 +79,27 @@ func (s *Service) GetAgentStore() *AgentStore {
 	return s.agentStore
 }
 
+// HasAgentStore returns true if the agent store is configured.
+func (s *Service) HasAgentStore() bool {
+	return s.agentStore != nil
+}
+
+// GetAgent retrieves an agent by ID from the agent store.
+func (s *Service) GetAgent(ctx context.Context, agentID string) (*Agent, error) {
+	if s.agentStore == nil {
+		return nil, fmt.Errorf("agent store not configured")
+	}
+	return s.agentStore.GetByID(ctx, agentID)
+}
+
+// CreateTask creates a new agent task via the agent store.
+func (s *Service) CreateTask(ctx context.Context, task *AgentTask) error {
+	if s.agentStore == nil {
+		return fmt.Errorf("agent store not configured")
+	}
+	return s.agentStore.CreateTask(ctx, task)
+}
+
 // UpdateProvider swaps the active LLM provider and config at runtime.
 // This is safe to call concurrently with ProcessMessage.
 func (s *Service) UpdateProvider(provider LLMProvider, config AIConfig) {

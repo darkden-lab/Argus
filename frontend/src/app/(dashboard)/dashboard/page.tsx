@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { LiveIndicator } from "@/components/ui/live-indicator";
-import { useK8sWildcard } from "@/hooks/use-k8s-websocket";
+import { useK8sWildcard } from "@/hooks/use-k8s-socket";
 import { useDashboardStore } from "@/stores/dashboard";
 import { api } from "@/lib/api";
 import {
@@ -24,7 +24,7 @@ import {
   Server,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { WatchEvent } from "@/lib/ws";
+import type { WatchEvent } from "@/lib/socket";
 
 interface K8sEvent {
   id: string;

@@ -1,25 +1,10 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { WS_URL } from "@/lib/ws";
+import { getSocket, disconnectSocket } from "@/lib/socket";
+import type { Socket } from "socket.io-client";
 
 export type TerminalMode = "smart" | "raw";
-
-interface TerminalMessage {
-  type: "input" | "resize" | "mode" | "set_context";
-  data?: string;
-  cols?: number;
-  rows?: number;
-  mode?: TerminalMode;
-  cluster_id?: string;
-  namespace?: string;
-}
-
-interface TerminalServerMessage {
-  type: "output" | "error" | "connected" | "mode_changed";
-  data?: string;
-  mode?: TerminalMode;
-}
 
 interface UseTerminalOptions {
   cluster: string;
@@ -40,10 +25,8 @@ export function useTerminal({
   onConnected,
   onModeChanged,
 }: UseTerminalOptions) {
-  const wsRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectDelayRef = useRef(1000);
   const intentionalCloseRef = useRef(false);
 
   const clusterRef = useRef(cluster);
@@ -64,89 +47,46 @@ export function useTerminal({
 
     if (!token || !clusterRef.current) return;
 
-    // Clear any pending reconnect timer
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-
-    // Close existing WS intentionally (skip auto-reconnect in its onclose)
-    if (wsRef.current) {
-      intentionalCloseRef.current = true;
-      wsRef.current.close();
-    }
-
     intentionalCloseRef.current = false;
 
-    const params = new URLSearchParams({
-      token,
-      cluster: clusterRef.current,
-      namespace: namespaceRef.current,
-      mode: modeRef.current,
+    const socket = getSocket("/terminal");
+    socketRef.current = socket;
+
+    socket.on("connect", () => {
+      setIsConnected(true);
+      // Set context after connecting
+      socket.emit("set_context", {
+        cluster_id: clusterRef.current,
+        namespace: namespaceRef.current,
+      });
     });
 
-    const ws = new WebSocket(`${WS_URL}/ws/terminal?${params}`);
-    wsRef.current = ws;
+    socket.on("connected", () => {
+      callbackRefs.current.onConnected?.();
+    });
 
-    ws.onopen = () => {
-      setIsConnected(true);
-      reconnectDelayRef.current = 1000;
-    };
+    socket.on("output", (msg: { data?: string }) => {
+      if (msg.data) callbackRefs.current.onOutput?.(msg.data);
+    });
 
-    ws.onmessage = (event) => {
-      try {
-        const msg: TerminalServerMessage = JSON.parse(event.data);
-        switch (msg.type) {
-          case "output":
-            if (msg.data) callbackRefs.current.onOutput?.(msg.data);
-            break;
-          case "error":
-            if (msg.data) callbackRefs.current.onError?.(msg.data);
-            break;
-          case "connected":
-            callbackRefs.current.onConnected?.();
-            break;
-          case "mode_changed":
-            if (msg.mode) callbackRefs.current.onModeChanged?.(msg.mode);
-            break;
-        }
-      } catch {
-        // Raw output fallback
-        callbackRefs.current.onOutput?.(event.data);
-      }
-    };
+    socket.on("error", (msg: { data?: string } | string) => {
+      const errorData = typeof msg === "string" ? msg : msg.data;
+      if (errorData) callbackRefs.current.onError?.(errorData);
+    });
 
-    ws.onclose = () => {
+    socket.on("mode_changed", (msg: { mode?: TerminalMode }) => {
+      if (msg.mode) callbackRefs.current.onModeChanged?.(msg.mode);
+    });
+
+    socket.on("disconnect", () => {
       setIsConnected(false);
-
-      // Skip auto-reconnect if this WS was replaced or intentionally closed
-      if (wsRef.current !== ws || intentionalCloseRef.current) return;
-
-      // Auto-reconnect with backoff
-      reconnectTimerRef.current = setTimeout(() => {
-        reconnectDelayRef.current = Math.min(
-          reconnectDelayRef.current * 2,
-          30000
-        );
-        connect();
-      }, reconnectDelayRef.current);
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
+    });
   }, []);
 
   const disconnect = useCallback(() => {
-    if (reconnectTimerRef.current) {
-      clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = null;
-    }
-    if (wsRef.current) {
-      intentionalCloseRef.current = true;
-      wsRef.current.close();
-      wsRef.current = null;
-    }
+    intentionalCloseRef.current = true;
+    disconnectSocket("/terminal");
+    socketRef.current = null;
     setIsConnected(false);
   }, []);
 
@@ -158,10 +98,7 @@ export function useTerminal({
   const savedLineRef = useRef("");
 
   const sendRawInput = useCallback((data: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const msg: TerminalMessage = { type: "input", data };
-      wsRef.current.send(JSON.stringify(msg));
-    }
+    socketRef.current?.emit("input", { data });
   }, []);
 
   const sendInput = sendRawInput;
@@ -181,12 +118,7 @@ export function useTerminal({
       if (data === "\x15") {
         if (cursorPosRef.current > 0) {
           const after = lineBufferRef.current.slice(cursorPosRef.current);
-          // Move cursor to start, clear line, rewrite remaining
           writeFn("\r$ " + after + " ".repeat(cursorPosRef.current) + "\r$ ");
-          if (after.length > 0) {
-            // Move cursor back to right after "$ "
-            // cursor is already at "$ ", need to stay there
-          }
           lineBufferRef.current = after;
           cursorPosRef.current = 0;
         }
@@ -201,7 +133,6 @@ export function useTerminal({
           historyRef.current.push(command);
           sendRawInput(command);
         } else {
-          // Empty enter — just show new prompt
           writeFn("$ ");
         }
         lineBufferRef.current = "";
@@ -219,15 +150,13 @@ export function useTerminal({
           const after = buf.slice(pos);
           lineBufferRef.current = before + after;
           cursorPosRef.current = pos - 1;
-          // Move back, rewrite rest of line, clear trailing char, reposition cursor
           writeFn("\b" + after + " " + "\b".repeat(after.length + 1));
         }
         return;
       }
 
-      // Arrow keys (escape sequences)
+      // Arrow keys
       if (data === "\x1b[A") {
-        // Up — previous history
         if (historyRef.current.length === 0) return;
         if (historyIndexRef.current === -1) {
           savedLineRef.current = lineBufferRef.current;
@@ -243,7 +172,6 @@ export function useTerminal({
       }
 
       if (data === "\x1b[B") {
-        // Down — next history
         if (historyIndexRef.current === -1) return;
         if (historyIndexRef.current < historyRef.current.length - 1) {
           historyIndexRef.current++;
@@ -257,7 +185,6 @@ export function useTerminal({
       }
 
       if (data === "\x1b[C") {
-        // Right arrow
         if (cursorPosRef.current < lineBufferRef.current.length) {
           cursorPosRef.current++;
           writeFn("\x1b[C");
@@ -266,7 +193,6 @@ export function useTerminal({
       }
 
       if (data === "\x1b[D") {
-        // Left arrow
         if (cursorPosRef.current > 0) {
           cursorPosRef.current--;
           writeFn("\x1b[D");
@@ -274,7 +200,7 @@ export function useTerminal({
         return;
       }
 
-      // Printable characters (code >= 32)
+      // Printable characters
       for (let i = 0; i < data.length; i++) {
         const ch = data[i];
         if (ch.charCodeAt(0) >= 32) {
@@ -284,7 +210,6 @@ export function useTerminal({
           const after = buf.slice(pos);
           lineBufferRef.current = before + ch + after;
           cursorPosRef.current = pos + 1;
-          // Write char + rest of line, then move cursor back
           writeFn(ch + after + "\b".repeat(after.length));
         }
       }
@@ -292,13 +217,10 @@ export function useTerminal({
     [sendRawInput]
   );
 
-  /** Replace the visible line buffer content on the terminal. */
   const replaceLineBuffer = (newContent: string, writeFn: (s: string) => void) => {
     const oldLen = lineBufferRef.current.length;
     const oldPos = cursorPosRef.current;
-    // Move cursor to start of input (after "$ ")
     if (oldPos > 0) writeFn("\b".repeat(oldPos));
-    // Write new content + clear any leftover chars
     writeFn(newContent);
     if (oldLen > newContent.length) {
       writeFn(" ".repeat(oldLen - newContent.length));
@@ -326,35 +248,24 @@ export function useTerminal({
   }, []);
 
   const sendResize = useCallback((cols: number, rows: number) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const msg: TerminalMessage = { type: "resize", cols, rows };
-      wsRef.current.send(JSON.stringify(msg));
-    }
+    socketRef.current?.emit("resize", { cols, rows });
   }, []);
 
   const sendModeChange = useCallback((newMode: TerminalMode) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      const msg: TerminalMessage = { type: "mode", mode: newMode };
-      wsRef.current.send(JSON.stringify(msg));
-    }
+    socketRef.current?.emit("mode", { mode: newMode });
   }, []);
 
   const sendContextChange = useCallback(
     (newCluster: string, newNamespace: string) => {
-      if (wsRef.current?.readyState === WebSocket.OPEN) {
-        const msg: TerminalMessage = {
-          type: "set_context",
-          cluster_id: newCluster,
-          namespace: newNamespace,
-        };
-        wsRef.current.send(JSON.stringify(msg));
-      }
+      socketRef.current?.emit("set_context", {
+        cluster_id: newCluster,
+        namespace: newNamespace,
+      });
     },
     []
   );
 
-  // Only reconnect WebSocket when cluster changes.
-  // Namespace/mode changes are sent as in-band messages (set_context / mode).
+  // Reconnect when cluster changes
   useEffect(() => {
     connect();
     return () => disconnect();

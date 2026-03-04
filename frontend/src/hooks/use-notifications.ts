@@ -2,10 +2,11 @@
 
 import { useEffect, useRef } from "react";
 import { useNotificationStore, type Notification } from "@/stores/notifications";
-import { WS_URL } from "@/lib/ws";
+import { getSocket, disconnectSocket } from "@/lib/socket";
+import type { Socket } from "socket.io-client";
 
 /**
- * Hook that manages real-time notification updates via WebSocket
+ * Hook that manages real-time notification updates via Socket.IO
  * and initial data fetching for the notification system.
  */
 export function useNotifications() {
@@ -20,9 +21,7 @@ export function useNotifications() {
     addRealtimeNotification,
   } = useNotificationStore();
 
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reconnectDelayRef = useRef(1000);
+  const socketRef = useRef<Socket | null>(null);
 
   useEffect(() => {
     fetchNotifications();
@@ -37,45 +36,22 @@ export function useNotifications() {
 
     if (!token) return;
 
-    function connect() {
-      const ws = new WebSocket(`${WS_URL}/ws/notifications?token=${token}`);
-      wsRef.current = ws;
+    const socket = getSocket("/notifications");
+    socketRef.current = socket;
 
-      ws.onmessage = (event) => {
-        try {
-          const notification: Notification = JSON.parse(event.data);
-          addRealtimeNotification(notification);
-        } catch {
-          // Ignore malformed messages
-        }
-      };
-
-      ws.onclose = () => {
-        reconnectTimerRef.current = setTimeout(() => {
-          reconnectDelayRef.current = Math.min(
-            reconnectDelayRef.current * 2,
-            30000
-          );
-          connect();
-        }, reconnectDelayRef.current);
-      };
-
-      ws.onerror = () => {
-        ws.close();
-      };
-
-      ws.onopen = () => {
-        reconnectDelayRef.current = 1000;
-      };
-    }
-
-    connect();
+    socket.on("notification", (data: Notification | string) => {
+      try {
+        const notification: Notification =
+          typeof data === "string" ? JSON.parse(data) : data;
+        addRealtimeNotification(notification);
+      } catch {
+        // Ignore malformed messages
+      }
+    });
 
     return () => {
-      if (reconnectTimerRef.current) {
-        clearTimeout(reconnectTimerRef.current);
-      }
-      wsRef.current?.close();
+      disconnectSocket("/notifications");
+      socketRef.current = null;
     };
   }, [addRealtimeNotification]);
 
