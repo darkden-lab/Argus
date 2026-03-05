@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useAuthStore } from '@/stores/auth';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -19,6 +20,7 @@ interface OidcInfo {
 export default function LoginPage() {
   const router = useRouter();
   const { login, isLoading } = useAuthStore();
+  const t = useTranslations('auth');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -81,9 +83,9 @@ export default function LoginPage() {
           <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary shadow-lg shadow-primary/20">
             <Network className="h-8 w-8 text-primary-foreground" />
           </div>
-          <h1 className="text-3xl font-bold tracking-tight">Argus</h1>
+          <h1 className="text-3xl font-bold tracking-tight">{t('login_title')}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Multi-cluster Kubernetes Dashboard
+            {t('login_subtitle')}
           </p>
         </div>
 
@@ -98,7 +100,7 @@ export default function LoginPage() {
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">{t('email')}</Label>
                 <Input
                   id="email"
                   type="email"
@@ -111,7 +113,7 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -127,10 +129,10 @@ export default function LoginPage() {
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    {t('login_loading')}
                   </>
                 ) : (
-                  'Sign in'
+                  t('login_button')
                 )}
               </Button>
 
@@ -141,7 +143,7 @@ export default function LoginPage() {
                       <span className="w-full border-t" />
                     </div>
                     <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-card px-2 text-muted-foreground">or</span>
+                      <span className="bg-card px-2 text-muted-foreground">{t('or')}</span>
                     </div>
                   </div>
 
@@ -153,21 +155,21 @@ export default function LoginPage() {
                   >
                     <KeyRound className="mr-2 h-4 w-4" />
                     {oidcInfo.provider_name
-                      ? `Sign in with ${oidcInfo.provider_name}`
-                      : 'Sign in with SSO'}
+                      ? t('oidc_login_provider', { provider: oidcInfo.provider_name })
+                      : t('oidc_login')}
                   </Button>
                 </>
               )}
 
               <p className="text-center text-xs text-muted-foreground">
-                Contact your administrator for account creation.
+                {t('contact_admin')}
               </p>
             </form>
           </CardContent>
         </Card>
 
         <p className="mt-6 text-center text-xs text-muted-foreground/50">
-          Argus &mdash; Kubernetes Infrastructure Management
+          {t('footer')}
         </p>
       </div>
     </div>

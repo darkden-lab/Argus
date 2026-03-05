@@ -2,18 +2,27 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Users, Shield, Puzzle, KeyRound, ScrollText, Bell, Bot, Radio } from "lucide-react";
+import { useTranslations } from "next-intl";
+import { User, Users, Shield, Puzzle, KeyRound, ScrollText, Bell, Bot, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
 
-const settingsNav = [
-  { label: "Users", href: "/settings/users", icon: Users },
-  { label: "Roles", href: "/settings/roles", icon: Shield },
-  { label: "Plugins", href: "/settings/plugins", icon: Puzzle },
-  { label: "OIDC", href: "/settings/oidc", icon: KeyRound },
-  { label: "Audit Log", href: "/settings/audit", icon: ScrollText },
-  { label: "Notifications", href: "/settings/notifications", icon: Bell },
-  { label: "Channels", href: "/settings/notification-channels", icon: Radio },
-  { label: "AI Assistant", href: "/settings/ai", icon: Bot },
+interface SettingsNavItem {
+  key: string;
+  href: string;
+  icon: LucideIcon;
+}
+
+const settingsNavItems: SettingsNavItem[] = [
+  { key: "profile", href: "/settings/profile", icon: User },
+  { key: "users", href: "/settings/users", icon: Users },
+  { key: "roles", href: "/settings/roles", icon: Shield },
+  { key: "plugins", href: "/settings/plugins", icon: Puzzle },
+  { key: "oidc", href: "/settings/oidc", icon: KeyRound },
+  { key: "audit", href: "/settings/audit", icon: ScrollText },
+  { key: "notifications", href: "/settings/notifications", icon: Bell },
+  { key: "channels", href: "/settings/notification-channels", icon: Radio },
+  { key: "ai", href: "/settings/ai", icon: Bot },
 ];
 
 export default function SettingsLayout({
@@ -22,19 +31,18 @@ export default function SettingsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const t = useTranslations("settings");
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">
-          Manage users, roles, plugins, and authentication.
-        </p>
+        <h1 className="text-2xl font-bold tracking-tight">{t("title")}</h1>
+        <p className="text-muted-foreground">{t("subtitle")}</p>
       </div>
 
       <div className="flex gap-6">
         <nav className="flex w-48 shrink-0 flex-col gap-1">
-          {settingsNav.map(({ label, href, icon: Icon }) => {
+          {settingsNavItems.map(({ key, href, icon: Icon }) => {
             const active = pathname === href || pathname.startsWith(href + "/");
             return (
               <Link
@@ -48,7 +56,7 @@ export default function SettingsLayout({
                 )}
               >
                 <Icon className="h-4 w-4" />
-                {label}
+                {t(`nav.${key}`)}
               </Link>
             );
           })}

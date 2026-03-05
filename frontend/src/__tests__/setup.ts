@@ -1,4 +1,23 @@
 import '@testing-library/jest-dom';
+import { TextEncoder, TextDecoder } from 'util';
+
+// Polyfill TextEncoder/TextDecoder for jsdom
+if (typeof globalThis.TextEncoder === 'undefined') {
+  Object.defineProperty(globalThis, 'TextEncoder', { value: TextEncoder });
+  Object.defineProperty(globalThis, 'TextDecoder', { value: TextDecoder });
+}
+
+// Mock crypto.subtle for components that use Web Crypto API (e.g. Gravatar hashing)
+if (!globalThis.crypto?.subtle) {
+  Object.defineProperty(globalThis, 'crypto', {
+    value: {
+      ...globalThis.crypto,
+      subtle: {
+        digest: jest.fn().mockResolvedValue(new ArrayBuffer(32)),
+      },
+    },
+  });
+}
 
 // Mock localStorage
 const localStorageMock = (() => {

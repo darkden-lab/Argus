@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { getSocket, disconnectSocket, type WatchEvent } from "@/lib/socket";
+import { getSocket, type WatchEvent } from "@/lib/socket";
 
 interface UseK8sSocketOptions {
   cluster: string;

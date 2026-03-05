@@ -1,17 +1,21 @@
 import { create } from "zustand";
 
+export type SocketStatus = "connected" | "reconnecting" | "disconnected";
+
 interface UIState {
   sidebarCollapsed: boolean;
   commandPaletteOpen: boolean;
   terminalPanelOpen: boolean;
   terminalPanelHeight: number;
   onboardingCompleted: boolean;
+  socketStatus: SocketStatus;
   toggleSidebar: () => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
   setCommandPaletteOpen: (open: boolean) => void;
   setTerminalPanelOpen: (open: boolean) => void;
   setTerminalPanelHeight: (height: number) => void;
   setOnboardingCompleted: (completed: boolean) => void;
+  setSocketStatus: (status: SocketStatus) => void;
 }
 
 function loadFromStorage<T>(key: string, defaultValue: T): T {
@@ -40,6 +44,7 @@ export const useUIStore = create<UIState>((set) => ({
   terminalPanelOpen: loadFromStorage("argus:terminal-panel-open", false),
   terminalPanelHeight: loadFromStorage("argus:terminal-panel-height", 300),
   onboardingCompleted: loadFromStorage("argus:onboarding-completed", false),
+  socketStatus: "disconnected" as SocketStatus,
 
   toggleSidebar: () =>
     set((state) => {
@@ -69,4 +74,6 @@ export const useUIStore = create<UIState>((set) => ({
     saveToStorage("argus:onboarding-completed", completed);
     set({ onboardingCompleted: completed });
   },
+
+  setSocketStatus: (status: SocketStatus) => set({ socketStatus: status }),
 }));

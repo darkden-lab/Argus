@@ -49,7 +49,7 @@ func NewServer(deps Deps) *Server {
 	io := socket.NewServer(nil, opts)
 
 	// Register namespaces
-	registerK8sNamespace(io, deps.JWTService, deps.Hub)
+	registerK8sNamespace(io, deps.JWTService, deps.Hub, deps.ClusterMgr)
 	registerAINamespace(io, deps.JWTService, deps.AIService, deps.HistoryStore, deps.TaskRunner)
 	registerTerminalNamespace(io, deps.JWTService, deps.ClusterMgr)
 	registerNotificationsNamespace(io, deps.JWTService, deps.NotifWSHandler)

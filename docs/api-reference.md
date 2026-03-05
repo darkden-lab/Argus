@@ -148,6 +148,63 @@ Handles the OIDC callback. On success, redirects to `FRONTEND_URL/auth/oidc/call
 
 ---
 
+## User Profile
+
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| PATCH | `/api/users/me` | Yes | Update display name and/or email |
+| PATCH | `/api/users/me/password` | Yes | Change password |
+| GET | `/api/users/me/preferences` | Yes | Get user preferences |
+| PUT | `/api/users/me/preferences` | Yes | Save user preferences (UPSERT) |
+
+### PATCH /api/users/me
+
+Update the authenticated user's display_name and/or email. OIDC users cannot change their email.
+
+**Request Body:**
+```json
+{ "display_name": "string", "email": "string" }
+```
+
+### PATCH /api/users/me/password
+
+Change the authenticated user's password. OIDC users cannot change their password.
+
+**Request Body:**
+```json
+{ "current_password": "string", "new_password": "string" }
+```
+
+### GET /api/users/me/preferences
+
+Get the authenticated user's preferences. Returns defaults if none saved.
+
+**Response (200):**
+```json
+{
+  "theme": "system",
+  "language": "en",
+  "sidebar_compact": false,
+  "animations_enabled": true
+}
+```
+
+### PUT /api/users/me/preferences
+
+Save the authenticated user's preferences. Creates or updates (UPSERT).
+
+**Request Body:**
+```json
+{
+  "theme": "system|dark|light",
+  "language": "en",
+  "sidebar_compact": false,
+  "animations_enabled": true
+}
+```
+
+---
+
 ## Clusters
 
 | Method | Path | Auth | Description |
@@ -293,9 +350,54 @@ Each plugin also registers its own routes under `/api/plugins/{plugin_id}/...`. 
 |--------|------|------|-------------|
 | GET | `/api/auth/permissions` | Yes | Get current user's permissions |
 | GET | `/api/roles` | Yes | List all roles with permissions |
+| POST | `/api/roles` | Yes (admin) | Create a custom role |
+| DELETE | `/api/roles/{id}` | Yes (admin) | Delete a custom role |
+| GET | `/api/roles/{id}/permissions` | Yes | List permissions for a role |
+| POST | `/api/roles/{id}/permissions` | Yes (admin) | Add permission to a role |
+| DELETE | `/api/roles/{id}/permissions/{permId}` | Yes (admin) | Remove permission from a role |
 | GET | `/api/roles/assignments` | Yes | List all user-role assignments |
 | POST | `/api/roles/assign` | Yes | Assign a role to a user |
 | DELETE | `/api/roles/revoke/{id}` | Yes | Revoke a role assignment |
+
+### POST /api/roles
+
+Create a new custom role. Built-in roles (admin, operator, developer, viewer) are protected and cannot be recreated.
+
+**Request Body:**
+```json
+{ "name": "string", "description": "string" }
+```
+
+**Response (201):**
+```json
+{ "id": "uuid", "message": "role created" }
+```
+
+### DELETE /api/roles/{id}
+
+Delete a custom role. Built-in roles cannot be deleted.
+
+### GET /api/roles/{id}/permissions
+
+List all permissions for a role. Each permission includes its `id`.
+
+### POST /api/roles/{id}/permissions
+
+Add a permission to a role.
+
+**Request Body:**
+```json
+{
+  "resource": "string",
+  "action": "string",
+  "scope_type": "global|cluster|namespace",
+  "scope_id": "string"
+}
+```
+
+### DELETE /api/roles/{id}/permissions/{permId}
+
+Remove a specific permission from a role.
 
 ### POST /api/roles/assign
 

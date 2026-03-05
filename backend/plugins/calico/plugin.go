@@ -73,6 +73,7 @@ func (p *CalicoPlugin) RegisterRoutes(router *mux.Router, cm *cluster.Manager) {
 
 	sub.HandleFunc("/{cluster}/hostendpoints", h.ListClusterResources("hostendpoints")).Methods("GET")
 	sub.HandleFunc("/{cluster}/hostendpoints/{name}", h.GetClusterResource("hostendpoints")).Methods("GET")
+	sub.HandleFunc("/{cluster}/hostendpoints/{name}", h.DeleteClusterResource("hostendpoints")).Methods("DELETE")
 
 	sub.HandleFunc("/{cluster}/ippools", h.ListClusterResources("ippools")).Methods("GET")
 	sub.HandleFunc("/{cluster}/ippools/{name}", h.GetClusterResource("ippools")).Methods("GET")

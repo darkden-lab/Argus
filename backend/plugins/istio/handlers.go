@@ -66,10 +66,26 @@ func (h *handlers) ListDestinationRules(w http.ResponseWriter, r *http.Request) 
 	h.list(w, r, gvrDestinationRules)
 }
 
+func (h *handlers) GetDestinationRule(w http.ResponseWriter, r *http.Request) {
+	h.get(w, r, gvrDestinationRules)
+}
+
+func (h *handlers) DeleteDestinationRule(w http.ResponseWriter, r *http.Request) {
+	h.del(w, r, gvrDestinationRules)
+}
+
 // --- ServiceEntries ---
 
 func (h *handlers) ListServiceEntries(w http.ResponseWriter, r *http.Request) {
 	h.list(w, r, gvrServiceEntries)
+}
+
+func (h *handlers) GetServiceEntry(w http.ResponseWriter, r *http.Request) {
+	h.get(w, r, gvrServiceEntries)
+}
+
+func (h *handlers) DeleteServiceEntry(w http.ResponseWriter, r *http.Request) {
+	h.del(w, r, gvrServiceEntries)
 }
 
 // --- Generic dynamic-client helpers ---
@@ -181,7 +197,7 @@ func (h *handlers) del(w http.ResponseWriter, r *http.Request, gvr schema.GroupV
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	json.NewEncoder(w).Encode(data) //nolint:errcheck
 }
 
 func errMsg(msg string) map[string]string {

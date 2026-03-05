@@ -256,7 +256,7 @@ func (h *handlers) delClusterScoped(w http.ResponseWriter, r *http.Request, gvr 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	json.NewEncoder(w).Encode(data) //nolint:errcheck
 }
 
 func errMsg(msg string) map[string]string {

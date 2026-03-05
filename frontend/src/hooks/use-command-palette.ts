@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useUIStore } from "@/stores/ui";
 import { useAiChatStore } from "@/stores/ai-chat";
+import { useClusterStore } from "@/stores/cluster";
 import {
   allCommandGroups,
   type CommandGroup,
@@ -24,6 +25,10 @@ export function useCommandPalette(): UseCommandPaletteReturn {
   const open = useUIStore((s) => s.commandPaletteOpen);
   const setOpen = useUIStore((s) => s.setCommandPaletteOpen);
   const openAiChat = useAiChatStore((s) => s.open);
+  const selectedNamespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedProject = useClusterStore((s) => s.selectedProject);
+  const setSelectedNamespace = useClusterStore((s) => s.setSelectedNamespace);
+  const setSelectedProject = useClusterStore((s) => s.setSelectedProject);
   const [searchTerm, setSearchTerm] = useState("");
 
   // Reset search term when palette closes
@@ -54,6 +59,18 @@ export function useCommandPalette(): UseCommandPaletteReturn {
         return;
       }
 
+      // Filter commands
+      if (item.id === "filter-all-namespaces") {
+        setSelectedNamespace(null);
+        setOpen(false);
+        return;
+      }
+      if (item.id === "filter-clear-project") {
+        setSelectedProject(null);
+        setOpen(false);
+        return;
+      }
+
       // If it is the AI assistant, open the chat
       if (item.id === "action-ai") {
         openAiChat();
@@ -67,12 +84,29 @@ export function useCommandPalette(): UseCommandPaletteReturn {
         setOpen(false);
       }
     },
-    [router, setOpen, openAiChat]
+    [router, setOpen, openAiChat, setSelectedNamespace, setSelectedProject]
   );
+
+  // Build contextual command groups — hide irrelevant filter items
+  const contextualGroups = useMemo(() => {
+    return allCommandGroups
+      .map((group) => {
+        if (group.id !== "filters") return group;
+        return {
+          ...group,
+          items: group.items.filter((item) => {
+            if (item.id === "filter-all-namespaces") return selectedNamespace !== null;
+            if (item.id === "filter-clear-project") return selectedProject !== null;
+            return true;
+          }),
+        };
+      })
+      .filter((group) => group.items.length > 0);
+  }, [selectedNamespace, selectedProject]);
 
   const filteredGroups = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
-    if (!term) return allCommandGroups;
+    if (!term) return contextualGroups;
 
     // If the user types "?" prefix, treat it as an AI query hint
     if (term.startsWith("?")) {
@@ -95,7 +129,7 @@ export function useCommandPalette(): UseCommandPaletteReturn {
       }
     }
 
-    return allCommandGroups
+    return contextualGroups
       .map((group) => ({
         ...group,
         items: group.items.filter((item) => {
@@ -110,7 +144,7 @@ export function useCommandPalette(): UseCommandPaletteReturn {
         }),
       }))
       .filter((group) => group.items.length > 0);
-  }, [searchTerm]);
+  }, [searchTerm, contextualGroups]);
 
   return {
     open,

@@ -116,6 +116,9 @@ func main() {
 	notificationsWriteGuard := rbac.RBACMiddleware(rbacEngine, "notifications", "write")
 	aiWriteGuard := rbac.RBACMiddleware(rbacEngine, "ai", "write")
 	auditReadGuard := rbac.RBACMiddleware(rbacEngine, "audit", "read")
+	_ = rbac.RBACMiddleware(rbacEngine, "clusters", "read")   // clustersReadGuard — available for future endpoint protection
+	_ = rbac.RBACMiddleware(rbacEngine, "settings", "read")   // settingsReadGuard — available for future endpoint protection
+	_ = rbac.RBACMiddleware(rbacEngine, "terminal", "write")  // terminalWriteGuard — available for future endpoint protection
 
 	// Audit Log
 	auditStore := audit.NewStore(pool)
@@ -218,6 +221,10 @@ func main() {
 	// User management routes
 	userMgmtHandlers := auth.NewUserManagementHandlers(authService, pool)
 	userMgmtHandlers.RegisterRoutes(protected)
+
+	// Profile & preferences routes (self-service, any authenticated user)
+	profileHandlers := auth.NewProfileHandlers(authService, pool)
+	profileHandlers.RegisterRoutes(protected)
 
 	// OIDC group -> role mapping routes (write endpoints require settings:write RBAC)
 	oidcMappingHandlers := auth.NewOIDCMappingHandlers(pool, rbac.RBACMiddleware(rbacEngine, "settings", "write"))

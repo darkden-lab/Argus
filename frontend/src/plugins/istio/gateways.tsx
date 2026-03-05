@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PluginTableSkeleton } from "@/components/skeletons";
+import { useClusterStore } from "@/stores/cluster";
 
 interface Gateway {
   metadata: { name: string; namespace: string };
@@ -13,25 +15,26 @@ interface Gateway {
 export function GatewayList() {
   const [items, setItems] = useState<Gateway[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) { setIsLoading(false); return; }
-
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
     api
       .get<{ items: Gateway[] }>(
-        `/api/plugins/istio/gateways?clusterID=${clusterID}`
+        `/api/plugins/istio/gateways?clusterID=${clusterID}${nsParam}`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Gateways</h1>
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <PluginTableSkeleton />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No gateways found.</p>
       ) : (

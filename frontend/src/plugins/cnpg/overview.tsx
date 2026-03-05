@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useClusterStore } from "@/stores/cluster";
 
 function CountCard({ label, count }: { label: string; count: number }) {
   return (
@@ -14,15 +15,17 @@ function CountCard({ label, count }: { label: string; count: number }) {
 
 export function CnpgOverview() {
   const [counts, setCounts] = useState({ clusters: 0, backups: 0, poolers: 0 });
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) return;
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
 
     Promise.allSettled([
-      api.get<{ items: unknown[] }>(`/api/plugins/cnpg/clusters?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/cnpg/backups?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/cnpg/poolers?clusterID=${clusterID}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/cnpg/clusters?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/cnpg/backups?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/cnpg/poolers?clusterID=${clusterID}${nsParam}`),
     ]).then(([cl, bk, pl]) => {
       setCounts({
         clusters: cl.status === "fulfilled" ? (cl.value.items?.length ?? 0) : 0,
@@ -30,7 +33,7 @@ export function CnpgOverview() {
         poolers:  pl.status === "fulfilled" ? (pl.value.items?.length ?? 0) : 0,
       });
     });
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-6">

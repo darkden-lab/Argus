@@ -70,16 +70,19 @@ func (p *CnpgPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 	bk := r.PathPrefix("/api/plugins/cnpg/backups").Subrouter()
 	bk.HandleFunc("", h.ListBackups).Methods("GET")
 	bk.HandleFunc("", h.CreateBackup).Methods("POST")
+	bk.HandleFunc("/{name}", h.GetBackup).Methods("GET")
 	bk.HandleFunc("/{name}", h.DeleteBackup).Methods("DELETE")
 
 	sb := r.PathPrefix("/api/plugins/cnpg/scheduledbackups").Subrouter()
 	sb.HandleFunc("", h.ListScheduledBackups).Methods("GET")
 	sb.HandleFunc("", h.CreateScheduledBackup).Methods("POST")
+	sb.HandleFunc("/{name}", h.GetScheduledBackup).Methods("GET")
 	sb.HandleFunc("/{name}", h.DeleteScheduledBackup).Methods("DELETE")
 
 	pl := r.PathPrefix("/api/plugins/cnpg/poolers").Subrouter()
 	pl.HandleFunc("", h.ListPoolers).Methods("GET")
 	pl.HandleFunc("", h.CreatePooler).Methods("POST")
+	pl.HandleFunc("/{name}", h.GetPooler).Methods("GET")
 	pl.HandleFunc("/{name}", h.DeletePooler).Methods("DELETE")
 }
 

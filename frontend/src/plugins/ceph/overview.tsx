@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { StatusBadge } from "@/components/resources/resource-table";
+import { useClusterStore } from "@/stores/cluster";
 
 interface CephCluster {
   metadata: { name: string };
@@ -21,16 +22,18 @@ function CountCard({ label, count }: { label: string; count: number }) {
 export function CephOverview() {
   const [counts, setCounts] = useState({ clusters: 0, blockPools: 0, filesystems: 0, objectStores: 0 });
   const [health, setHealth] = useState<string>("Unknown");
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) return;
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
 
     Promise.allSettled([
-      api.get<{ items: CephCluster[] }>(`/api/plugins/ceph/cephclusters?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephblockpools?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephfilesystems?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephobjectstores?clusterID=${clusterID}`),
+      api.get<{ items: CephCluster[] }>(`/api/plugins/ceph/cephclusters?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephblockpools?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephfilesystems?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephobjectstores?clusterID=${clusterID}${nsParam}`),
     ]).then(([cl, bp, fs, os]) => {
       if (cl.status === "fulfilled" && cl.value.items?.[0]) {
         setHealth(cl.value.items[0].status?.ceph?.health ?? cl.value.items[0].status?.phase ?? "Unknown");
@@ -42,7 +45,7 @@ export function CephOverview() {
         objectStores: os.status === "fulfilled" ? (os.value.items?.length ?? 0) : 0,
       });
     });
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-6">

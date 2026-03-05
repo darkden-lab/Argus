@@ -13,7 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Loader2, X, Play, Pause, AlertCircle } from "lucide-react";
+import { Loader2, X, Play, Pause, AlertCircle, Search, Download } from "lucide-react";
 
 interface LogViewerProps {
   clusterID: string;
@@ -68,11 +68,11 @@ function getLevelBadgeClass(level: string | undefined): string {
     case "warn":
       return "bg-yellow-900/40 text-yellow-400 border-yellow-800/50";
     case "debug":
-      return "bg-gray-800/40 text-gray-500 border-gray-700/50";
+      return "bg-muted/40 text-muted-foreground border-border/50";
     case "info":
       return "bg-blue-900/40 text-blue-400 border-blue-800/50";
     default:
-      return "bg-zinc-800/40 text-zinc-400 border-zinc-700/50";
+      return "bg-muted/40 text-muted-foreground border-border/50";
   }
 }
 
@@ -144,18 +144,34 @@ function normalizeLogData(data: unknown): string {
   return String(data);
 }
 
-function LogLine({ parsed }: { parsed: ParsedLogLine }) {
+function highlightText(text: string, query: string): React.ReactNode {
+  if (!query) return text;
+  const regex = new RegExp(`(${query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")})`, "gi");
+  const parts = text.split(regex);
+  return parts.map((part, i) =>
+    regex.test(part) ? (
+      <mark key={i} className="bg-yellow-200/30 text-inherit rounded-sm px-0.5">
+        {part}
+      </mark>
+    ) : (
+      part
+    )
+  );
+}
+
+function LogLine({ parsed, searchQuery }: { parsed: ParsedLogLine; searchQuery?: string }) {
   if (!parsed.isJson) {
-    return <span>{parsed.raw}</span>;
+    return <span>{highlightText(parsed.raw, searchQuery ?? "")}</span>;
   }
 
   const colorClass = getLevelColorClass(parsed.level);
   const badgeClass = getLevelBadgeClass(parsed.level);
+  const displayText = parsed.message ?? parsed.raw;
 
   return (
     <span className={colorClass}>
       {parsed.timestamp && (
-        <span className="text-zinc-500 select-all">{parsed.timestamp} </span>
+        <span className="text-muted-foreground select-all">{parsed.timestamp} </span>
       )}
       {parsed.level && (
         <span
@@ -164,28 +180,49 @@ function LogLine({ parsed }: { parsed: ParsedLogLine }) {
           {parsed.level}
         </span>
       )}
-      {parsed.message ?? parsed.raw}
+      {highlightText(displayText, searchQuery ?? "")}
     </span>
   );
 }
 
-function LogOutput({ logs }: { logs: string }) {
+function LogOutput({ logs, searchQuery }: { logs: string; searchQuery?: string }) {
   const parsedLines = useMemo(() => {
     if (!logs) return [];
     return logs.split("\n").map((line) => parseLine(line));
   }, [logs]);
 
+  const matchCount = useMemo(() => {
+    if (!searchQuery) return 0;
+    const q = searchQuery.toLowerCase();
+    return parsedLines.filter((p) => p.raw.toLowerCase().includes(q)).length;
+  }, [parsedLines, searchQuery]);
+
   if (parsedLines.length === 0) {
-    return <span className="text-zinc-500">No logs available.</span>;
+    return <span className="text-muted-foreground">No logs available.</span>;
   }
 
   return (
     <>
-      {parsedLines.map((parsed, i) => (
-        <div key={i} className="hover:bg-zinc-900/50 px-1 -mx-1 rounded">
-          <LogLine parsed={parsed} />
+      {searchQuery && (
+        <div className="sticky top-0 bg-background/90 backdrop-blur-sm border-b border-border -mx-4 px-4 py-1.5 mb-2 text-[10px] text-muted-foreground">
+          {matchCount} {matchCount === 1 ? "match" : "matches"}
         </div>
-      ))}
+      )}
+      {parsedLines.map((parsed, i) => {
+        const matches = searchQuery
+          ? parsed.raw.toLowerCase().includes(searchQuery.toLowerCase())
+          : true;
+        return (
+          <div
+            key={i}
+            className={`hover:bg-muted/50 px-1 -mx-1 rounded ${
+              searchQuery && !matches ? "opacity-30" : ""
+            }`}
+          >
+            <LogLine parsed={parsed} searchQuery={searchQuery} />
+          </div>
+        );
+      })}
     </>
   );
 }
@@ -209,6 +246,8 @@ export function LogViewer({
   const [following, setFollowing] = useState(false);
   const [followError, setFollowError] = useState<string | null>(null);
   const [followMode, setFollowMode] = useState<"sse" | "polling" | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [showSearch, setShowSearch] = useState(false);
   const logRef = useRef<HTMLPreElement>(null);
   const eventSourceRef = useRef<EventSource | null>(null);
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -480,6 +519,40 @@ export function LogViewer({
           </span>
         )}
 
+        <Button
+          variant={showSearch ? "default" : "outline"}
+          size="sm"
+          className="h-8 text-xs"
+          onClick={() => {
+            setShowSearch(!showSearch);
+            if (showSearch) setSearchQuery("");
+          }}
+          aria-label="Toggle search"
+        >
+          <Search className="mr-1 h-3 w-3" />
+          Search
+        </Button>
+
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-8 text-xs"
+          disabled={!logs}
+          onClick={() => {
+            const blob = new Blob([logs], { type: "text/plain" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `${podName}${selectedContainer ? `-${selectedContainer}` : ""}-logs.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          aria-label="Download logs"
+        >
+          <Download className="mr-1 h-3 w-3" />
+          Download
+        </Button>
+
         {onClose && (
           <Button
             variant="ghost"
@@ -491,6 +564,30 @@ export function LogViewer({
           </Button>
         )}
       </div>
+
+      {/* Search bar */}
+      {showSearch && (
+        <div className="flex items-center gap-2">
+          <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+          <Input
+            placeholder="Filter logs..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="h-8 text-xs flex-1"
+            autoFocus
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={() => setSearchQuery("")}
+              aria-label="Clear search"
+            >
+              <X className="h-3 w-3" />
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Follow status message */}
       {followError && following && (
@@ -504,17 +601,17 @@ export function LogViewer({
       <pre
         ref={logRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-[300px] max-h-[500px] overflow-auto rounded-md bg-zinc-950 p-4 font-mono text-xs text-zinc-200 leading-5 whitespace-pre-wrap break-all"
+        className="flex-1 min-h-[300px] max-h-[500px] overflow-auto rounded-md bg-background p-4 font-mono text-xs text-foreground leading-5 whitespace-pre-wrap break-all"
       >
         {loading ? (
-          <span className="flex items-center gap-2 text-zinc-500">
+          <span className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading logs...
           </span>
         ) : logs ? (
-          <LogOutput logs={logs} />
+          <LogOutput logs={logs} searchQuery={searchQuery || undefined} />
         ) : (
-          <span className="text-zinc-500">No logs available.</span>
+          <span className="text-muted-foreground">No logs available.</span>
         )}
       </pre>
     </div>

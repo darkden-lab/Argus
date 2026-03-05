@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { ResourceTable, StatusBadge, type Column } from "@/components/resources/resource-table";
+import { useClusterStore } from "@/stores/cluster";
 
 interface CnpgBackup {
   metadata: { name: string; namespace: string };
@@ -22,15 +23,17 @@ const columns: Column<CnpgBackup>[] = [
 export function CnpgBackupList() {
   const [items, setItems] = useState<CnpgBackup[]>([]);
   const [loading, setLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) { setLoading(false); return; }
-    api.get<{ items: CnpgBackup[] }>(`/api/plugins/cnpg/backups?clusterID=${clusterID}`)
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
+    api.get<{ items: CnpgBackup[] }>(`/api/plugins/cnpg/backups?clusterID=${clusterID}${nsParam}`)
       .then((d) => setItems(d.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-4">
@@ -40,23 +43,3 @@ export function CnpgBackupList() {
   );
 }
 
-export function CnpgScheduledBackupList() {
-  const [items, setItems] = useState<CnpgBackup[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
-    if (!clusterID) { setLoading(false); return; }
-    api.get<{ items: CnpgBackup[] }>(`/api/plugins/cnpg/scheduledbackups?clusterID=${clusterID}`)
-      .then((d) => setItems(d.items ?? []))
-      .catch(() => setItems([]))
-      .finally(() => setLoading(false));
-  }, []);
-
-  return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-bold tracking-tight">Scheduled Backups</h1>
-      <ResourceTable data={items} columns={columns} loading={loading} searchPlaceholder="Filter scheduled backups..." />
-    </div>
-  );
-}

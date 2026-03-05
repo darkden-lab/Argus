@@ -144,7 +144,7 @@ export function NetworkPolicyRuleGraph({
   const centerY = svgHeight / 2;
 
   return (
-    <div className="rounded-md border bg-zinc-950/50 p-2 overflow-x-auto">
+    <div className="rounded-md border bg-background/50 p-2 overflow-x-auto">
       <svg width={svgWidth} height={svgHeight} className="w-full" style={{ minWidth: 400 }}>
         <defs>
           <marker

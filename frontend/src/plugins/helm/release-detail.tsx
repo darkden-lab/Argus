@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
+import { DetailPageSkeleton } from "@/components/skeletons";
 import { StatusBadge } from "@/components/resources/resource-table";
 
 interface HelmRelease {
@@ -28,20 +29,18 @@ interface HelmRelease {
   };
 }
 
-interface YamlEditorProps {
-  value: string;
-  readOnly?: boolean;
-}
-
-function YamlEditor({ value, readOnly = true }: YamlEditorProps) {
-  return (
-    <textarea
-      className="w-full font-mono text-xs bg-muted text-foreground rounded border border-border p-3 resize-y min-h-[200px]"
-      value={value}
-      readOnly={readOnly}
-      spellCheck={false}
-    />
-  );
+interface HelmHistoryEntry {
+  revision?: number;
+  updated?: string;
+  status?: string;
+  chart?: string;
+  chartName?: string;
+  chartVersion?: string;
+  appVersion?: string;
+  app_version?: string;
+  description?: string;
+  firstDeployed?: string;
+  lastDeployed?: string;
 }
 
 function toYaml(obj: unknown, indent = 0): string {
@@ -76,8 +75,15 @@ export function HelmReleaseDetail({ name = "", namespace = "" }: ReleaseDetailPr
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"values" | "history" | "conditions">("values");
 
+  const [historyEntries, setHistoryEntries] = useState<HelmHistoryEntry[]>([]);
+  const [valuesText, setValuesText] = useState<string>("");
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [valuesLoading, setValuesLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const clusterID = typeof window !== "undefined" ? (localStorage.getItem("selected_cluster") ?? "") : "";
+
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID || !name || !namespace) { setLoading(false); return; }
     api.get<HelmRelease>(
       `/api/plugins/helm/helmreleases/${name}?clusterID=${clusterID}&namespace=${namespace}`
@@ -85,22 +91,69 @@ export function HelmReleaseDetail({ name = "", namespace = "" }: ReleaseDetailPr
       .then((d) => setRelease(d))
       .catch(() => setRelease(null))
       .finally(() => setLoading(false));
-  }, [name, namespace]);
+  }, [name, namespace, clusterID]);
 
-  if (loading) {
-    return <div className="py-12 text-center text-muted-foreground">Loading...</div>;
-  }
+  useEffect(() => {
+    if (!clusterID || !name || !namespace) return;
 
-  if (!release) {
-    return <div className="py-12 text-center text-muted-foreground">Release not found.</div>;
-  }
+    setHistoryLoading(true);
+    api.get<HelmHistoryEntry[] | { history?: HelmHistoryEntry[] }>(
+      `/api/plugins/helm/${clusterID}/releases/${name}/history?namespace=${namespace}`
+    )
+      .then((d) => {
+        const entries = Array.isArray(d) ? d : (d.history ?? []);
+        setHistoryEntries(entries);
+      })
+      .catch(() => setHistoryEntries([]))
+      .finally(() => setHistoryLoading(false));
+
+    setValuesLoading(true);
+    api.get<Record<string, unknown> | string>(
+      `/api/plugins/helm/${clusterID}/releases/${name}/values?namespace=${namespace}`
+    )
+      .then((d) => {
+        setValuesText(typeof d === "string" ? d : toYaml(d));
+      })
+      .catch(() => setValuesText(""))
+      .finally(() => setValuesLoading(false));
+  }, [clusterID, name, namespace]);
+
+  const handleRollback = useCallback((revision: number) => {
+    if (!window.confirm(`Rollback "${name}" to revision ${revision}?`)) return;
+    api.post(`/api/plugins/helm/${clusterID}/releases/${name}/rollback?namespace=${namespace}`, { revision })
+      .then(() => window.location.reload())
+      .catch(() => {});
+  }, [clusterID, name, namespace]);
+
+  const handleCopy = useCallback(() => {
+    const text = valuesText || (release?.spec?.values ? toYaml(release.spec.values) : "");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }, [valuesText, release]);
+
+  if (loading) return <DetailPageSkeleton />;
+  if (!release) return <div className="py-12 text-center text-muted-foreground">Release not found.</div>;
 
   const ready = release.status?.conditions?.find((c) => c.type === "Ready");
-  const valuesYaml = release.spec?.values ? toYaml(release.spec.values) : "# No values configured";
+  const displayValues = valuesText || (release.spec?.values ? toYaml(release.spec.values) : "# No values configured");
+
+  const displayHistory = historyEntries.length > 0
+    ? historyEntries
+    : (release.status?.history ?? []).map((h, i) => ({
+        revision: i + 1,
+        chart: h.chartName ?? "-",
+        chartVersion: h.chartVersion ?? "-",
+        appVersion: h.appVersion ?? "-",
+        status: h.status ?? "Unknown",
+        firstDeployed: h.firstDeployed,
+        updated: h.lastDeployed,
+        description: "",
+      } as HelmHistoryEntry));
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">{release.metadata.name}</h1>
@@ -111,7 +164,6 @@ export function HelmReleaseDetail({ name = "", namespace = "" }: ReleaseDetailPr
         </div>
       </div>
 
-      {/* Info cards */}
       <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
         <div className="rounded-lg border border-border bg-card p-4">
           <p className="text-xs text-muted-foreground uppercase tracking-wider">Chart</p>
@@ -131,7 +183,6 @@ export function HelmReleaseDetail({ name = "", namespace = "" }: ReleaseDetailPr
         </div>
       </div>
 
-      {/* Tabs */}
       <div>
         <div className="flex gap-1 border-b border-border mb-4">
           {(["values", "history", "conditions"] as const).map((tab) => (
@@ -151,39 +202,73 @@ export function HelmReleaseDetail({ name = "", namespace = "" }: ReleaseDetailPr
 
         {activeTab === "values" && (
           <div className="space-y-2">
-            <p className="text-xs text-muted-foreground">Applied values for this release (read-only).</p>
-            <YamlEditor value={valuesYaml} readOnly />
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                {valuesLoading ? "Loading values..." : "Applied values for this release."}
+              </p>
+              <button
+                onClick={handleCopy}
+                className="text-xs px-3 py-1 rounded border border-border hover:bg-muted transition-colors"
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+            <textarea
+              className="w-full font-mono text-xs bg-muted text-foreground rounded border border-border p-3 resize-y min-h-[200px]"
+              value={displayValues}
+              readOnly
+              spellCheck={false}
+            />
           </div>
         )}
 
         {activeTab === "history" && (
           <div className="space-y-2">
-            {(release.status?.history ?? []).length === 0 ? (
+            {historyLoading ? (
+              <p className="text-sm text-muted-foreground">Loading history...</p>
+            ) : displayHistory.length === 0 ? (
               <p className="text-sm text-muted-foreground">No revision history available.</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border text-left text-xs text-muted-foreground uppercase tracking-wider">
-                      <th className="pb-2 pr-4">Chart</th>
-                      <th className="pb-2 pr-4">Version</th>
-                      <th className="pb-2 pr-4">App Version</th>
+                      <th className="pb-2 pr-4">Revision</th>
                       <th className="pb-2 pr-4">Status</th>
-                      <th className="pb-2 pr-4">First Deployed</th>
-                      <th className="pb-2">Last Deployed</th>
+                      <th className="pb-2 pr-4">Chart</th>
+                      <th className="pb-2 pr-4">App Version</th>
+                      <th className="pb-2 pr-4">Description</th>
+                      <th className="pb-2 pr-4">Updated</th>
+                      <th className="pb-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border">
-                    {release.status!.history!.map((h, i) => (
-                      <tr key={i} className="py-2">
-                        <td className="py-2 pr-4 font-mono">{h.chartName ?? "-"}</td>
-                        <td className="py-2 pr-4">{h.chartVersion ?? "-"}</td>
-                        <td className="py-2 pr-4">{h.appVersion ?? "-"}</td>
+                    {displayHistory.map((h, i) => (
+                      <tr key={h.revision ?? i} className="py-2">
+                        <td className="py-2 pr-4 font-mono">{h.revision ?? i + 1}</td>
                         <td className="py-2 pr-4">
                           <StatusBadge status={h.status ?? "Unknown"} />
                         </td>
-                        <td className="py-2 pr-4 text-muted-foreground text-xs">{h.firstDeployed ?? "-"}</td>
-                        <td className="py-2 text-muted-foreground text-xs">{h.lastDeployed ?? "-"}</td>
+                        <td className="py-2 pr-4 font-mono">
+                          {h.chart ?? `${h.chartName ?? "-"}-${h.chartVersion ?? ""}`}
+                        </td>
+                        <td className="py-2 pr-4">{h.appVersion ?? h.app_version ?? "-"}</td>
+                        <td className="py-2 pr-4 text-muted-foreground text-xs max-w-[200px] truncate">
+                          {h.description ?? "-"}
+                        </td>
+                        <td className="py-2 pr-4 text-muted-foreground text-xs">
+                          {h.updated ?? h.firstDeployed ?? "-"}
+                        </td>
+                        <td className="py-2">
+                          {h.revision && (
+                            <button
+                              onClick={() => handleRollback(h.revision!)}
+                              className="text-xs text-primary hover:underline"
+                            >
+                              Rollback
+                            </button>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>

@@ -63,7 +63,6 @@ describe('SettingsHubPage', () => {
   it('renders exactly 8 settings section cards', () => {
     const { container } = render(<SettingsHubPage />);
 
-    // Each section renders as a Card with cursor-pointer class
     const cards = container.querySelectorAll('[class*="cursor-pointer"]');
     expect(cards).toHaveLength(8);
   });
@@ -141,10 +140,9 @@ describe('SettingsLayout', () => {
       </SettingsLayout>
     );
 
-    expect(screen.getByText('Settings')).toBeInTheDocument();
-    expect(
-      screen.getByText('Manage users, roles, plugins, and authentication.')
-    ).toBeInTheDocument();
+    // With i18n mock, t("title") returns "title", t("subtitle") returns "subtitle"
+    expect(screen.getByText('title')).toBeInTheDocument();
+    expect(screen.getByText('subtitle')).toBeInTheDocument();
   });
 
   it('renders all navigation links', () => {
@@ -154,14 +152,16 @@ describe('SettingsLayout', () => {
       </SettingsLayout>
     );
 
-    expect(screen.getByText('Users')).toBeInTheDocument();
-    expect(screen.getByText('Roles')).toBeInTheDocument();
-    expect(screen.getByText('Plugins')).toBeInTheDocument();
-    expect(screen.getByText('OIDC')).toBeInTheDocument();
-    expect(screen.getByText('Audit Log')).toBeInTheDocument();
-    expect(screen.getByText('Notifications')).toBeInTheDocument();
-    expect(screen.getByText('Channels')).toBeInTheDocument();
-    expect(screen.getByText('AI Assistant')).toBeInTheDocument();
+    // With mock, t("nav.users") returns "nav.users", etc.
+    expect(screen.getByText('nav.profile')).toBeInTheDocument();
+    expect(screen.getByText('nav.users')).toBeInTheDocument();
+    expect(screen.getByText('nav.roles')).toBeInTheDocument();
+    expect(screen.getByText('nav.plugins')).toBeInTheDocument();
+    expect(screen.getByText('nav.oidc')).toBeInTheDocument();
+    expect(screen.getByText('nav.audit')).toBeInTheDocument();
+    expect(screen.getByText('nav.notifications')).toBeInTheDocument();
+    expect(screen.getByText('nav.channels')).toBeInTheDocument();
+    expect(screen.getByText('nav.ai')).toBeInTheDocument();
   });
 
   it('renders navigation links with correct hrefs', () => {
@@ -171,35 +171,35 @@ describe('SettingsLayout', () => {
       </SettingsLayout>
     );
 
-    expect(screen.getByText('Users').closest('a')).toHaveAttribute(
+    expect(screen.getByText('nav.users').closest('a')).toHaveAttribute(
       'href',
       '/settings/users'
     );
-    expect(screen.getByText('Roles').closest('a')).toHaveAttribute(
+    expect(screen.getByText('nav.roles').closest('a')).toHaveAttribute(
       'href',
       '/settings/roles'
     );
-    expect(screen.getByText('Plugins').closest('a')).toHaveAttribute(
+    expect(screen.getByText('nav.plugins').closest('a')).toHaveAttribute(
       'href',
       '/settings/plugins'
     );
-    expect(screen.getByText('OIDC').closest('a')).toHaveAttribute(
+    expect(screen.getByText('nav.oidc').closest('a')).toHaveAttribute(
       'href',
       '/settings/oidc'
     );
-    expect(screen.getByText('Audit Log').closest('a')).toHaveAttribute(
+    expect(screen.getByText('nav.audit').closest('a')).toHaveAttribute(
       'href',
       '/settings/audit'
     );
-    expect(screen.getByText('Notifications').closest('a')).toHaveAttribute(
+    expect(screen.getByText('nav.notifications').closest('a')).toHaveAttribute(
       'href',
       '/settings/notifications'
     );
-    expect(screen.getByText('Channels').closest('a')).toHaveAttribute(
+    expect(screen.getByText('nav.channels').closest('a')).toHaveAttribute(
       'href',
       '/settings/notification-channels'
     );
-    expect(screen.getByText('AI Assistant').closest('a')).toHaveAttribute(
+    expect(screen.getByText('nav.ai').closest('a')).toHaveAttribute(
       'href',
       '/settings/ai'
     );
@@ -222,8 +222,7 @@ describe('SettingsLayout', () => {
       </SettingsLayout>
     );
 
-    const usersLink = screen.getByText('Users').closest('a');
-    // Active link should have the active class (font-medium)
+    const usersLink = screen.getByText('nav.users').closest('a');
     expect(usersLink).toHaveClass('font-medium');
   });
 
@@ -234,7 +233,7 @@ describe('SettingsLayout', () => {
       </SettingsLayout>
     );
 
-    const rolesLink = screen.getByText('Roles').closest('a');
+    const rolesLink = screen.getByText('nav.roles').closest('a');
     expect(rolesLink).not.toHaveClass('font-medium');
   });
 });

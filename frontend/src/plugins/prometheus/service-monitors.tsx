@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PluginTableSkeleton } from "@/components/skeletons";
+import { useClusterStore } from "@/stores/cluster";
 
 interface ServiceMonitor {
   metadata: { name: string; namespace: string };
@@ -11,25 +13,26 @@ interface ServiceMonitor {
 export function ServiceMonitorList() {
   const [items, setItems] = useState<ServiceMonitor[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) { setIsLoading(false); return; }
-
+    const nsParam = namespace ? `?namespace=${namespace}` : "";
     api
       .get<{ items: ServiceMonitor[] }>(
-        `/api/plugins/prometheus/${clusterID}/servicemonitors`
+        `/api/plugins/prometheus/${clusterID}/servicemonitors${nsParam}`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Service Monitors</h1>
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <PluginTableSkeleton />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No service monitors found.</p>
       ) : (

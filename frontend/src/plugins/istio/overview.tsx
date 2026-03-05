@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useClusterStore } from "@/stores/cluster";
 
 interface ResourceCount {
   label: string;
@@ -24,6 +25,7 @@ export function IstioOverview() {
     destinationrules: 0,
     serviceentries: 0,
   });
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID =
@@ -31,19 +33,20 @@ export function IstioOverview() {
         ? (localStorage.getItem("selected_cluster") ?? "")
         : "";
     if (!clusterID) return;
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
 
     Promise.allSettled([
       api.get<{ items: unknown[] }>(
-        `/api/plugins/istio/virtualservices?clusterID=${clusterID}`
+        `/api/plugins/istio/virtualservices?clusterID=${clusterID}${nsParam}`
       ),
       api.get<{ items: unknown[] }>(
-        `/api/plugins/istio/gateways?clusterID=${clusterID}`
+        `/api/plugins/istio/gateways?clusterID=${clusterID}${nsParam}`
       ),
       api.get<{ items: unknown[] }>(
-        `/api/plugins/istio/destinationrules?clusterID=${clusterID}`
+        `/api/plugins/istio/destinationrules?clusterID=${clusterID}${nsParam}`
       ),
       api.get<{ items: unknown[] }>(
-        `/api/plugins/istio/serviceentries?clusterID=${clusterID}`
+        `/api/plugins/istio/serviceentries?clusterID=${clusterID}${nsParam}`
       ),
     ]).then(([vs, gw, dr, se]) => {
       setCounts({
@@ -56,7 +59,7 @@ export function IstioOverview() {
           se.status === "fulfilled" ? (se.value.items?.length ?? 0) : 0,
       });
     });
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-6">

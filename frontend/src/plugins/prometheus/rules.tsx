@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { PluginTableSkeleton } from "@/components/skeletons";
+import { useClusterStore } from "@/stores/cluster";
 
 interface PrometheusRule {
   metadata: { name: string; namespace: string };
@@ -11,25 +13,26 @@ interface PrometheusRule {
 export function RulesList() {
   const [items, setItems] = useState<PrometheusRule[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) { setIsLoading(false); return; }
-
+    const nsParam = namespace ? `?namespace=${namespace}` : "";
     api
       .get<{ items: PrometheusRule[] }>(
-        `/api/plugins/prometheus/${clusterID}/prometheusrules`
+        `/api/plugins/prometheus/${clusterID}/prometheusrules${nsParam}`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-bold tracking-tight">Prometheus Rules</h1>
       {isLoading ? (
-        <p className="text-sm text-muted-foreground">Loading...</p>
+        <PluginTableSkeleton />
       ) : items.length === 0 ? (
         <p className="text-sm text-muted-foreground">No rules found.</p>
       ) : (

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { ResourceTable, StatusBadge, type Column } from "@/components/resources/resource-table";
+import { useClusterStore } from "@/stores/cluster";
 
 interface MariaBackup {
   metadata: { name: string; namespace: string };
@@ -25,15 +26,17 @@ const columns: Column<MariaBackup>[] = [
 export function MariadbBackupList() {
   const [items, setItems] = useState<MariaBackup[]>([]);
   const [loading, setLoading] = useState(true);
+  const namespace = useClusterStore((s) => s.selectedNamespace);
 
   useEffect(() => {
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
     if (!clusterID) { setLoading(false); return; }
-    api.get<{ items: MariaBackup[] }>(`/api/plugins/mariadb/backups?clusterID=${clusterID}`)
+    const nsParam = namespace ? `&namespace=${namespace}` : "";
+    api.get<{ items: MariaBackup[] }>(`/api/plugins/mariadb/backups?clusterID=${clusterID}${nsParam}`)
       .then((d) => setItems(d.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, []);
+  }, [namespace]);
 
   return (
     <div className="space-y-4">

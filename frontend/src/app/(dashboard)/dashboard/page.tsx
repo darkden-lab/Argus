@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { LiveIndicator } from "@/components/ui/live-indicator";
 import { useK8sWildcard } from "@/hooks/use-k8s-socket";
 import { useDashboardStore } from "@/stores/dashboard";
+import { useClusterStore } from "@/stores/cluster";
 import { api } from "@/lib/api";
 import {
   Loader2,
@@ -22,6 +23,7 @@ import {
   AlertTriangle,
   XCircle,
   Server,
+  FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { WatchEvent } from "@/lib/socket";
@@ -44,11 +46,22 @@ interface PluginInfo {
   category: string;
 }
 
+interface ProjectSummary {
+  name: string;
+  namespaces: string[];
+  workloads: number;
+  podsRunning: number;
+  podsTotal: number;
+  health: "healthy" | "degraded" | "unknown";
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { clusters, stats, loading, fetchAll } = useDashboardStore();
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
   const [events, setEvents] = useState<K8sEvent[]>([]);
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
+  const [projects, setProjects] = useState<ProjectSummary[]>([]);
 
   const handleWsEvent = useCallback((event: WatchEvent) => {
     const obj = event.object as Record<string, unknown> | undefined;
@@ -70,6 +83,17 @@ export default function DashboardPage() {
     fetchAll();
     api.get<PluginInfo[]>("/api/plugins/enabled").then(setPlugins).catch(() => {});
   }, [fetchAll]);
+
+  useEffect(() => {
+    if (!selectedClusterId) {
+      setProjects([]);
+      return;
+    }
+    api
+      .get<{ projects: ProjectSummary[] }>(`/api/clusters/${selectedClusterId}/projects`)
+      .then((data) => setProjects(data.projects || []))
+      .catch(() => setProjects([]));
+  }, [selectedClusterId]);
 
   const statCards = [
     {
@@ -247,6 +271,67 @@ export default function DashboardPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              {/* Projects Widget */}
+              {selectedClusterId && (
+                <Card>
+                  <CardHeader className="flex-row items-center justify-between">
+                    <CardTitle className="text-sm font-medium">Projects</CardTitle>
+                    <Button variant="ghost" size="sm" onClick={() => router.push("/projects")}>
+                      View Projects <ArrowRight className="ml-1 h-3 w-3" />
+                    </Button>
+                  </CardHeader>
+                  <CardContent>
+                    {projects.length === 0 ? (
+                      <div className="text-center py-4">
+                        <FolderOpen className="mx-auto h-8 w-8 text-muted-foreground/50 mb-2" />
+                        <p className="text-xs text-muted-foreground">
+                          No projects yet. Add label{" "}
+                          <code className="rounded bg-muted px-1 py-0.5 text-[10px]">
+                            argus.darkden.net/projects
+                          </code>
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <span className="h-2 w-2 rounded-full bg-success" />
+                            {projects.filter((p) => p.health === "healthy").length} healthy
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="h-2 w-2 rounded-full bg-warning" />
+                            {projects.filter((p) => p.health === "degraded").length} degraded
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="h-2 w-2 rounded-full bg-muted-foreground" />
+                            {projects.filter((p) => p.health === "unknown").length} unknown
+                          </span>
+                        </div>
+                        {projects.slice(0, 5).map((p) => (
+                          <div
+                            key={p.name}
+                            className="flex items-center justify-between text-sm cursor-pointer hover:bg-muted/50 rounded px-1 py-0.5"
+                            onClick={() => router.push(`/projects/${p.name}`)}
+                          >
+                            <span className="truncate">{p.name}</span>
+                            <span
+                              className={cn(
+                                "h-2 w-2 shrink-0 rounded-full",
+                                p.health === "healthy"
+                                  ? "bg-success"
+                                  : p.health === "degraded"
+                                    ? "bg-warning"
+                                    : "bg-muted-foreground"
+                              )}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
 
               {/* Active Plugins */}
               <Card>

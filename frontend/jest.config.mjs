@@ -17,6 +17,8 @@ const config = {
     '^react-markdown$': '<rootDir>/src/__tests__/__mocks__/react-markdown.tsx',
     '^remark-gfm$': '<rootDir>/src/__tests__/__mocks__/remark-gfm.ts',
     '^sugar-high$': '<rootDir>/src/__tests__/__mocks__/sugar-high.ts',
+    '^next-intl$': '<rootDir>/src/__tests__/__mocks__/next-intl.tsx',
+    '^next-intl/(.*)$': '<rootDir>/src/__tests__/__mocks__/next-intl.tsx',
   },
   setupFilesAfterEnv: ['<rootDir>/src/__tests__/setup.ts'],
   collectCoverageFrom: [

@@ -27,14 +27,20 @@ func NewRoleHandlers(pool *pgxpool.Pool, engine *Engine) *RoleHandlers {
 // RegisterRoutes registers role management routes on the given router.
 func (h *RoleHandlers) RegisterRoutes(r *mux.Router) {
 	r.HandleFunc("/api/roles", h.handleListRoles).Methods("GET")
+	r.HandleFunc("/api/roles", h.handleCreateRole).Methods("POST")
 	r.HandleFunc("/api/roles/assignments", h.handleListAssignments).Methods("GET")
 	r.HandleFunc("/api/roles/assign", h.handleAssignRole).Methods("POST")
 	r.HandleFunc("/api/roles/revoke/{id}", h.handleRevokeRole).Methods("DELETE")
+	r.HandleFunc("/api/roles/{id}", h.handleDeleteRole).Methods("DELETE")
+	r.HandleFunc("/api/roles/{id}/permissions", h.handleListRolePermissions).Methods("GET")
+	r.HandleFunc("/api/roles/{id}/permissions", h.handleAddRolePermission).Methods("POST")
+	r.HandleFunc("/api/roles/{id}/permissions/{permId}", h.handleRemoveRolePermission).Methods("DELETE")
 }
 
 // --- Response types ---
 
 type rolePermissionResponse struct {
+	ID        string `json:"id"`
 	Resource  string `json:"resource"`
 	Action    string `json:"action"`
 	ScopeType string `json:"scope_type"`
@@ -96,6 +102,7 @@ func (h *RoleHandlers) handleListRoles(w http.ResponseWriter, r *http.Request) {
 	query := `
 		SELECT r.id, r.name, COALESCE(r.description, ''),
 		       COALESCE(json_agg(json_build_object(
+		           'id', rp.id::text,
 		           'resource', rp.resource,
 		           'action', rp.action,
 		           'scope_type', rp.scope_type,
@@ -312,4 +319,181 @@ func (h *RoleHandlers) handleRevokeRole(w http.ResponseWriter, r *http.Request) 
 	h.engine.InvalidateCache(userID)
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"message": "role revoked successfully"})
+}
+
+// handleCreateRole creates a new custom role. Built-in role names are protected.
+func (h *RoleHandlers) handleCreateRole(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "write") {
+		return
+	}
+
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Name == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+
+	builtInRoles := map[string]bool{"admin": true, "operator": true, "developer": true, "viewer": true}
+	if builtInRoles[req.Name] {
+		httputil.WriteError(w, http.StatusBadRequest, "cannot create role with reserved name")
+		return
+	}
+
+	var id string
+	err := h.pool.QueryRow(r.Context(),
+		`INSERT INTO roles (name, description) VALUES ($1, $2) RETURNING id`,
+		req.Name, req.Description,
+	).Scan(&id)
+	if err != nil {
+		log.Printf("ERROR: failed to create role: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to create role")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": id, "message": "role created"})
+}
+
+// handleDeleteRole deletes a custom role. Built-in roles cannot be deleted.
+func (h *RoleHandlers) handleDeleteRole(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "write") {
+		return
+	}
+
+	id := mux.Vars(r)["id"]
+
+	var name string
+	err := h.pool.QueryRow(r.Context(), "SELECT name FROM roles WHERE id = $1", id).Scan(&name)
+	if err != nil {
+		httputil.WriteError(w, http.StatusNotFound, "role not found")
+		return
+	}
+
+	builtInRoles := map[string]bool{"admin": true, "operator": true, "developer": true, "viewer": true}
+	if builtInRoles[name] {
+		httputil.WriteError(w, http.StatusBadRequest, "cannot delete built-in role")
+		return
+	}
+
+	h.engine.InvalidateUsersWithRole(r.Context(), id)
+
+	_, err = h.pool.Exec(r.Context(), "DELETE FROM roles WHERE id = $1", id)
+	if err != nil {
+		log.Printf("ERROR: failed to delete role: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to delete role")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"message": "role deleted"})
+}
+
+// handleListRolePermissions returns all permissions for a specific role.
+func (h *RoleHandlers) handleListRolePermissions(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "read") {
+		return
+	}
+
+	roleID := mux.Vars(r)["id"]
+
+	rows, err := h.pool.Query(r.Context(),
+		`SELECT id::text, resource, action, scope_type, COALESCE(scope_id, '')
+		 FROM role_permissions WHERE role_id = $1 ORDER BY resource, action`,
+		roleID)
+	if err != nil {
+		log.Printf("ERROR: failed to list role permissions: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to list permissions")
+		return
+	}
+	defer rows.Close()
+
+	perms := make([]rolePermissionResponse, 0)
+	for rows.Next() {
+		var p rolePermissionResponse
+		if err := rows.Scan(&p.ID, &p.Resource, &p.Action, &p.ScopeType, &p.ScopeID); err != nil {
+			log.Printf("ERROR: failed to scan permission: %v", err)
+			httputil.WriteError(w, http.StatusInternalServerError, "failed to scan permission")
+			return
+		}
+		perms = append(perms, p)
+	}
+	httputil.WriteJSON(w, http.StatusOK, perms)
+}
+
+// handleAddRolePermission adds a permission to a role.
+func (h *RoleHandlers) handleAddRolePermission(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "write") {
+		return
+	}
+
+	roleID := mux.Vars(r)["id"]
+
+	var req struct {
+		Resource  string `json:"resource"`
+		Action    string `json:"action"`
+		ScopeType string `json:"scope_type"`
+		ScopeID   string `json:"scope_id"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Resource == "" || req.Action == "" || req.ScopeType == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "resource, action, and scope_type are required")
+		return
+	}
+
+	var scopeID interface{}
+	if req.ScopeID != "" {
+		scopeID = req.ScopeID
+	}
+
+	var permID string
+	err := h.pool.QueryRow(r.Context(),
+		`INSERT INTO role_permissions (role_id, resource, action, scope_type, scope_id)
+		 VALUES ($1, $2, $3, $4, $5)
+		 ON CONFLICT DO NOTHING
+		 RETURNING id::text`,
+		roleID, req.Resource, req.Action, req.ScopeType, scopeID,
+	).Scan(&permID)
+	if err != nil {
+		log.Printf("ERROR: failed to add permission: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to add permission")
+		return
+	}
+
+	h.engine.InvalidateUsersWithRole(r.Context(), roleID)
+
+	httputil.WriteJSON(w, http.StatusCreated, map[string]string{"id": permID, "message": "permission added"})
+}
+
+// handleRemoveRolePermission removes a specific permission from a role.
+func (h *RoleHandlers) handleRemoveRolePermission(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePermission(w, r, "roles", "write") {
+		return
+	}
+
+	vars := mux.Vars(r)
+	roleID := vars["id"]
+	permID := vars["permId"]
+
+	result, err := h.pool.Exec(r.Context(),
+		"DELETE FROM role_permissions WHERE id = $1 AND role_id = $2",
+		permID, roleID)
+	if err != nil {
+		log.Printf("ERROR: failed to remove permission: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to remove permission")
+		return
+	}
+	if result.RowsAffected() == 0 {
+		httputil.WriteError(w, http.StatusNotFound, "permission not found")
+		return
+	}
+
+	h.engine.InvalidateUsersWithRole(r.Context(), roleID)
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"message": "permission removed"})
 }
