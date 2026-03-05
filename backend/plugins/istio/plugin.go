@@ -83,11 +83,13 @@ func (p *IstioPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 
 	dr := r.PathPrefix("/api/plugins/istio/destinationrules").Subrouter()
 	dr.HandleFunc("", h.ListDestinationRules).Methods("GET")
+	dr.HandleFunc("", h.CreateDestinationRule).Methods("POST")
 	dr.HandleFunc("/{name}", h.GetDestinationRule).Methods("GET")
 	dr.HandleFunc("/{name}", h.DeleteDestinationRule).Methods("DELETE")
 
 	se := r.PathPrefix("/api/plugins/istio/serviceentries").Subrouter()
 	se.HandleFunc("", h.ListServiceEntries).Methods("GET")
+	se.HandleFunc("", h.CreateServiceEntry).Methods("POST")
 	se.HandleFunc("/{name}", h.GetServiceEntry).Methods("GET")
 	se.HandleFunc("/{name}", h.DeleteServiceEntry).Methods("DELETE")
 

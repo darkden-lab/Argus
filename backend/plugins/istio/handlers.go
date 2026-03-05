@@ -70,6 +70,10 @@ func (h *handlers) GetDestinationRule(w http.ResponseWriter, r *http.Request) {
 	h.get(w, r, gvrDestinationRules)
 }
 
+func (h *handlers) CreateDestinationRule(w http.ResponseWriter, r *http.Request) {
+	h.create(w, r, gvrDestinationRules)
+}
+
 func (h *handlers) DeleteDestinationRule(w http.ResponseWriter, r *http.Request) {
 	h.del(w, r, gvrDestinationRules)
 }
@@ -82,6 +86,10 @@ func (h *handlers) ListServiceEntries(w http.ResponseWriter, r *http.Request) {
 
 func (h *handlers) GetServiceEntry(w http.ResponseWriter, r *http.Request) {
 	h.get(w, r, gvrServiceEntries)
+}
+
+func (h *handlers) CreateServiceEntry(w http.ResponseWriter, r *http.Request) {
+	h.create(w, r, gvrServiceEntries)
 }
 
 func (h *handlers) DeleteServiceEntry(w http.ResponseWriter, r *http.Request) {

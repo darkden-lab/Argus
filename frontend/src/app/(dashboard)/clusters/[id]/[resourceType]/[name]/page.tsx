@@ -63,107 +63,9 @@ function resourceToOverview(resource: Record<string, unknown>): Array<{ key: str
   return entries;
 }
 
-function parseSimpleYaml(yaml: string): Record<string, unknown> {
-  // Parse the simple YAML format produced by toYaml back to an object.
-  // This handles the subset of YAML our toYaml generates (no multi-line strings, no anchors, etc.)
-  const lines = yaml.split("\n");
-  const root: Record<string, unknown> = {};
-  const stack: { indent: number; obj: Record<string, unknown> | unknown[]; key?: string }[] = [
-    { indent: -1, obj: root },
-  ];
-
-  for (const line of lines) {
-    if (line.trim() === "" || line.trim() === "{}") continue;
-
-    const stripped = line.replace(/^(\s*)/, "");
-    const currentIndent = line.length - stripped.length;
-
-    // Pop stack to find parent
-    while (stack.length > 1 && stack[stack.length - 1].indent >= currentIndent) {
-      stack.pop();
-    }
-    const parent = stack[stack.length - 1];
-
-    if (stripped.startsWith("- ")) {
-      // Array item
-      const value = stripped.slice(2).trim();
-      if (Array.isArray(parent.obj)) {
-        if (value.includes(": ")) {
-          const obj: Record<string, unknown> = {};
-          const colonIdx = value.indexOf(": ");
-          obj[value.slice(0, colonIdx)] = parseYamlValue(value.slice(colonIdx + 2));
-          (parent.obj as unknown[]).push(obj);
-          stack.push({ indent: currentIndent + 2, obj });
-        } else {
-          (parent.obj as unknown[]).push(parseYamlValue(value));
-        }
-      }
-    } else if (stripped.includes(": ")) {
-      const colonIdx = stripped.indexOf(": ");
-      const key = stripped.slice(0, colonIdx);
-      const value = stripped.slice(colonIdx + 2);
-
-      if (!Array.isArray(parent.obj)) {
-        parent.obj[key] = parseYamlValue(value);
-      }
-    } else if (stripped.endsWith(":")) {
-      // Object or array follows
-      const key = stripped.slice(0, -1);
-      // Peek at next line to determine if array or object
-      const nextLineIdx = lines.indexOf(line) + 1;
-      const nextLine = nextLineIdx < lines.length ? lines[nextLineIdx].trim() : "";
-
-      let child: Record<string, unknown> | unknown[];
-      if (nextLine.startsWith("- ")) {
-        child = [];
-      } else {
-        child = {};
-      }
-
-      if (!Array.isArray(parent.obj)) {
-        parent.obj[key] = child;
-      }
-      stack.push({ indent: currentIndent, obj: child, key });
-    }
-  }
-
-  return root;
-}
-
-function parseYamlValue(value: string): unknown {
-  if (value === "null") return null;
-  if (value === "true") return true;
-  if (value === "false") return false;
-  if (value === "[]") return [];
-  if (value === "{}") return {};
-  const num = Number(value);
-  if (!isNaN(num) && value !== "") return num;
-  return value;
-}
-
-function toYaml(obj: unknown, indent = 0): string {
-  const pad = "  ".repeat(indent);
-  if (obj === null || obj === undefined) return `${pad}null`;
-  if (typeof obj === "string") return `${pad}${obj}`;
-  if (typeof obj === "number" || typeof obj === "boolean") return `${pad}${obj}`;
-  if (Array.isArray(obj)) {
-    if (obj.length === 0) return `${pad}[]`;
-    return obj.map((item) => `${pad}- ${toYaml(item, indent + 1).trimStart()}`).join("\n");
-  }
-  if (typeof obj === "object") {
-    const entries = Object.entries(obj as Record<string, unknown>);
-    if (entries.length === 0) return `${pad}{}`;
-    return entries
-      .map(([key, val]) => {
-        if (val && typeof val === "object") {
-          return `${pad}${key}:\n${toYaml(val, indent + 1)}`;
-        }
-        return `${pad}${key}: ${val === null ? "null" : String(val)}`;
-      })
-      .join("\n");
-  }
-  return `${pad}${String(obj)}`;
-}
+// Resource serialization uses JSON (the native K8s API format) to avoid
+// data corruption that occurred with the previous custom YAML parser.
+// JSON round-trips losslessly for all K8s resource structures.
 
 export default function ResourceDetailPage() {
   const params = useParams();
@@ -231,9 +133,9 @@ export default function ResourceDetailPage() {
     }
   }
 
-  async function handleSaveYaml(yaml: string) {
+  async function handleSaveYaml(json: string) {
     try {
-      const parsed = parseSimpleYaml(yaml);
+      const parsed = JSON.parse(json) as Record<string, unknown>;
       await api.put(
         `/api/clusters/${clusterId}/resources/${gvr}/${resourceName}`,
         parsed
@@ -243,7 +145,7 @@ export default function ResourceDetailPage() {
     } catch (err) {
       toast("Failed to save", {
         variant: "error",
-        description: err instanceof Error ? err.message : "Could not update resource.",
+        description: err instanceof Error ? err.message : "Could not update resource. Check JSON syntax.",
       });
     }
   }
@@ -290,7 +192,7 @@ export default function ResourceDetailPage() {
         kind={kind}
         namespace={meta?.namespace as string | undefined}
         overview={resourceToOverview(resource)}
-        yaml={toYaml(resource)}
+        yaml={JSON.stringify(resource, null, 2)}
         events={events}
         onDelete={canDelete ? handleDelete : undefined}
         onSaveYaml={handleSaveYaml}

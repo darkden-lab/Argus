@@ -9,6 +9,7 @@ import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { HardDrive, Database, Loader2, FolderOpen, Plus } from "lucide-react";
 import { CreatePVCWizard } from "@/components/resources/create-pvc-wizard";
+import { useClusterStore } from "@/stores/cluster";
 
 interface K8sMeta {
   name: string;
@@ -59,21 +60,9 @@ export default function StoragePage() {
   const [pvcs, setPVCs] = useState<PVC[]>([]);
   const [storageClasses, setStorageClasses] = useState<StorageClass[]>([]);
   const [pvs, setPVs] = useState<PV[]>([]);
-  const [clusters, setClusters] = useState<Array<{ id: string; name: string; status: string }>>([]);
-  const [selectedCluster, setSelectedCluster] = useState<string>("");
+  const selectedCluster = useClusterStore((s) => s.selectedClusterId) ?? "";
   const [loading, setLoading] = useState(true);
   const [showCreatePVC, setShowCreatePVC] = useState(false);
-
-  useEffect(() => {
-    api
-      .get<Array<{ id: string; name: string; status: string }>>("/api/clusters")
-      .then((data) => {
-        setClusters(data);
-        const connected = data.find((c) => c.status === "connected" || c.status === "healthy");
-        if (connected) setSelectedCluster(connected.id);
-      })
-      .catch(() => setLoading(false));
-  }, []);
 
   const fetchData = useCallback(async () => {
     if (!selectedCluster) { setLoading(false); return; }
@@ -99,12 +88,7 @@ export default function StoragePage() {
           <p className="text-sm text-muted-foreground">Persistent Volumes, PVCs, and Storage Classes.</p>
         </div>
         <div className="flex items-center gap-2">
-          {clusters.length > 1 && (
-            <select value={selectedCluster} onChange={(e) => setSelectedCluster(e.target.value)}
-              className="rounded-md border bg-background px-3 py-1.5 text-sm">
-              {clusters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          )}
+          {/* Cluster selection is handled by the global sidebar selector */}
           {selectedCluster && (
             <Button size="sm" onClick={() => setShowCreatePVC(true)}>
               <Plus className="mr-1.5 h-3.5 w-3.5" />

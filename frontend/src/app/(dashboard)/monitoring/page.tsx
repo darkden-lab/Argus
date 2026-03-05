@@ -44,9 +44,7 @@ export default function MonitoringPage() {
   const [enablingPrometheus, setEnablingPrometheus] = useState(false);
   const [hasConfig, setHasConfig] = useState(false);
   const [configLoading, setConfigLoading] = useState(true);
-  const clusters = useClusterStore((s) => s.clusters);
   const selectedCluster = useClusterStore((s) => s.selectedClusterId) ?? "";
-  const setSelectedCluster = useClusterStore((s) => s.setSelectedClusterId);
   const fetchClusters = useClusterStore((s) => s.fetchClusters);
   const clustersLoading = useClusterStore((s) => s.loading);
   const [nodes, setNodes] = useState<Array<Record<string, unknown>>>([]);
@@ -125,12 +123,7 @@ export default function MonitoringPage() {
           <h1 className="text-2xl font-bold tracking-tight">Monitoring</h1>
           <p className="text-sm text-muted-foreground">Cluster health and resource usage.</p>
         </div>
-        {clusters.length > 1 && (
-          <select value={selectedCluster} onChange={(e) => setSelectedCluster(e.target.value)}
-            className="rounded-md border bg-background px-3 py-1.5 text-sm">
-            {clusters.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
-        )}
+{/* Cluster selection is handled by the global sidebar selector */}
       </div>
 
       {!prometheusEnabled && (
