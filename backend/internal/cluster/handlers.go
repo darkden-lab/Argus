@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"strings"
 
 	"github.com/gorilla/mux"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +32,7 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 		writeAPI.Use(h.rbacWriteGuard)
 	}
 	writeAPI.HandleFunc("", h.handleCreate).Methods("POST")
+	writeAPI.HandleFunc("/{id}", h.handleUpdate).Methods("PUT")
 	writeAPI.HandleFunc("/{id}", h.handleDelete).Methods("DELETE")
 	writeAPI.HandleFunc("/{id}/health", h.handleHealthCheck).Methods("POST")
 }
@@ -69,6 +71,50 @@ func (h *Handlers) handleCreate(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusCreated, cluster)
+}
+
+type updateClusterRequest struct {
+	Name         *string `json:"name"`
+	APIServerURL *string `json:"api_server_url"`
+}
+
+func (h *Handlers) handleUpdate(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	var req updateClusterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	existing, err := h.manager.store.GetCluster(r.Context(), id)
+	if err != nil {
+		httputil.WriteError(w, http.StatusNotFound, "cluster not found")
+		return
+	}
+
+	name := existing.Name
+	apiServerURL := existing.APIServerURL
+	if req.Name != nil {
+		name = strings.TrimSpace(*req.Name)
+	}
+	if req.APIServerURL != nil {
+		apiServerURL = strings.TrimSpace(*req.APIServerURL)
+	}
+
+	if name == "" || apiServerURL == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "name and api_server_url must not be empty")
+		return
+	}
+
+	cluster, err := h.manager.UpdateCluster(r.Context(), id, name, apiServerURL)
+	if err != nil {
+		log.Printf("cluster: UpdateCluster error: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to update cluster")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, cluster)
 }
 
 func (h *Handlers) handleList(w http.ResponseWriter, r *http.Request) {

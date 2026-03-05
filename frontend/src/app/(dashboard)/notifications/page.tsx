@@ -19,6 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import type {
   Notification,
@@ -107,6 +108,7 @@ export default function NotificationsPage() {
   const [total, setTotal] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const router = useRouter();
   const perPage = 20;
 
   const fetchUnreadCount = useNotificationStore(
@@ -296,7 +298,7 @@ export default function NotificationsPage() {
                                 className="h-6 text-xs"
                                 onClick={() => {
                                   const resourceType = meta.resource_type ?? "pods";
-                                  window.location.href = `/clusters/${meta.cluster_id}/${resourceType}`;
+                                  router.push(`/clusters/${meta.cluster_id}/${resourceType}`);
                                 }}
                               >
                                 View Resource
@@ -308,7 +310,7 @@ export default function NotificationsPage() {
                                 size="sm"
                                 className="h-6 text-xs"
                                 onClick={() => {
-                                  window.location.href = `/clusters/${meta.cluster_id}`;
+                                  router.push(`/clusters/${meta.cluster_id}`);
                                 }}
                               >
                                 View Cluster
