@@ -33,7 +33,7 @@ export function CephFilesystemList() {
     const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setLoading(false); return; }
     const nsParam = namespace ? `&namespace=${namespace}` : "";
-    api.get<{ items: CephFilesystem[] }>(`/api/plugins/ceph/cephfilesystems?clusterID=${clusterID}${nsParam}`)
+    api.get<{ items: CephFilesystem[] }>(`/api/plugins/ceph/filesystems?clusterID=${clusterID}${nsParam}`)
       .then((d) => setItems(d.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));

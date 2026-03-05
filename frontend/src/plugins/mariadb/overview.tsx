@@ -24,7 +24,7 @@ export function MariadbOverview() {
     const nsParam = namespace ? `&namespace=${namespace}` : "";
 
     Promise.allSettled([
-      api.get<{ items: unknown[] }>(`/api/plugins/mariadb/mariadbs?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/mariadb/instances?clusterID=${clusterID}${nsParam}`),
       api.get<{ items: unknown[] }>(`/api/plugins/mariadb/databases?clusterID=${clusterID}${nsParam}`),
       api.get<{ items: unknown[] }>(`/api/plugins/mariadb/backups?clusterID=${clusterID}${nsParam}`),
       api.get<{ items: unknown[] }>(`/api/plugins/mariadb/users?clusterID=${clusterID}${nsParam}`),

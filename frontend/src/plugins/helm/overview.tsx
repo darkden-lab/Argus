@@ -23,8 +23,8 @@ export function HelmOverview() {
   useEffect(() => {
     const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setLoading(false); return; }
-    const nsParam = namespace ? `&namespace=${namespace}` : "";
-    api.get<{ items: HelmRelease[] }>(`/api/plugins/helm/helmreleases?clusterID=${clusterID}${nsParam}`)
+    const nsParam = namespace ? `?namespace=${namespace}` : "";
+    api.get<{ items: HelmRelease[] }>(`/api/plugins/helm/${clusterID}/releases${nsParam}`)
       .then((d) => setReleases(d.items ?? []))
       .catch(() => setReleases([]))
       .finally(() => setLoading(false));

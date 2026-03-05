@@ -25,7 +25,7 @@ export function GlobalNetworkPolicyList() {
 
     api
       .get<{ items: GlobalNetworkPolicy[] }>(
-        `/api/plugins/calico/globalnetworkpolicies?clusterID=${clusterID}`
+        `/api/plugins/calico/${clusterID}/globalnetworkpolicies`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))

@@ -258,11 +258,18 @@ func (idx *Indexer) indexClusterCRDs(ctx context.Context) error {
 func (idx *Indexer) GetStatus() map[string]interface{} {
 	idx.mu.Lock()
 	defer idx.mu.Unlock()
+
+	var lastIndexed interface{}
+	if !idx.LastRun.IsZero() {
+		lastIndexed = idx.LastRun.Format(time.RFC3339)
+	}
+
 	return map[string]interface{}{
-		"status":     idx.Status,
-		"last_run":   idx.LastRun,
-		"docs_count": idx.DocsCount,
-		"error":      idx.Error,
+		"indexed_documents": idx.DocsCount,
+		"last_indexed_at":   lastIndexed,
+		"is_indexing":       idx.Status == "running",
+		"status":            idx.Status,
+		"error":             idx.Error,
 	}
 }
 

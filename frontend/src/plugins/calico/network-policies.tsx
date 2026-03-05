@@ -23,10 +23,10 @@ export function NetworkPolicyList() {
   useEffect(() => {
     const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setIsLoading(false); return; }
-    const nsParam = namespace ? `&namespace=${namespace}` : "";
+    const nsParam = namespace ? `?namespace=${namespace}` : "";
     api
       .get<{ items: NetworkPolicy[] }>(
-        `/api/plugins/calico/networkpolicies?clusterID=${clusterID}${nsParam}`
+        `/api/plugins/calico/${clusterID}/networkpolicies${nsParam}`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))

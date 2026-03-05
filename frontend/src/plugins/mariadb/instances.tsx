@@ -35,7 +35,7 @@ export function MariadbInstanceList() {
     const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setLoading(false); return; }
     const nsParam = namespace ? `&namespace=${namespace}` : "";
-    api.get<{ items: MariaDBInstance[] }>(`/api/plugins/mariadb/mariadbs?clusterID=${clusterID}${nsParam}`)
+    api.get<{ items: MariaDBInstance[] }>(`/api/plugins/mariadb/instances?clusterID=${clusterID}${nsParam}`)
       .then((d) => setItems(d.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));

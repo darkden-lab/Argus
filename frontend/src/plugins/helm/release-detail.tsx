@@ -88,7 +88,7 @@ export function HelmReleaseDetail({ name = "", namespace = "" }: ReleaseDetailPr
   useEffect(() => {
     if (!clusterID || !name || !namespace) { setLoading(false); return; }
     api.get<HelmRelease>(
-      `/api/plugins/helm/helmreleases/${name}?clusterID=${clusterID}&namespace=${namespace}`
+      `/api/plugins/helm/${clusterID}/releases/${name}?namespace=${namespace}`
     )
       .then((d) => setRelease(d))
       .catch(() => setRelease(null))

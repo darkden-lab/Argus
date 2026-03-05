@@ -31,10 +31,10 @@ export function CephOverview() {
     const nsParam = namespace ? `&namespace=${namespace}` : "";
 
     Promise.allSettled([
-      api.get<{ items: CephCluster[] }>(`/api/plugins/ceph/cephclusters?clusterID=${clusterID}${nsParam}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephblockpools?clusterID=${clusterID}${nsParam}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephfilesystems?clusterID=${clusterID}${nsParam}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/ceph/cephobjectstores?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: CephCluster[] }>(`/api/plugins/ceph/clusters?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/ceph/blockpools?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/ceph/filesystems?clusterID=${clusterID}${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/ceph/objectstores?clusterID=${clusterID}${nsParam}`),
     ]).then(([cl, bp, fs, os]) => {
       if (cl.status === "fulfilled" && cl.value.items?.[0]) {
         setHealth(cl.value.items[0].status?.ceph?.health ?? cl.value.items[0].status?.phase ?? "Unknown");

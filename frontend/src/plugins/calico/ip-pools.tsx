@@ -26,7 +26,7 @@ export function IPPoolList() {
 
     api
       .get<{ items: IPPool[] }>(
-        `/api/plugins/calico/ippools?clusterID=${clusterID}`
+        `/api/plugins/calico/${clusterID}/ippools`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))

@@ -36,7 +36,7 @@ export function CephClusterList() {
     const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setLoading(false); return; }
     const nsParam = namespace ? `&namespace=${namespace}` : "";
-    api.get<{ items: CephCluster[] }>(`/api/plugins/ceph/cephclusters?clusterID=${clusterID}${nsParam}`)
+    api.get<{ items: CephCluster[] }>(`/api/plugins/ceph/clusters?clusterID=${clusterID}${nsParam}`)
       .then((d) => setItems(d.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
