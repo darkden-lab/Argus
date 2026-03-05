@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useTranslations } from "next-intl";
-import { User, Users, Shield, Puzzle, KeyRound, ScrollText, Bell, Bot, Radio } from "lucide-react";
+import { User, Users, Shield, Puzzle, KeyRound, Key, ScrollText, Bell, Bot, Radio } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LucideIcon } from "lucide-react";
 
@@ -19,6 +19,7 @@ const settingsNavItems: SettingsNavItem[] = [
   { key: "roles", href: "/settings/roles", icon: Shield },
   { key: "plugins", href: "/settings/plugins", icon: Puzzle },
   { key: "oidc", href: "/settings/oidc", icon: KeyRound },
+  { key: "apiKeys", href: "/settings/api-keys", icon: Key },
   { key: "audit", href: "/settings/audit", icon: ScrollText },
   { key: "notifications", href: "/settings/notifications", icon: Bell },
   { key: "channels", href: "/settings/notification-channels", icon: Radio },

@@ -8,9 +8,26 @@ import (
 	"github.com/darkden-lab/argus/backend/internal/auth"
 )
 
-func AuthMiddleware(jwtService *auth.JWTService) func(http.Handler) http.Handler {
+func AuthMiddleware(jwtService *auth.JWTService, apiKeyService ...*auth.APIKeyService) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check X-API-Key header first
+			if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
+				if len(apiKeyService) > 0 && apiKeyService[0] != nil {
+					claims, err := apiKeyService[0].ValidateKey(r.Context(), apiKey)
+					if err != nil {
+						writeError(w, http.StatusUnauthorized, "invalid or expired API key")
+						return
+					}
+					ctx := auth.ContextWithClaims(r.Context(), claims)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+				writeError(w, http.StatusUnauthorized, "API key authentication not available")
+				return
+			}
+
+			// Fall through to JWT authentication
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
 				writeError(w, http.StatusUnauthorized, "missing authorization header")

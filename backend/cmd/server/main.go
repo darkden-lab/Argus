@@ -92,6 +92,7 @@ func main() {
 	jwtService := auth.NewJWTService(cfg.JWTSecret)
 	authService := auth.NewAuthService(database, jwtService)
 	authHandlers := auth.NewHandlers(authService)
+	apiKeyService := auth.NewAPIKeyService(pool)
 
 	// Setup wizard
 	setupService := setup.NewService(pool)
@@ -203,7 +204,7 @@ func main() {
 
 	// Protected routes
 	protected := r.PathPrefix("").Subrouter()
-	protected.Use(mw.AuthMiddleware(jwtService))
+	protected.Use(mw.AuthMiddleware(jwtService, apiKeyService))
 	// Guard: block all protected routes if initial setup is pending
 	protected.Use(setup.GuardMiddleware(setupService))
 	if pool != nil {
@@ -225,6 +226,10 @@ func main() {
 	// Profile & preferences routes (self-service, any authenticated user)
 	profileHandlers := auth.NewProfileHandlers(authService, pool)
 	profileHandlers.RegisterRoutes(protected)
+
+	// API Key management routes
+	apiKeyHandlers := auth.NewAPIKeyHandlers(apiKeyService)
+	apiKeyHandlers.RegisterRoutes(protected)
 
 	// OIDC group -> role mapping routes (write endpoints require settings:write RBAC)
 	oidcMappingHandlers := auth.NewOIDCMappingHandlers(pool, rbac.RBACMiddleware(rbacEngine, "settings", "write"))
@@ -529,7 +534,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 			}
 		}
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 
