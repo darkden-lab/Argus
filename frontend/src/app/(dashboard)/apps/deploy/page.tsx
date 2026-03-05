@@ -163,6 +163,14 @@ export default function DeployAppPage() {
   const [deployResult, setDeployResult] = useState<"success" | "error" | null>(
     null
   );
+  const [namespaces, setNamespaces] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!selectedClusterId) return;
+    api.get<{ name: string }[]>(`/api/clusters/${selectedClusterId}/namespaces`)
+      .then((data) => setNamespaces(data.map((ns) => ns.name)))
+      .catch(() => setNamespaces([]));
+  }, [selectedClusterId]);
 
   const checkHelmPlugin = useCallback(async () => {
     if (helmPluginEnabled !== null) return;
@@ -582,7 +590,7 @@ export default function DeployAppPage() {
                   <div>
                     <p className="font-medium">Container Image</p>
                     <p className="text-xs text-muted-foreground">
-                      Deploy from a Docker/OCI image
+                      Deploy your application directly from a container image like Docker Hub or a private registry
                     </p>
                   </div>
                 </button>
@@ -594,7 +602,7 @@ export default function DeployAppPage() {
                   <div>
                     <p className="font-medium">Helm Chart</p>
                     <p className="text-xs text-muted-foreground">
-                      Deploy from a Helm chart repository
+                      Use a pre-packaged application template from the Helm ecosystem
                     </p>
                   </div>
                 </button>
@@ -625,6 +633,9 @@ export default function DeployAppPage() {
                     })
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  A unique identifier for this installation
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -636,7 +647,7 @@ export default function DeployAppPage() {
                   onChange={(e) => updateHelmConfig({ chartRef: e.target.value })}
                 />
                 <p className="text-xs text-muted-foreground">
-                  e.g. bitnami/nginx, oci://registry/chart
+                  The chart to install, e.g. bitnami/nginx or oci://registry/chart
                 </p>
               </div>
 
@@ -648,16 +659,32 @@ export default function DeployAppPage() {
                   value={helmConfig.repoURL}
                   onChange={(e) => updateHelmConfig({ repoURL: e.target.value })}
                 />
+                <p className="text-xs text-muted-foreground">
+                  The Helm chart repository URL where the chart is hosted
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="helm-namespace">Namespace</Label>
-                <Input
-                  id="helm-namespace"
-                  placeholder="default"
-                  value={helmConfig.namespace}
-                  onChange={(e) => updateHelmConfig({ namespace: e.target.value })}
-                />
+                <Select
+                  value={helmConfig.namespace || "default"}
+                  onValueChange={(v) => updateHelmConfig({ namespace: v })}
+                >
+                  <SelectTrigger id="helm-namespace">
+                    <SelectValue placeholder="Select a namespace" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!namespaces.includes("default") && (
+                      <SelectItem value="default">default</SelectItem>
+                    )}
+                    {namespaces.map((ns) => (
+                      <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Namespaces help organize applications. Use &quot;default&quot; if unsure.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -670,6 +697,9 @@ export default function DeployAppPage() {
                   onBlur={() => validateHelmValues(helmConfig.values)}
                   className="font-mono text-xs min-h-[120px]"
                 />
+                <p className="text-xs text-muted-foreground">
+                  Override default chart settings using YAML format
+                </p>
                 {helmValuesError && (
                   <p className="text-xs text-destructive">{helmValuesError}</p>
                 )}
@@ -727,16 +757,32 @@ export default function DeployAppPage() {
                     })
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  A unique name for your application (lowercase, numbers, and hyphens only)
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="namespace">Namespace</Label>
-                <Input
-                  id="namespace"
-                  placeholder="default"
-                  value={config.namespace}
-                  onChange={(e) => updateConfig({ namespace: e.target.value })}
-                />
+                <Select
+                  value={config.namespace || "default"}
+                  onValueChange={(v) => updateConfig({ namespace: v })}
+                >
+                  <SelectTrigger id="namespace">
+                    <SelectValue placeholder="Select a namespace" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!namespaces.includes("default") && (
+                      <SelectItem value="default">default</SelectItem>
+                    )}
+                    {namespaces.map((ns) => (
+                      <SelectItem key={ns} value={ns}>{ns}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Namespaces help organize applications. Use &quot;default&quot; if unsure.
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -747,6 +793,9 @@ export default function DeployAppPage() {
                   value={config.image}
                   onChange={(e) => updateConfig({ image: e.target.value })}
                 />
+                <p className="text-xs text-muted-foreground">
+                  The Docker image to run, e.g. nginx:latest, postgres:16, or your-registry.com/app:v1
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -778,10 +827,16 @@ export default function DeployAppPage() {
                     <Plus className="h-3 w-3" />
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Number of copies of your app running simultaneously for high availability
+                </p>
               </div>
 
               <div className="space-y-2">
                 <Label>Container Ports</Label>
+                <p className="text-xs text-muted-foreground">
+                  The network ports your application listens on
+                </p>
                 {config.ports.map((port, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <Input
@@ -826,6 +881,9 @@ export default function DeployAppPage() {
 
               <div className="space-y-2">
                 <Label>Environment Variables</Label>
+                <p className="text-xs text-muted-foreground">
+                  Configuration values passed to your application at runtime
+                </p>
                 {config.envVars.map((env, i) => (
                   <div key={i} className="flex items-center gap-2">
                     <Input
@@ -897,13 +955,13 @@ export default function DeployAppPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="ClusterIP">
-                      ClusterIP (internal only)
+                      ClusterIP - Internal only, accessible within the cluster
                     </SelectItem>
                     <SelectItem value="NodePort">
-                      NodePort (expose on node)
+                      NodePort - Expose on a port on every cluster node (30000-32767)
                     </SelectItem>
                     <SelectItem value="LoadBalancer">
-                      LoadBalancer (external IP)
+                      LoadBalancer - Get an external IP address from your cloud provider
                     </SelectItem>
                   </SelectContent>
                 </Select>
@@ -913,7 +971,12 @@ export default function DeployAppPage() {
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <Label>Ingress (optional)</Label>
+                  <div>
+                    <Label>Ingress (optional)</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Route external traffic to your app using a domain name
+                    </p>
+                  </div>
                   <Button
                     variant={config.ingressEnabled ? "default" : "outline"}
                     size="sm"
@@ -950,7 +1013,7 @@ export default function DeployAppPage() {
                   <div>
                     <Label>HTTPRoute (Gateway API)</Label>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Create an HTTPRoute resource for Gateway API-based routing
+                      Advanced routing using the Gateway API standard
                     </p>
                   </div>
                   <Button
@@ -1050,7 +1113,7 @@ export default function DeployAppPage() {
 
               {config.volumes.length === 0 && (
                 <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-                  No volumes configured. Click the button below to add persistent storage.
+                  No persistent storage configured. Add a volume if your application needs to save data that persists between restarts.
                 </div>
               )}
 
@@ -1112,7 +1175,7 @@ export default function DeployAppPage() {
                           }
                         />
                         <p className="text-xs text-muted-foreground">
-                          Leave empty to use the cluster default
+                          Leave empty for the cluster default. Common options: standard, gp2, gp3
                         </p>
                       </div>
 
@@ -1131,13 +1194,13 @@ export default function DeployAppPage() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="ReadWriteOnce">
-                              ReadWriteOnce (single node)
+                              ReadWriteOnce - Single node read/write (most common)
                             </SelectItem>
                             <SelectItem value="ReadWriteMany">
-                              ReadWriteMany (multiple nodes)
+                              ReadWriteMany - Multiple nodes read/write (requires NFS or similar)
                             </SelectItem>
                             <SelectItem value="ReadOnlyMany">
-                              ReadOnlyMany (read-only, multiple nodes)
+                              ReadOnlyMany - Multiple nodes read-only
                             </SelectItem>
                           </SelectContent>
                         </Select>
@@ -1186,6 +1249,9 @@ export default function DeployAppPage() {
                           updateVolumeMount(i, { mountPath: e.target.value })
                         }
                       />
+                      <p className="text-xs text-muted-foreground">
+                        The directory inside your container where the volume will be available, e.g. /data, /var/lib/postgres
+                      </p>
                     </div>
 
                     <div className="space-y-2">
@@ -1378,7 +1444,7 @@ export default function DeployAppPage() {
                     <Check className="h-8 w-8 text-green-500" />
                   </div>
                   <p className="text-lg font-medium">
-                    {method === "helm" ? "Helm Release Deployed" : "Deployment Created"}
+                    {method === "helm" ? "Helm Release Deployed Successfully!" : "Application Deployed Successfully!"}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {method === "helm"
@@ -1395,8 +1461,8 @@ export default function DeployAppPage() {
                     <Settings2 className="h-8 w-8 text-destructive" />
                   </div>
                   <p className="text-lg font-medium">Deployment Failed</p>
-                  <p className="text-sm text-muted-foreground">
-                    Something went wrong while creating resources.
+                  <p className="text-sm text-muted-foreground text-center max-w-md">
+                    Something went wrong while creating resources. Check that your cluster is accessible and the namespace exists. Common issues: image not found, insufficient permissions, or resource quotas.
                   </p>
                   <div className="flex gap-2">
                     <Button variant="outline" onClick={() => setStep(reviewStepIdx)}>

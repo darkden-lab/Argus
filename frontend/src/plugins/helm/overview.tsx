@@ -18,16 +18,17 @@ export function HelmOverview() {
   const [releases, setReleases] = useState<HelmRelease[]>([]);
   const [loading, setLoading] = useState(true);
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setLoading(false); return; }
     const nsParam = namespace ? `&namespace=${namespace}` : "";
     api.get<{ items: HelmRelease[] }>(`/api/plugins/helm/helmreleases?clusterID=${clusterID}${nsParam}`)
       .then((d) => setReleases(d.items ?? []))
       .catch(() => setReleases([]))
       .finally(() => setLoading(false));
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   const byNamespace = releases.reduce<Record<string, number>>((acc, r) => {
     const ns = r.metadata.namespace;

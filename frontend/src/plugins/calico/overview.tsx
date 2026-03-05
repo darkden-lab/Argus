@@ -14,9 +14,10 @@ interface CalicoStats {
 export function CalicoOverview() {
   const [stats, setStats] = useState<CalicoStats>({ networkPolicies: 0, globalNetworkPolicies: 0, ipPools: 0, hostEndpoints: 0 });
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) return;
     const nsParam = namespace ? `&namespace=${namespace}` : "";
 
@@ -33,7 +34,7 @@ export function CalicoOverview() {
         hostEndpoints:         he.status  === "fulfilled" ? (he.value.items?.length ?? 0) : 0,
       });
     });
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-6">

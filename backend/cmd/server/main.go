@@ -242,7 +242,7 @@ func main() {
 	resourceHandler.RegisterRoutes(protected)
 
 	// Convenience routes (namespaces, nodes, events)
-	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr)
+	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr, pool)
 	convenienceHandlers.RegisterRoutes(protected)
 
 	// Pod logs endpoint (auth handled internally to support EventSource SSE)

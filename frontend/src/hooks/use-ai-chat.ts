@@ -15,6 +15,7 @@ export function useAiChat() {
   const {
     isOpen,
     isFullPage,
+    connectionState,
     pageContext,
     addMessage,
     appendToMessage,
@@ -32,6 +33,8 @@ export function useAiChat() {
     setTasks,
     updateTask,
     setActiveAgent,
+    configVersion,
+    incrementConfigVersion,
   } = useAiChatStore();
 
   const storeRef = useRef({
@@ -51,6 +54,7 @@ export function useAiChat() {
     setTasks,
     updateTask,
     setActiveAgent,
+    incrementConfigVersion,
   });
   storeRef.current = {
     addMessage,
@@ -69,6 +73,7 @@ export function useAiChat() {
     setTasks,
     updateTask,
     setActiveAgent,
+    incrementConfigVersion,
   };
 
   // Clear streaming timeout
@@ -111,7 +116,12 @@ export function useAiChat() {
     api
       .get<AiStatus>("/api/ai/status")
       .then((status) => {
+        const prev = useAiChatStore.getState().aiStatus;
         storeRef.current.setAiStatus(status);
+        // If config changed from unconfigured to configured, trigger reconnect
+        if (status?.enabled && status?.configured && (!prev?.configured || !prev?.enabled)) {
+          storeRef.current.incrementConfigVersion();
+        }
       })
       .catch(() => {
         storeRef.current.setAiStatus(null);
@@ -351,7 +361,20 @@ export function useAiChat() {
     socketRef.current = null;
   }, [clearStreamTimeout]);
 
+  // Poll AI status when in error state to auto-reconnect after config changes
+  useEffect(() => {
+    if (!(isOpen || isFullPage)) return;
+    const state = useAiChatStore.getState();
+    if (state.connectionState !== "error") return;
+
+    const interval = setInterval(() => {
+      fetchAiStatus();
+    }, 10_000); // Check every 10s
+    return () => clearInterval(interval);
+  }, [isOpen, isFullPage, fetchAiStatus, connectionState]);
+
   // Connect when panel opens or full page is active, fetch AI status first
+  // configVersion triggers reconnect when AI config changes (e.g. user saves settings)
   useEffect(() => {
     if (isOpen || isFullPage) {
       fetchAgents();
@@ -365,7 +388,7 @@ export function useAiChat() {
           } else {
             storeRef.current.setConnectionState("error");
             storeRef.current.setConnectionError(
-              "AI assistant is not configured. Please set up an AI provider in Settings > AI Configuration."
+              status.message || "AI assistant is not configured. Please set up an AI provider in Settings > AI Configuration."
             );
           }
         })
@@ -378,7 +401,7 @@ export function useAiChat() {
       disconnect();
     }
     return () => disconnect();
-  }, [isOpen, isFullPage, connect, disconnect, fetchAgents]);
+  }, [isOpen, isFullPage, configVersion, connect, disconnect, fetchAgents]);
 
   const sendMessage = useCallback(
     (content: string) => {

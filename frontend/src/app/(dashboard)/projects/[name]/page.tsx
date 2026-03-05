@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { StatCard } from "@/components/ui/stat-card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CardSkeleton } from "@/components/skeletons";
+import { AssignNamespacesDialog } from "@/components/projects/assign-namespaces-dialog";
 import {
   ArrowLeft,
   Layers,
@@ -16,6 +17,8 @@ import {
   Container,
   Globe,
   RefreshCw,
+  Plus,
+  Trash2,
 } from "lucide-react";
 
 interface ProjectResource {
@@ -44,6 +47,7 @@ export default function ProjectDetailPage() {
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [assignOpen, setAssignOpen] = useState(false);
 
   function fetchProject() {
     if (!selectedClusterId || !params.name) return;
@@ -101,6 +105,30 @@ export default function ProjectDetailPage() {
     );
   }
 
+  async function handleDeleteProject() {
+    if (!selectedClusterId || !project) return;
+    if (!confirm(`Delete project "${project.name}"? This cannot be undone.`)) return;
+    try {
+      await api.del(`/api/clusters/${selectedClusterId}/projects/${project.name}`);
+      router.push("/projects");
+    } catch {
+      // Error toast handled by api client
+    }
+  }
+
+  async function handleRemoveNamespace(ns: string) {
+    if (!selectedClusterId || !project) return;
+    if (!confirm(`Remove namespace "${ns}" from this project?`)) return;
+    try {
+      await api.del(
+        `/api/clusters/${selectedClusterId}/projects/${project.name}/namespaces/${ns}`
+      );
+      fetchProject();
+    } catch {
+      // Error toast handled by api client
+    }
+  }
+
   if (!project) return null;
 
   const deployments = project.resources.filter((r) => r.kind === "Deployment");
@@ -117,21 +145,49 @@ export default function ProjectDetailPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center gap-4">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => router.push("/projects")}
-        >
-          <ArrowLeft className="h-4 w-4" />
-        </Button>
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold tracking-tight">
-            {project.name}
-          </h1>
-          <Badge variant={variant}>{label}</Badge>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => router.push("/projects")}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="flex items-center gap-3">
+            <h1 className="text-2xl font-bold tracking-tight">
+              {project.name}
+            </h1>
+            <Badge variant={variant}>{label}</Badge>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setAssignOpen(true)}
+          >
+            <Plus className="h-4 w-4 mr-1" />
+            Add Namespaces
+          </Button>
+          <Button
+            size="sm"
+            variant="destructive"
+            onClick={handleDeleteProject}
+          >
+            <Trash2 className="h-4 w-4 mr-1" />
+            Delete
+          </Button>
         </div>
       </div>
+
+      <AssignNamespacesDialog
+        projectName={project.name}
+        currentNamespaces={project.namespaces}
+        open={assignOpen}
+        onOpenChange={setAssignOpen}
+        onAssigned={fetchProject}
+      />
 
       {/* Stat cards */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -199,6 +255,9 @@ export default function ProjectDetailPage() {
                     <th className="px-4 py-2 text-left font-medium">
                       Namespace
                     </th>
+                    <th className="px-4 py-2 text-right font-medium">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -206,6 +265,15 @@ export default function ProjectDetailPage() {
                     <tr key={ns} className="border-b last:border-0">
                       <td className="px-4 py-2">
                         <Badge variant="outline">{ns}</Badge>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveNamespace(ns)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                        </Button>
                       </td>
                     </tr>
                   ))}

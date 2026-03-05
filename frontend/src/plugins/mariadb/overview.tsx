@@ -16,9 +16,10 @@ function CountCard({ label, count }: { label: string; count: number }) {
 export function MariadbOverview() {
   const [counts, setCounts] = useState({ instances: 0, databases: 0, backups: 0, users: 0, connections: 0 });
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) return;
     const nsParam = namespace ? `&namespace=${namespace}` : "";
 
@@ -37,7 +38,7 @@ export function MariadbOverview() {
         connections: conn.status === "fulfilled" ? (conn.value.items?.length ?? 0) : 0,
       });
     });
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-6">

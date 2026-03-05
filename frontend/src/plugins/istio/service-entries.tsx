@@ -29,9 +29,10 @@ export function ServiceEntryList() {
   const [items, setItems] = useState<ServiceEntry[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setIsLoading(false); return; }
     const nsParam = namespace ? `&namespace=${namespace}` : "";
     api
@@ -41,11 +42,11 @@ export function ServiceEntryList() {
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   function handleDelete(ns: string, name: string) {
     if (!window.confirm(`Delete service entry "${name}" in namespace "${ns}"?`)) return;
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     api.del(`/api/plugins/istio/serviceentries/${name}?clusterID=${clusterID}&namespace=${ns}`)
       .then(() => setItems((prev) => prev.filter((i) => !(i.metadata.name === name && i.metadata.namespace === ns))))
       .catch(() => {});

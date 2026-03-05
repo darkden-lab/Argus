@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
+import { useClusterStore } from "@/stores/cluster";
 
 interface GlobalNetworkPolicy {
   metadata: { name: string };
@@ -16,9 +17,10 @@ interface GlobalNetworkPolicy {
 export function GlobalNetworkPolicyList() {
   const [items, setItems] = useState<GlobalNetworkPolicy[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setIsLoading(false); return; }
 
     api
@@ -28,7 +30,7 @@ export function GlobalNetworkPolicyList() {
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [selectedClusterId]);
 
   return (
     <div className="space-y-4">

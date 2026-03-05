@@ -16,9 +16,10 @@ function CountCard({ label, count }: { label: string; count: number }) {
 export function KedaOverview() {
   const [counts, setCounts] = useState({ scaledObjects: 0, scaledJobs: 0, triggerAuths: 0 });
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) return;
     const nsParam = namespace ? `&namespace=${namespace}` : "";
 
@@ -33,7 +34,7 @@ export function KedaOverview() {
         triggerAuths:  ta.status === "fulfilled" ? (ta.value.items?.length ?? 0) : 0,
       });
     });
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-6">

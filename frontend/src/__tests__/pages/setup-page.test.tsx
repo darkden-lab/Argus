@@ -396,7 +396,7 @@ describe('SetupPage', () => {
 
       await waitFor(() => {
         // Should show a generic fallback message
-        expect(screen.getByText(/setup failed/i)).toBeInTheDocument();
+        expect(screen.getByText(/request failed/i)).toBeInTheDocument();
       });
     });
 
@@ -515,7 +515,7 @@ describe('SetupPage', () => {
 
       await user.click(screen.getByRole('button', { name: /continue/i }));
 
-      expect(screen.getByText('Setup Complete')).toBeInTheDocument();
+      expect(screen.getByText(/All Set/i)).toBeInTheDocument();
     });
   });
 
@@ -540,7 +540,7 @@ describe('SetupPage', () => {
       });
 
       await user.click(screen.getByRole('button', { name: /continue/i }));
-      expect(screen.getByText('Setup Complete')).toBeInTheDocument();
+      expect(screen.getByText(/All Set/i)).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: /go to dashboard/i }));
 

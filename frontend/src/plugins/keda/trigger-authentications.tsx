@@ -44,9 +44,10 @@ export function TriggerAuthenticationList() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"namespaced" | "cluster">("namespaced");
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setLoading(false); return; }
     const nsParam = namespace ? `&namespace=${namespace}` : "";
 
@@ -57,7 +58,7 @@ export function TriggerAuthenticationList() {
       setNsItems(ns.status === "fulfilled" ? (ns.value.items ?? []) : []);
       setClusterItems(cluster.status === "fulfilled" ? (cluster.value.items ?? []) : []);
     }).finally(() => setLoading(false));
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-4">
