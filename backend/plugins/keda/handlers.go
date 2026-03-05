@@ -70,6 +70,10 @@ func (h *handlers) ListTriggerAuthentications(w http.ResponseWriter, r *http.Req
 	h.list(w, r, gvrTriggerAuthentications)
 }
 
+func (h *handlers) GetTriggerAuthentication(w http.ResponseWriter, r *http.Request) {
+	h.get(w, r, gvrTriggerAuthentications)
+}
+
 func (h *handlers) CreateTriggerAuthentication(w http.ResponseWriter, r *http.Request) {
 	h.create(w, r, gvrTriggerAuthentications)
 }
@@ -82,6 +86,10 @@ func (h *handlers) DeleteTriggerAuthentication(w http.ResponseWriter, r *http.Re
 
 func (h *handlers) ListClusterTriggerAuthentications(w http.ResponseWriter, r *http.Request) {
 	h.listClusterScoped(w, r, gvrClusterTriggerAuths)
+}
+
+func (h *handlers) GetClusterTriggerAuthentication(w http.ResponseWriter, r *http.Request) {
+	h.getClusterScoped(w, r, gvrClusterTriggerAuths)
 }
 
 func (h *handlers) CreateClusterTriggerAuthentication(w http.ResponseWriter, r *http.Request) {
@@ -212,6 +220,24 @@ func (h *handlers) listClusterScoped(w http.ResponseWriter, r *http.Request, gvr
 		return
 	}
 	writeJSON(w, http.StatusOK, list)
+}
+
+func (h *handlers) getClusterScoped(w http.ResponseWriter, r *http.Request, gvr schema.GroupVersionResource) {
+	clusterID := r.URL.Query().Get("clusterID")
+	name := mux.Vars(r)["name"]
+
+	client, err := h.cm.GetClient(clusterID)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, errMsg("cluster not found"))
+		return
+	}
+
+	obj, err := client.DynClient.Resource(gvr).Get(r.Context(), name, metav1.GetOptions{})
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, errMsg(err.Error()))
+		return
+	}
+	writeJSON(w, http.StatusOK, obj)
 }
 
 func (h *handlers) createClusterScoped(w http.ResponseWriter, r *http.Request, gvr schema.GroupVersionResource) {

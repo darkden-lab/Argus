@@ -19,16 +19,18 @@ type RequestHandler func(ctx context.Context, req *pb.K8SRequest) *pb.K8SRespons
 
 // Connector manages the gRPC connection to the dashboard backend.
 type Connector struct {
-	config  *Config
-	handler RequestHandler
-	conn    *grpc.ClientConn
-	client  pb.ClusterAgentClient
+	config   *Config
+	handler  RequestHandler
+	watchMgr *WatchManager
+	conn     *grpc.ClientConn
+	client   pb.ClusterAgentClient
 }
 
 func NewConnector(cfg *Config, handler RequestHandler) *Connector {
 	return &Connector{
-		config:  cfg,
-		handler: handler,
+		config:   cfg,
+		handler:  handler,
+		watchMgr: NewWatchManager(),
 	}
 }
 
@@ -127,6 +129,9 @@ func (c *Connector) stream(ctx context.Context) error {
 
 	log.Printf("Stream connected: cluster_id=%s", c.config.ClusterID)
 
+	// Stop all watches when stream disconnects.
+	defer c.watchMgr.StopAll()
+
 	// Process incoming messages from the dashboard.
 	for {
 		msg, err := stream.Recv()
@@ -146,11 +151,20 @@ func (c *Connector) stream(ctx context.Context) error {
 				},
 			})
 		case *pb.DashboardMessage_WatchSubscribe:
-			log.Printf("Watch subscribe request: watch_id=%s path=%s",
+			log.Printf("Watch subscribe: watch_id=%s path=%s",
 				payload.WatchSubscribe.WatchId, payload.WatchSubscribe.Path)
-			// Watch handling will be implemented in task 3.2
+			c.watchMgr.Subscribe(ctx, payload.WatchSubscribe, func(event *pb.WatchEvent) {
+				if err := stream.Send(&pb.AgentMessage{
+					Payload: &pb.AgentMessage_WatchEvent{
+						WatchEvent: event,
+					},
+				}); err != nil {
+					log.Printf("Failed to send watch event %s: %v", event.WatchId, err)
+				}
+			})
 		case *pb.DashboardMessage_WatchUnsubscribe:
 			log.Printf("Watch unsubscribe: watch_id=%s", payload.WatchUnsubscribe.WatchId)
+			c.watchMgr.Unsubscribe(payload.WatchUnsubscribe.WatchId)
 		}
 	}
 }

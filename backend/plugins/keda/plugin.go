@@ -77,11 +77,13 @@ func (p *KedaPlugin) RegisterRoutes(r *mux.Router, cm *cluster.Manager) {
 	ta := r.PathPrefix("/api/plugins/keda/triggerauthentications").Subrouter()
 	ta.HandleFunc("", h.ListTriggerAuthentications).Methods("GET")
 	ta.HandleFunc("", h.CreateTriggerAuthentication).Methods("POST")
+	ta.HandleFunc("/{name}", h.GetTriggerAuthentication).Methods("GET")
 	ta.HandleFunc("/{name}", h.DeleteTriggerAuthentication).Methods("DELETE")
 
 	cta := r.PathPrefix("/api/plugins/keda/clustertriggerauthentications").Subrouter()
 	cta.HandleFunc("", h.ListClusterTriggerAuthentications).Methods("GET")
 	cta.HandleFunc("", h.CreateClusterTriggerAuthentication).Methods("POST")
+	cta.HandleFunc("/{name}", h.GetClusterTriggerAuthentication).Methods("GET")
 	cta.HandleFunc("/{name}", h.DeleteClusterTriggerAuthentication).Methods("DELETE")
 }
 
