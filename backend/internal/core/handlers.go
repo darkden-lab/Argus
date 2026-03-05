@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/gorilla/mux"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/darkden-lab/argus/backend/internal/cluster"
 	"github.com/darkden-lab/argus/backend/internal/httputil"
 	"github.com/darkden-lab/argus/backend/pkg/agentpb"
@@ -17,10 +18,11 @@ import (
 // the generic /resources/{group}/{version}/{resource} URL themselves.
 type ConvenienceHandlers struct {
 	clusterMgr *cluster.Manager
+	pool       *pgxpool.Pool
 }
 
-func NewConvenienceHandlers(cm *cluster.Manager) *ConvenienceHandlers {
-	return &ConvenienceHandlers{clusterMgr: cm}
+func NewConvenienceHandlers(cm *cluster.Manager, pool *pgxpool.Pool) *ConvenienceHandlers {
+	return &ConvenienceHandlers{clusterMgr: cm, pool: pool}
 }
 
 // RegisterRoutes attaches all convenience endpoints to the provided router.
@@ -31,7 +33,12 @@ func (h *ConvenienceHandlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/events", h.ListEvents).Methods(http.MethodGet)
 	api.HandleFunc("/api-resources", h.ListAPIResources).Methods(http.MethodGet)
 	api.HandleFunc("/projects", h.ListProjects).Methods(http.MethodGet)
+	api.HandleFunc("/projects", h.CreateProject).Methods(http.MethodPost)
 	api.HandleFunc("/projects/{project}", h.GetProject).Methods(http.MethodGet)
+	api.HandleFunc("/projects/{project}", h.UpdateProject).Methods(http.MethodPut)
+	api.HandleFunc("/projects/{project}", h.DeleteProject).Methods(http.MethodDelete)
+	api.HandleFunc("/projects/{project}/namespaces", h.AssignNamespaces).Methods(http.MethodPost)
+	api.HandleFunc("/projects/{project}/namespaces/{namespace}", h.RemoveNamespace).Methods(http.MethodDelete)
 }
 
 // proxyAgentList is a convenience wrapper around proxyAgentResponse for GET requests.

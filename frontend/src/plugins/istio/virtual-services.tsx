@@ -17,9 +17,10 @@ export function VirtualServiceList() {
   const [items, setItems] = useState<VirtualService[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setIsLoading(false); return; }
     const nsParam = namespace ? `&namespace=${namespace}` : "";
     api
@@ -29,7 +30,7 @@ export function VirtualServiceList() {
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-4">

@@ -14,9 +14,10 @@ interface PrometheusStats {
 export function PrometheusOverview() {
   const [stats, setStats] = useState<PrometheusStats>({ serviceMonitors: 0, podMonitors: 0, rules: 0, alertManagers: 0 });
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) return;
     const nsParam = namespace ? `?namespace=${namespace}` : "";
 
@@ -33,7 +34,7 @@ export function PrometheusOverview() {
         alertManagers:   am.status === "fulfilled" ? (am.value.items?.length ?? 0) : 0,
       });
     });
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-6">

@@ -141,6 +141,10 @@ interface AiChatState {
   tasks: AgentTask[];
   setTasks: (tasks: AgentTask[]) => void;
   updateTask: (id: string, updates: Partial<AgentTask>) => void;
+
+  // Config version (increments when AI config changes to trigger reconnect)
+  configVersion: number;
+  incrementConfigVersion: () => void;
 }
 
 export const useAiChatStore = create<AiChatState>((set) => ({
@@ -233,4 +237,8 @@ export const useAiChatStore = create<AiChatState>((set) => ({
         t.id === id ? { ...t, ...updates } : t
       ),
     })),
+
+  // Config version
+  configVersion: 0,
+  incrementConfigVersion: () => set((s) => ({ configVersion: s.configVersion + 1 })),
 }));

@@ -23,9 +23,10 @@ export function CephOverview() {
   const [counts, setCounts] = useState({ clusters: 0, blockPools: 0, filesystems: 0, objectStores: 0 });
   const [health, setHealth] = useState<string>("Unknown");
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) return;
     const nsParam = namespace ? `&namespace=${namespace}` : "";
 
@@ -45,7 +46,7 @@ export function CephOverview() {
         objectStores: os.status === "fulfilled" ? (os.value.items?.length ?? 0) : 0,
       });
     });
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-6">

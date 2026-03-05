@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { api } from "@/lib/api";
 import { DetailPageSkeleton } from "@/components/skeletons";
 import { StatusBadge } from "@/components/resources/resource-table";
+import { useClusterStore } from "@/stores/cluster";
 
 interface HelmRelease {
   metadata: { name: string; namespace: string; labels?: Record<string, string> };
@@ -80,8 +81,9 @@ export function HelmReleaseDetail({ name = "", namespace = "" }: ReleaseDetailPr
   const [historyLoading, setHistoryLoading] = useState(false);
   const [valuesLoading, setValuesLoading] = useState(false);
   const [copied, setCopied] = useState(false);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
-  const clusterID = typeof window !== "undefined" ? (localStorage.getItem("selected_cluster") ?? "") : "";
+  const clusterID = selectedClusterId ?? "";
 
   useEffect(() => {
     if (!clusterID || !name || !namespace) { setLoading(false); return; }

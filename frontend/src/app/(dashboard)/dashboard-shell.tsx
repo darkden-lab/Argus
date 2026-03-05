@@ -7,6 +7,7 @@ import { MainContent } from "@/components/layout/main-content";
 import { CommandPalette } from "@/components/command-palette/command-palette";
 import { usePermissionsStore } from "@/stores/permissions";
 import { useAuthStore } from "@/stores/auth";
+import { useOnboarding } from "@/hooks/use-onboarding";
 import { getSocket, disconnectSocket } from "@/lib/socket";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { ToastContainer } from "@/components/ui/toast";
@@ -17,6 +18,9 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
   const fetchPermissions = usePermissionsStore((s) => s.fetchPermissions);
   const isLoaded = usePermissionsStore((s) => s.isLoaded);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+
+  // Redirect to /onboarding if no clusters exist and onboarding not completed
+  useOnboarding();
 
   useEffect(() => {
     if (!isLoaded) {

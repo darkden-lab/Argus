@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { PluginTableSkeleton } from "@/components/skeletons";
+import { useClusterStore } from "@/stores/cluster";
 
 interface HostEndpoint {
   metadata: { name: string; creationTimestamp?: string };
@@ -26,9 +27,10 @@ function age(ts?: string): string {
 export function HostEndpointList() {
   const [items, setItems] = useState<HostEndpoint[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setIsLoading(false); return; }
 
     api
@@ -38,11 +40,11 @@ export function HostEndpointList() {
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setIsLoading(false));
-  }, []);
+  }, [selectedClusterId]);
 
   function handleDelete(name: string) {
     if (!window.confirm(`Delete host endpoint "${name}"?`)) return;
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     api.del(`/api/plugins/calico/hostendpoints/${name}?clusterID=${clusterID}`)
       .then(() => setItems((prev) => prev.filter((i) => i.metadata.name !== name)))
       .catch(() => {});

@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { CardSkeleton } from "@/components/skeletons";
+import { CreateProjectDialog } from "@/components/projects/create-project-dialog";
 import { Search, FolderOpen, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -90,6 +91,7 @@ export default function ProjectsPage() {
             Logical groupings of workloads across namespaces.
           </p>
         </div>
+        <CreateProjectDialog onCreated={fetchProjects} />
       </div>
 
       {loading ? (

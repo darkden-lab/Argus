@@ -26,12 +26,10 @@ export function IstioOverview() {
     serviceentries: 0,
   });
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID =
-      typeof window !== "undefined"
-        ? (localStorage.getItem("selected_cluster") ?? "")
-        : "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) return;
     const nsParam = namespace ? `&namespace=${namespace}` : "";
 
@@ -59,7 +57,7 @@ export function IstioOverview() {
           se.status === "fulfilled" ? (se.value.items?.length ?? 0) : 0,
       });
     });
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-6">

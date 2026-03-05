@@ -49,16 +49,17 @@ export function CephObjectStoreList() {
   const [items, setItems] = useState<CephObjectStore[]>([]);
   const [loading, setLoading] = useState(true);
   const namespace = useClusterStore((s) => s.selectedNamespace);
+  const selectedClusterId = useClusterStore((s) => s.selectedClusterId);
 
   useEffect(() => {
-    const clusterID = localStorage.getItem("selected_cluster") ?? "";
+    const clusterID = selectedClusterId ?? "";
     if (!clusterID) { setLoading(false); return; }
     const nsParam = namespace ? `&namespace=${namespace}` : "";
     api.get<{ items: CephObjectStore[] }>(`/api/plugins/ceph/objectstores?clusterID=${clusterID}${nsParam}`)
       .then((d) => setItems(d.items ?? []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
-  }, [namespace]);
+  }, [namespace, selectedClusterId]);
 
   return (
     <div className="space-y-4">
