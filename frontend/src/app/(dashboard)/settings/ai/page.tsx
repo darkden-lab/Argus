@@ -36,6 +36,8 @@ interface AiConfig {
   base_url: string;
   tool_permission_level: string;
   max_tokens: number;
+  temperature: number;
+  embed_model: string;
   custom_headers: Record<string, string>;
 }
 
@@ -105,6 +107,8 @@ export default function AiSettingsPage() {
     base_url: "",
     tool_permission_level: "all",
     max_tokens: 4096,
+    temperature: 0.7,
+    embed_model: "",
     custom_headers: {},
   });
   const [headerEntries, setHeaderEntries] = useState<HeaderEntry[]>([]);
@@ -321,6 +325,34 @@ export default function AiSettingsPage() {
               }
               min={256}
               max={128000}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Temperature</Label>
+            <Input
+              type="number"
+              value={config.temperature}
+              onChange={(e) =>
+                setConfig({
+                  ...config,
+                  temperature: parseFloat(e.target.value) || 0.7,
+                })
+              }
+              min={0}
+              max={2}
+              step={0.1}
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Embedding Model</Label>
+            <Input
+              value={config.embed_model}
+              onChange={(e) =>
+                setConfig({ ...config, embed_model: e.target.value })
+              }
+              placeholder="Default embedding model"
             />
           </div>
 

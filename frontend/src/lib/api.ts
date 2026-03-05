@@ -5,6 +5,7 @@ const MAX_RETRIES = 2;
 const RETRY_DELAY_MS = 1000;
 
 let isRedirecting = false;
+let refreshPromise: Promise<boolean> | null = null;
 
 export class ApiError extends Error {
   constructor(
@@ -59,7 +60,10 @@ async function fetchWithAuth<T>(path: string, method: string, body?: unknown, re
   });
 
   if (res.status === 401) {
-    const refreshed = await tryRefreshToken();
+    if (!refreshPromise) {
+      refreshPromise = tryRefreshToken().finally(() => { refreshPromise = null; });
+    }
+    const refreshed = await refreshPromise;
     if (!refreshed) {
       if (typeof window !== 'undefined' && !isRedirecting) {
         isRedirecting = true;

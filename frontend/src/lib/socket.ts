@@ -65,6 +65,9 @@ export function getSocket(namespace: Namespace): Socket {
   socket.on("disconnect", updateSocketStatus);
   socket.io.on("reconnect_attempt", () => {
     useUIStore.getState().setSocketStatus("reconnecting");
+    // Refresh token for reconnection
+    const freshToken = getToken();
+    socket.auth = { token: freshToken || "" };
   });
 
   sockets.set(namespace, socket);

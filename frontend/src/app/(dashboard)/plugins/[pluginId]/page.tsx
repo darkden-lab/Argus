@@ -25,5 +25,10 @@ export function generateStaticParams() {
     { pluginId: "istio" },
     { pluginId: "prometheus" },
     { pluginId: "calico" },
+    { pluginId: "cnpg" },
+    { pluginId: "mariadb" },
+    { pluginId: "keda" },
+    { pluginId: "ceph" },
+    { pluginId: "helm" },
   ];
 }

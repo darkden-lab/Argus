@@ -137,6 +137,10 @@ func (m *Manager) IsAgentCluster(ctx context.Context, clusterID string) bool {
 	return ct == "agent"
 }
 
+func (m *Manager) UpdateCluster(ctx context.Context, id, name, apiServerURL string) (*Cluster, error) {
+	return m.store.UpdateCluster(ctx, id, name, apiServerURL)
+}
+
 func (m *Manager) ListClusters(ctx context.Context) ([]*Cluster, error) {
 	return m.store.ListClusters(ctx)
 }
