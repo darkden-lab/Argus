@@ -19,13 +19,13 @@ export function CalicoOverview() {
   useEffect(() => {
     const clusterID = selectedClusterId ?? "";
     if (!clusterID) return;
-    const nsParam = namespace ? `&namespace=${namespace}` : "";
+    const nsParam = namespace ? `?namespace=${namespace}` : "";
 
     Promise.allSettled([
-      api.get<{ items: unknown[] }>(`/api/plugins/calico/networkpolicies?clusterID=${clusterID}${nsParam}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/calico/globalnetworkpolicies?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/calico/ippools?clusterID=${clusterID}`),
-      api.get<{ items: unknown[] }>(`/api/plugins/calico/hostendpoints?clusterID=${clusterID}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/calico/${clusterID}/networkpolicies${nsParam}`),
+      api.get<{ items: unknown[] }>(`/api/plugins/calico/${clusterID}/globalnetworkpolicies`),
+      api.get<{ items: unknown[] }>(`/api/plugins/calico/${clusterID}/ippools`),
+      api.get<{ items: unknown[] }>(`/api/plugins/calico/${clusterID}/hostendpoints`),
     ]).then(([np, gnp, ip, he]) => {
       setStats({
         networkPolicies:       np.status  === "fulfilled" ? (np.value.items?.length ?? 0) : 0,

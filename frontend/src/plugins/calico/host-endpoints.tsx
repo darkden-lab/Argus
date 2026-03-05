@@ -35,7 +35,7 @@ export function HostEndpointList() {
 
     api
       .get<{ items: HostEndpoint[] }>(
-        `/api/plugins/calico/hostendpoints?clusterID=${clusterID}`
+        `/api/plugins/calico/${clusterID}/hostendpoints`
       )
       .then((data) => setItems(data.items ?? []))
       .catch(() => setItems([]))
@@ -45,7 +45,7 @@ export function HostEndpointList() {
   function handleDelete(name: string) {
     if (!window.confirm(`Delete host endpoint "${name}"?`)) return;
     const clusterID = selectedClusterId ?? "";
-    api.del(`/api/plugins/calico/hostendpoints/${name}?clusterID=${clusterID}`)
+    api.del(`/api/plugins/calico/${clusterID}/hostendpoints/${name}`)
       .then(() => setItems((prev) => prev.filter((i) => i.metadata.name !== name)))
       .catch(() => {});
   }

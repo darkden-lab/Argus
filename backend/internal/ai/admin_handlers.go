@@ -228,6 +228,18 @@ func (h *AdminHandlers) testConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// If the API key is the masked placeholder, substitute the stored key
+	if cfg.APIKey == "••••••••" && h.pool != nil {
+		var encKey []byte
+		err := h.pool.QueryRow(r.Context(), `SELECT encrypted_api_key FROM ai_config LIMIT 1`).Scan(&encKey)
+		if err == nil && len(encKey) > 0 {
+			decrypted, err := crypto.Decrypt(encKey, h.encryptionKey)
+			if err == nil {
+				cfg.APIKey = string(decrypted)
+			}
+		}
+	}
+
 	if h.providerFactory == nil {
 		writeAIJSON(w, http.StatusOK, map[string]string{"status": "ok", "message": "Configuration is valid (no provider factory to test)"})
 		return
