@@ -766,32 +766,32 @@ export function NetworkMap({ clusterID }: NetworkMapProps) {
       {/* SVG container */}
       <div
         ref={containerRef}
-        className="relative rounded-md bg-zinc-950 border overflow-hidden"
+        className="relative rounded-md bg-background border overflow-hidden"
       >
         <svg ref={svgRef} className="w-full" style={{ minHeight: 500 }} />
         {tooltip && (
           <div
-            className="absolute z-50 pointer-events-none rounded-md bg-zinc-800 border border-zinc-700 px-3 py-2 text-xs shadow-lg"
+            className="absolute z-50 pointer-events-none rounded-md bg-popover border border-border px-3 py-2 text-xs shadow-lg"
             style={{
               left: tooltip.node.x ?? 0,
               top: (tooltip.node.y ?? 0) - 50,
             }}
           >
-            <p className="font-medium text-zinc-100">{tooltip.node.name}</p>
-            <p className="text-zinc-400">
+            <p className="font-medium text-popover-foreground">{tooltip.node.name}</p>
+            <p className="text-muted-foreground">
               {tooltip.node.namespace} --{" "}
               <Badge variant="outline" className="text-[9px] px-1 py-0">
                 {tooltip.node.type}
               </Badge>
             </p>
-            <p className="text-zinc-400">Status: {tooltip.node.status}</p>
+            <p className="text-muted-foreground">Status: {tooltip.node.status}</p>
             {isTrafficMode &&
               tooltip.node.requestRate != null && (
                 <>
-                  <p className="text-zinc-400">
+                  <p className="text-muted-foreground">
                     Rate: {tooltip.node.requestRate.toFixed(2)} req/s
                   </p>
-                  <p className="text-zinc-400">
+                  <p className="text-muted-foreground">
                     Error: {tooltip.node.errorRate?.toFixed(2) ?? "0.00"}%
                   </p>
                 </>

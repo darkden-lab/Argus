@@ -632,6 +632,48 @@ func TestMatchPermissionNamespaceScopeWithClusterOnly(t *testing.T) {
 	}
 }
 
+// TestInvalidateUsersWithRole tests that InvalidateUsersWithRole attempts
+// to query the database for affected users. With nil pool it panics,
+// proving it reaches the DB layer.
+func TestInvalidateUsersWithRole(t *testing.T) {
+	e := newTestEngine()
+
+	// Seed some users in cache
+	seedCache(e, "user-a", []Permission{
+		{Resource: "pods", Action: "read", ScopeType: "global"},
+	})
+	seedCache(e, "user-b", []Permission{
+		{Resource: "pods", Action: "write", ScopeType: "global"},
+	})
+
+	// With nil pool, the function should panic at e.pool.Query
+	// We verify it doesn't hang or behave unexpectedly
+	panicked := false
+	func() {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = true
+			}
+		}()
+		e.InvalidateUsersWithRole(nil, "role-123")
+	}()
+
+	if !panicked {
+		t.Fatal("expected panic with nil pool (proves it reached DB layer)")
+	}
+
+	// Existing cache entries should still be intact since the function
+	// panicked before it could invalidate anything
+	e.mu.RLock()
+	_, aExists := e.cache["user-a"]
+	_, bExists := e.cache["user-b"]
+	e.mu.RUnlock()
+
+	if !aExists || !bExists {
+		t.Fatal("expected cache entries to survive after panic")
+	}
+}
+
 // TestEvaluateUserNotInCache tests that Evaluate returns error when user
 // is not cached and DB pool is nil.
 func TestEvaluateUserNotInCache(t *testing.T) {

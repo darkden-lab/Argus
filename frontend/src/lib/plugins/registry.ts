@@ -27,7 +27,8 @@ import { CalicoStatus } from "@/plugins/calico/overview";
 // CNPG components
 import { CnpgOverview, CnpgStatus } from "@/plugins/cnpg/overview";
 import { CnpgClusterList } from "@/plugins/cnpg/clusters";
-import { CnpgBackupList, CnpgScheduledBackupList } from "@/plugins/cnpg/backups";
+import { CnpgBackupList } from "@/plugins/cnpg/backups";
+import { CnpgScheduledBackupList } from "@/plugins/cnpg/scheduled-backups";
 import { CnpgPoolerList } from "@/plugins/cnpg/poolers";
 
 // MariaDB components

@@ -41,6 +41,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useTranslations } from "next-intl";
 import { useUIStore } from "@/stores/ui";
 import { useAuthStore } from "@/stores/auth";
 import { usePluginStore } from "@/stores/plugins";
@@ -114,6 +115,7 @@ function getInitials(displayName: string): string {
 
 export function Sidebar() {
   const pathname = usePathname();
+  const t = useTranslations("nav");
   const collapsed = useUIStore((s) => s.sidebarCollapsed);
   const toggleSidebar = useUIStore((s) => s.toggleSidebar);
   const user = useAuthStore((s) => s.user);
@@ -188,7 +190,7 @@ export function Sidebar() {
             <div key={section.title} className="mb-3">
               {!collapsed && (
                 <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                  {section.title}
+                  {t(section.title.toLowerCase() as "main" | "infrastructure")}
                 </p>
               )}
               {collapsed && sectionIdx > 0 && (
@@ -217,7 +219,7 @@ export function Sidebar() {
           <div className="mb-3">
             {!collapsed && (
               <p className="mb-1 px-3 text-[11px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                Tools
+                {t("tools")}
               </p>
             )}
             {collapsed && (
@@ -319,12 +321,12 @@ export function Sidebar() {
               className="w-[220px]"
             >
               <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">
-                Switch cluster
+                {t("switch_cluster")}
               </div>
               <DropdownMenuSeparator />
               {clusters.length === 0 ? (
                 <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                  No clusters available
+                  {t("no_clusters")}
                 </div>
               ) : (
                 clusters.map((cluster) => (
@@ -347,7 +349,7 @@ export function Sidebar() {
           {!collapsed && selectedClusterId && (
             <div className="mt-2">
               <p className="mb-1 px-2 text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">
-                Namespace
+                {t("namespace")}
               </p>
               <NamespaceSelector />
             </div>
@@ -415,7 +417,7 @@ export function Sidebar() {
               <DropdownMenuItem asChild>
                 <Link href="/settings">
                   <Settings className="mr-2 h-4 w-4" />
-                  Settings
+                  {t("settings")}
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
@@ -424,7 +426,7 @@ export function Sidebar() {
                 onClick={logout}
               >
                 <LogOut className="mr-2 h-4 w-4" />
-                Log out
+                {t("log_out")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

@@ -46,7 +46,7 @@ export function ServiceEntryList() {
   function handleDelete(ns: string, name: string) {
     if (!window.confirm(`Delete service entry "${name}" in namespace "${ns}"?`)) return;
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
-    api.delete(`/api/plugins/istio/serviceentries/${name}?clusterID=${clusterID}&namespace=${ns}`)
+    api.del(`/api/plugins/istio/serviceentries/${name}?clusterID=${clusterID}&namespace=${ns}`)
       .then(() => setItems((prev) => prev.filter((i) => !(i.metadata.name === name && i.metadata.namespace === ns))))
       .catch(() => {});
   }

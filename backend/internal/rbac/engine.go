@@ -115,6 +115,27 @@ func (e *Engine) InvalidateCache(userID string) {
 	e.mu.Unlock()
 }
 
+// InvalidateUsersWithRole invalidates the RBAC cache for all users assigned to the given role.
+func (e *Engine) InvalidateUsersWithRole(ctx context.Context, roleID string) {
+	rows, err := e.pool.Query(ctx, "SELECT user_id FROM user_roles WHERE role_id = $1", roleID)
+	if err != nil {
+		return
+	}
+	defer rows.Close()
+
+	var userIDs []string
+	for rows.Next() {
+		var uid string
+		if err := rows.Scan(&uid); err == nil {
+			userIDs = append(userIDs, uid)
+		}
+	}
+
+	for _, uid := range userIDs {
+		e.InvalidateCache(uid)
+	}
+}
+
 func (e *Engine) matchPermission(perm Permission, req Request) bool {
 	// Check resource match
 	if perm.Resource != "*" && perm.Resource != req.Resource {

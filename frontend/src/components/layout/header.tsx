@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Search, LogOut, Settings, User, ChevronRight, Wifi, WifiOff } from "lucide-react";
 import { NotificationBell } from "@/components/notifications/notification-bell";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/ui/user-avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -38,19 +38,11 @@ const routeLabels: Record<string, string> = {
   roles: "Roles",
   users: "Users",
   "notification-channels": "Channels",
+  profile: "Profile",
 };
 
 function getRouteLabel(segment: string): string {
   return routeLabels[segment] || segment.charAt(0).toUpperCase() + segment.slice(1);
-}
-
-function getInitials(displayName: string): string {
-  return displayName
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((word) => word[0].toUpperCase())
-    .join("");
 }
 
 // --- Breadcrumbs ---
@@ -103,7 +95,6 @@ export function Header() {
     }
   }, [user, fetchUser]);
 
-  const initials = user?.display_name ? getInitials(user.display_name) : "?";
   const displayName = user?.display_name || "User";
   const email = user?.email || "";
 
@@ -152,20 +143,12 @@ export function Header() {
               className="relative h-8 w-8 rounded-full"
               aria-label="User menu"
             >
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar user={user} size="md" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <div className="flex items-center gap-2 px-2 py-1.5">
-              <Avatar className="h-8 w-8">
-                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                  {initials}
-                </AvatarFallback>
-              </Avatar>
+              <UserAvatar user={user} size="md" />
               <div className="flex flex-col min-w-0">
                 <span className="truncate text-sm font-medium">
                   {displayName}
@@ -176,9 +159,11 @@ export function Header() {
               </div>
             </div>
             <DropdownMenuSeparator />
-            <DropdownMenuItem>
-              <User className="mr-2 h-4 w-4" />
-              Profile
+            <DropdownMenuItem asChild>
+              <Link href="/settings/profile">
+                <User className="mr-2 h-4 w-4" />
+                Profile
+              </Link>
             </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link href="/settings">

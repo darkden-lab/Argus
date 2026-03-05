@@ -68,11 +68,11 @@ function getLevelBadgeClass(level: string | undefined): string {
     case "warn":
       return "bg-yellow-900/40 text-yellow-400 border-yellow-800/50";
     case "debug":
-      return "bg-gray-800/40 text-gray-500 border-gray-700/50";
+      return "bg-muted/40 text-muted-foreground border-border/50";
     case "info":
       return "bg-blue-900/40 text-blue-400 border-blue-800/50";
     default:
-      return "bg-zinc-800/40 text-zinc-400 border-zinc-700/50";
+      return "bg-muted/40 text-muted-foreground border-border/50";
   }
 }
 
@@ -171,7 +171,7 @@ function LogLine({ parsed, searchQuery }: { parsed: ParsedLogLine; searchQuery?:
   return (
     <span className={colorClass}>
       {parsed.timestamp && (
-        <span className="text-zinc-500 select-all">{parsed.timestamp} </span>
+        <span className="text-muted-foreground select-all">{parsed.timestamp} </span>
       )}
       {parsed.level && (
         <span
@@ -198,13 +198,13 @@ function LogOutput({ logs, searchQuery }: { logs: string; searchQuery?: string }
   }, [parsedLines, searchQuery]);
 
   if (parsedLines.length === 0) {
-    return <span className="text-zinc-500">No logs available.</span>;
+    return <span className="text-muted-foreground">No logs available.</span>;
   }
 
   return (
     <>
       {searchQuery && (
-        <div className="sticky top-0 bg-zinc-950/90 backdrop-blur-sm border-b border-zinc-800 -mx-4 px-4 py-1.5 mb-2 text-[10px] text-zinc-400">
+        <div className="sticky top-0 bg-background/90 backdrop-blur-sm border-b border-border -mx-4 px-4 py-1.5 mb-2 text-[10px] text-muted-foreground">
           {matchCount} {matchCount === 1 ? "match" : "matches"}
         </div>
       )}
@@ -215,7 +215,7 @@ function LogOutput({ logs, searchQuery }: { logs: string; searchQuery?: string }
         return (
           <div
             key={i}
-            className={`hover:bg-zinc-900/50 px-1 -mx-1 rounded ${
+            className={`hover:bg-muted/50 px-1 -mx-1 rounded ${
               searchQuery && !matches ? "opacity-30" : ""
             }`}
           >
@@ -601,17 +601,17 @@ export function LogViewer({
       <pre
         ref={logRef}
         onScroll={handleScroll}
-        className="flex-1 min-h-[300px] max-h-[500px] overflow-auto rounded-md bg-zinc-950 p-4 font-mono text-xs text-zinc-200 leading-5 whitespace-pre-wrap break-all"
+        className="flex-1 min-h-[300px] max-h-[500px] overflow-auto rounded-md bg-background p-4 font-mono text-xs text-foreground leading-5 whitespace-pre-wrap break-all"
       >
         {loading ? (
-          <span className="flex items-center gap-2 text-zinc-500">
+          <span className="flex items-center gap-2 text-muted-foreground">
             <Loader2 className="h-4 w-4 animate-spin" />
             Loading logs...
           </span>
         ) : logs ? (
           <LogOutput logs={logs} searchQuery={searchQuery || undefined} />
         ) : (
-          <span className="text-zinc-500">No logs available.</span>
+          <span className="text-muted-foreground">No logs available.</span>
         )}
       </pre>
     </div>

@@ -1,9 +1,15 @@
 import React from 'react';
 import { render, type RenderOptions } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { NextIntlClientProvider } from 'next-intl';
+import messages from '../../messages/en.json';
 
 function AllProviders({ children }: { children: React.ReactNode }) {
-  return <>{children}</>;
+  return (
+    <NextIntlClientProvider locale="en" messages={messages}>
+      {children}
+    </NextIntlClientProvider>
+  );
 }
 
 function customRender(

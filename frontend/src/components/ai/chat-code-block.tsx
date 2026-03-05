@@ -38,10 +38,10 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
   const highlightedHtml = highlight(code);
 
   return (
-    <div className="my-2 overflow-hidden rounded-md border border-border bg-zinc-950 dark:bg-zinc-950">
+    <div className="my-2 overflow-hidden rounded-md border border-border bg-muted">
       {/* Header */}
-      <div className="flex items-center justify-between bg-zinc-900 px-3 py-1.5">
-        <span className="text-[10px] font-medium uppercase text-zinc-400">
+      <div className="flex items-center justify-between bg-muted/80 px-3 py-1.5">
+        <span className="text-[10px] font-medium uppercase text-muted-foreground">
           {language}
         </span>
         <div className="flex items-center gap-1">
@@ -49,7 +49,7 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
             <Button
               variant="ghost"
               size="icon"
-              className="h-6 w-6 text-zinc-400 hover:text-zinc-200"
+              className="h-6 w-6 text-muted-foreground hover:text-foreground"
               onClick={() => onApply(code)}
               title="Apply YAML"
               aria-label="Apply YAML"
@@ -60,7 +60,7 @@ export function ChatCodeBlock({ code, language, onApply }: ChatCodeBlockProps) {
           <Button
             variant="ghost"
             size="icon"
-            className="h-6 w-6 text-zinc-400 hover:text-zinc-200"
+            className="h-6 w-6 text-muted-foreground hover:text-foreground"
             onClick={handleCopy}
             aria-label="Copy code"
           >

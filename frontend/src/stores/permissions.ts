@@ -32,7 +32,7 @@ function matchesScope(
     return !clusterId || perm.scope_id === clusterId || perm.scope_id === '*';
   }
   if (perm.scope_type === 'namespace') {
-    if (!clusterId && !namespace) return true;
+    if (!clusterId && !namespace) return false;
     // scope_id format: "clusterId/namespace" or "*/*" or "clusterId/*"
     const [scopeCluster, scopeNs] = perm.scope_id.split('/');
     const clusterMatch = !clusterId || scopeCluster === '*' || scopeCluster === clusterId;

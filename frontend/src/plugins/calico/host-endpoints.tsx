@@ -43,7 +43,7 @@ export function HostEndpointList() {
   function handleDelete(name: string) {
     if (!window.confirm(`Delete host endpoint "${name}"?`)) return;
     const clusterID = localStorage.getItem("selected_cluster") ?? "";
-    api.delete(`/api/plugins/calico/hostendpoints/${name}?clusterID=${clusterID}`)
+    api.del(`/api/plugins/calico/hostendpoints/${name}?clusterID=${clusterID}`)
       .then(() => setItems((prev) => prev.filter((i) => i.metadata.name !== name)))
       .catch(() => {});
   }

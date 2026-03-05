@@ -45,11 +45,12 @@ describe('LoginPage', () => {
       renderLoginPage();
     });
 
-    expect(screen.getByText('Argus')).toBeInTheDocument();
-    expect(screen.getByText('Multi-cluster Kubernetes Dashboard')).toBeInTheDocument();
-    expect(screen.getByLabelText('Email')).toBeInTheDocument();
-    expect(screen.getByLabelText('Password')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /sign in/i })).toBeInTheDocument();
+    // With i18n mock, t('login_title') returns 'login_title', t('email') returns 'email', etc.
+    expect(screen.getByText('login_title')).toBeInTheDocument();
+    expect(screen.getByText('login_subtitle')).toBeInTheDocument();
+    expect(screen.getByLabelText('email')).toBeInTheDocument();
+    expect(screen.getByLabelText('password')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'login_button' })).toBeInTheDocument();
   });
 
   it('submits login form with correct values', async () => {
@@ -61,9 +62,9 @@ describe('LoginPage', () => {
       user = result.user;
     });
 
-    await user!.type(screen.getByLabelText('Email'), 'admin@example.com');
-    await user!.type(screen.getByLabelText('Password'), 'password123');
-    await user!.click(screen.getByRole('button', { name: /sign in/i }));
+    await user!.type(screen.getByLabelText('email'), 'admin@example.com');
+    await user!.type(screen.getByLabelText('password'), 'password123');
+    await user!.click(screen.getByRole('button', { name: 'login_button' }));
 
     expect(mockLogin).toHaveBeenCalledWith('admin@example.com', 'password123');
   });
@@ -77,9 +78,9 @@ describe('LoginPage', () => {
       user = result.user;
     });
 
-    await user!.type(screen.getByLabelText('Email'), 'admin@example.com');
-    await user!.type(screen.getByLabelText('Password'), 'pass');
-    await user!.click(screen.getByRole('button', { name: /sign in/i }));
+    await user!.type(screen.getByLabelText('email'), 'admin@example.com');
+    await user!.type(screen.getByLabelText('password'), 'pass');
+    await user!.click(screen.getByRole('button', { name: 'login_button' }));
 
     await waitFor(() => {
       expect(mockPush).toHaveBeenCalledWith('/dashboard');
@@ -95,9 +96,9 @@ describe('LoginPage', () => {
       user = result.user;
     });
 
-    await user!.type(screen.getByLabelText('Email'), 'bad@example.com');
-    await user!.type(screen.getByLabelText('Password'), 'wrong');
-    await user!.click(screen.getByRole('button', { name: /sign in/i }));
+    await user!.type(screen.getByLabelText('email'), 'bad@example.com');
+    await user!.type(screen.getByLabelText('password'), 'wrong');
+    await user!.click(screen.getByRole('button', { name: 'login_button' }));
 
     await waitFor(() => {
       expect(screen.getByText('Invalid credentials')).toBeInTheDocument();
@@ -111,18 +112,18 @@ describe('LoginPage', () => {
       renderLoginPage();
     });
 
-    const button = screen.getByRole('button', { name: /signing in/i });
+    const button = screen.getByRole('button', { name: /login_loading/i });
     expect(button).toBeDisabled();
   });
 
-  it('shows "Signing in..." text when loading', async () => {
+  it('shows loading text when isLoading', async () => {
     useAuthStore.setState({ isLoading: true, login: mockLogin });
 
     await act(async () => {
       renderLoginPage();
     });
 
-    expect(screen.getByText('Signing in...')).toBeInTheDocument();
+    expect(screen.getByText('login_loading')).toBeInTheDocument();
   });
 
   it('shows admin contact message instead of register link', async () => {
@@ -130,11 +131,11 @@ describe('LoginPage', () => {
       renderLoginPage();
     });
 
-    expect(screen.getByText('Contact your administrator for account creation.')).toBeInTheDocument();
+    expect(screen.getByText('contact_admin')).toBeInTheDocument();
     expect(screen.queryByText('Register')).not.toBeInTheDocument();
   });
 
-  it('shows OIDC button when OIDC is enabled', async () => {
+  it('shows OIDC button when OIDC is enabled with provider', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({ enabled: true, provider_name: 'Keycloak' }),
@@ -144,8 +145,10 @@ describe('LoginPage', () => {
       renderLoginPage();
     });
 
+    // Mock t('oidc_login_provider', { provider: 'Keycloak' }) returns 'oidc_login_provider'
+    // because the mock replaces {provider} in key text but key doesn't contain {provider}
     await waitFor(() => {
-      expect(screen.getByText('Sign in with Keycloak')).toBeInTheDocument();
+      expect(screen.getByText('oidc_login_provider')).toBeInTheDocument();
     });
   });
 
@@ -160,7 +163,7 @@ describe('LoginPage', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('Sign in with SSO')).toBeInTheDocument();
+      expect(screen.getByText('oidc_login')).toBeInTheDocument();
     });
   });
 
@@ -178,14 +181,14 @@ describe('LoginPage', () => {
       expect(global.fetch).toHaveBeenCalled();
     });
 
-    expect(screen.queryByText(/sign in with/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('oidc_login')).not.toBeInTheDocument();
   });
 
-  it('renders the brand tagline', async () => {
+  it('renders the brand footer', async () => {
     await act(async () => {
       renderLoginPage();
     });
 
-    expect(screen.getByText(/Kubernetes Infrastructure Management/)).toBeInTheDocument();
+    expect(screen.getByText('footer')).toBeInTheDocument();
   });
 });
