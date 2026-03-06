@@ -12,6 +12,7 @@ jest.mock('@/lib/api', () => ({
 
 // Mock CreateRoleDialog since it uses its own API calls
 jest.mock('@/components/rbac/create-role-dialog', () => ({
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   CreateRoleDialog: ({ onCreated }: { onCreated: () => void }) => (
     <button data-testid="create-role-btn">New Role</button>
   ),

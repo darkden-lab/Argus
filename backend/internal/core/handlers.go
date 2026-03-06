@@ -17,12 +17,13 @@ import (
 // K8s resources (namespaces, nodes, events) so callers don't have to construct
 // the generic /resources/{group}/{version}/{resource} URL themselves.
 type ConvenienceHandlers struct {
-	clusterMgr *cluster.Manager
-	pool       *pgxpool.Pool
+	clusterMgr      *cluster.Manager
+	pool            *pgxpool.Pool
+	projectWriteGuard mux.MiddlewareFunc
 }
 
-func NewConvenienceHandlers(cm *cluster.Manager, pool *pgxpool.Pool) *ConvenienceHandlers {
-	return &ConvenienceHandlers{clusterMgr: cm, pool: pool}
+func NewConvenienceHandlers(cm *cluster.Manager, pool *pgxpool.Pool, projectWriteGuard mux.MiddlewareFunc) *ConvenienceHandlers {
+	return &ConvenienceHandlers{clusterMgr: cm, pool: pool, projectWriteGuard: projectWriteGuard}
 }
 
 // RegisterRoutes attaches all convenience endpoints to the provided router.
@@ -32,13 +33,21 @@ func (h *ConvenienceHandlers) RegisterRoutes(r *mux.Router) {
 	api.HandleFunc("/nodes", h.ListNodes).Methods(http.MethodGet)
 	api.HandleFunc("/events", h.ListEvents).Methods(http.MethodGet)
 	api.HandleFunc("/api-resources", h.ListAPIResources).Methods(http.MethodGet)
+
+	// Project read endpoints — any authenticated user
 	api.HandleFunc("/projects", h.ListProjects).Methods(http.MethodGet)
-	api.HandleFunc("/projects", h.CreateProject).Methods(http.MethodPost)
 	api.HandleFunc("/projects/{project}", h.GetProject).Methods(http.MethodGet)
-	api.HandleFunc("/projects/{project}", h.UpdateProject).Methods(http.MethodPut)
-	api.HandleFunc("/projects/{project}", h.DeleteProject).Methods(http.MethodDelete)
-	api.HandleFunc("/projects/{project}/namespaces", h.AssignNamespaces).Methods(http.MethodPost)
-	api.HandleFunc("/projects/{project}/namespaces/{namespace}", h.RemoveNamespace).Methods(http.MethodDelete)
+
+	// Project write endpoints — require clusters:write RBAC permission
+	writeAPI := api.PathPrefix("").Subrouter()
+	if h.projectWriteGuard != nil {
+		writeAPI.Use(h.projectWriteGuard)
+	}
+	writeAPI.HandleFunc("/projects", h.CreateProject).Methods(http.MethodPost)
+	writeAPI.HandleFunc("/projects/{project}", h.UpdateProject).Methods(http.MethodPut)
+	writeAPI.HandleFunc("/projects/{project}", h.DeleteProject).Methods(http.MethodDelete)
+	writeAPI.HandleFunc("/projects/{project}/namespaces", h.AssignNamespaces).Methods(http.MethodPost)
+	writeAPI.HandleFunc("/projects/{project}/namespaces/{namespace}", h.RemoveNamespace).Methods(http.MethodDelete)
 }
 
 // proxyAgentList is a convenience wrapper around proxyAgentResponse for GET requests.

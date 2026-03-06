@@ -13,7 +13,7 @@ import (
 
 type APIKey struct {
 	ID         string     `json:"id"`
-	UserID     string     `json:"user_id"`
+	UserID     string     `json:"-"`
 	Name       string     `json:"name"`
 	KeyPrefix  string     `json:"key_prefix"`
 	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
@@ -45,7 +45,20 @@ func generateAPIKey() (string, string, error) {
 	return key, prefix, nil
 }
 
+// maxKeysPerUser is the maximum number of API keys a single user can hold.
+const maxKeysPerUser = 25
+
 func (s *APIKeyService) CreateKey(ctx context.Context, userID, name string, expiresAt *time.Time) (*CreateAPIKeyResponse, error) {
+	var count int
+	if err := s.pool.QueryRow(ctx,
+		`SELECT COUNT(*) FROM api_keys WHERE user_id = $1 AND is_active = true`, userID,
+	).Scan(&count); err != nil {
+		return nil, fmt.Errorf("failed to check key count: %w", err)
+	}
+	if count >= maxKeysPerUser {
+		return nil, fmt.Errorf("maximum number of API keys (%d) reached", maxKeysPerUser)
+	}
+
 	key, prefix, err := generateAPIKey()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate API key: %w", err)
@@ -91,6 +104,9 @@ func (s *APIKeyService) ListKeys(ctx context.Context, userID string) ([]APIKey, 
 			return nil, fmt.Errorf("failed to scan API key: %w", err)
 		}
 		keys = append(keys, k)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate API keys: %w", err)
 	}
 	return keys, nil
 }
@@ -138,8 +154,10 @@ func (s *APIKeyService) ValidateKey(ctx context.Context, rawKey string) (*Claims
 			return nil, fmt.Errorf("API key has expired")
 		}
 
-		// Update last_used_at
-		_, _ = s.pool.Exec(ctx, `UPDATE api_keys SET last_used_at = NOW() WHERE id = $1`, id)
+		// Update last_used_at atomically (also re-checks active+expiry to prevent TOCTOU)
+		_, _ = s.pool.Exec(ctx,
+			`UPDATE api_keys SET last_used_at = NOW()
+			 WHERE id = $1 AND is_active = true AND (expires_at IS NULL OR expires_at > NOW())`, id)
 
 		// Look up user email
 		var email string
@@ -149,6 +167,9 @@ func (s *APIKeyService) ValidateKey(ctx context.Context, rawKey string) (*Claims
 		}
 
 		return &Claims{UserID: userID, Email: email}, nil
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate API keys: %w", err)
 	}
 
 	return nil, fmt.Errorf("invalid API key")

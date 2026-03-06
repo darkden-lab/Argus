@@ -44,6 +44,9 @@ describe('SettingsHubPage', () => {
     expect(screen.getByText('OIDC / SSO')).toBeInTheDocument();
     expect(screen.getByText('Single sign-on and identity provider')).toBeInTheDocument();
 
+    expect(screen.getByText('API Keys')).toBeInTheDocument();
+    expect(screen.getByText('Manage API keys for programmatic access')).toBeInTheDocument();
+
     expect(screen.getByText('Notification Rules')).toBeInTheDocument();
     expect(screen.getByText('Configure alerts and notification triggers')).toBeInTheDocument();
 
@@ -60,11 +63,11 @@ describe('SettingsHubPage', () => {
     expect(screen.getByText('Review system activity and changes')).toBeInTheDocument();
   });
 
-  it('renders exactly 8 settings section cards', () => {
+  it('renders exactly 9 settings section cards', () => {
     const { container } = render(<SettingsHubPage />);
 
     const cards = container.querySelectorAll('[class*="cursor-pointer"]');
-    expect(cards).toHaveLength(8);
+    expect(cards).toHaveLength(9);
   });
 
   it('navigates to /settings/users when Users card is clicked', async () => {
@@ -89,6 +92,14 @@ describe('SettingsHubPage', () => {
     await user.click(screen.getByText('Single sign-on and identity provider'));
 
     expect(mockPush).toHaveBeenCalledWith('/settings/oidc');
+  });
+
+  it('navigates to /settings/api-keys when API Keys card is clicked', async () => {
+    const { user } = render(<SettingsHubPage />);
+
+    await user.click(screen.getByText('Manage API keys for programmatic access'));
+
+    expect(mockPush).toHaveBeenCalledWith('/settings/api-keys');
   });
 
   it('navigates to /settings/notifications when Notification Rules card is clicked', async () => {
@@ -158,6 +169,7 @@ describe('SettingsLayout', () => {
     expect(screen.getByText('nav.roles')).toBeInTheDocument();
     expect(screen.getByText('nav.plugins')).toBeInTheDocument();
     expect(screen.getByText('nav.oidc')).toBeInTheDocument();
+    expect(screen.getByText('nav.apiKeys')).toBeInTheDocument();
     expect(screen.getByText('nav.audit')).toBeInTheDocument();
     expect(screen.getByText('nav.notifications')).toBeInTheDocument();
     expect(screen.getByText('nav.channels')).toBeInTheDocument();
@@ -186,6 +198,10 @@ describe('SettingsLayout', () => {
     expect(screen.getByText('nav.oidc').closest('a')).toHaveAttribute(
       'href',
       '/settings/oidc'
+    );
+    expect(screen.getByText('nav.apiKeys').closest('a')).toHaveAttribute(
+      'href',
+      '/settings/api-keys'
     );
     expect(screen.getByText('nav.audit').closest('a')).toHaveAttribute(
       'href',

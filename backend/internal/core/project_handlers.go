@@ -468,6 +468,7 @@ func (h *ConvenienceHandlers) getProjectNamespacesDB(ctx context.Context, projec
 			namespaces = append(namespaces, ns)
 		}
 	}
+	// Best-effort: ignore rows.Err() for this helper
 	if namespaces == nil {
 		return []string{}
 	}
@@ -491,6 +492,9 @@ func (h *ConvenienceHandlers) listDBProjects(ctx context.Context, clusterID stri
 		}
 		p.Namespaces = h.getProjectNamespacesDB(ctx, p.ID)
 		projects = append(projects, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return projects, nil
 }

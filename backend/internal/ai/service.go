@@ -647,6 +647,9 @@ func (s *Service) getHistoryWithSummary(ctx context.Context, conversationID stri
 		}
 		recent = append(recent, m)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 
 	// Reverse to get chronological order
 	for i, j := 0, len(recent)-1; i < j; i, j = i+1, j-1 {
@@ -688,6 +691,10 @@ func (s *Service) triggerSummarization(ctx context.Context, conversationID strin
 		}
 		m.Role = Role(roleStr)
 		allMessages = append(allMessages, m)
+	}
+	if err := rows.Err(); err != nil {
+		log.Printf("ai service: summarization rows error: %v", err)
+		return
 	}
 
 	if len(allMessages) <= 20 {
@@ -772,6 +779,9 @@ func (s *Service) loadHistory(ctx context.Context, conversationID string) ([]Mes
 			m.ToolCallID = *toolCallID
 		}
 		messages = append(messages, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	return messages, nil

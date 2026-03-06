@@ -23,9 +23,9 @@ type terminalSession struct {
 }
 
 // registerTerminalNamespace sets up the /terminal namespace.
-func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, clusterMgr *cluster.Manager) {
+func registerTerminalNamespace(io *socket.Server, jwtService *auth.JWTService, apiKeyService *auth.APIKeyService, clusterMgr *cluster.Manager) {
 	nsp := io.Of("/terminal", nil)
-	nsp.Use(authMiddleware(jwtService))
+	nsp.Use(authMiddleware(jwtService, apiKeyService))
 
 	_ = nsp.On("connection", func(clients ...interface{}) {
 		client := clients[0].(*socket.Socket)

@@ -215,7 +215,8 @@ func (s *OIDCService) HandleCallback(w http.ResponseWriter, r *http.Request) {
 
 	if errParam := r.URL.Query().Get("error"); errParam != "" {
 		desc := r.URL.Query().Get("error_description")
-		writeJSON(w, http.StatusBadRequest, errorResponse{Error: fmt.Sprintf("OIDC error: %s - %s", errParam, desc)})
+		log.Printf("oidc: callback error: %s — %s", errParam, desc)
+		writeJSON(w, http.StatusBadRequest, errorResponse{Error: "OIDC authentication failed"})
 		return
 	}
 

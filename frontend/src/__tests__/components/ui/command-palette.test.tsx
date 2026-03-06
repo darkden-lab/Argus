@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '../../test-utils';
+import { render, screen } from '../../test-utils';
 import { CommandPalette, type CommandGroup } from '@/components/ui/command-palette';
 
 // Mock scrollIntoView (not available in jsdom)
@@ -134,7 +134,7 @@ describe('CommandPalette', () => {
     it('moves selection down with ArrowDown', async () => {
       const { user } = renderPalette(true);
 
-      const input = screen.getByPlaceholderText('Type a command or search...');
+      screen.getByPlaceholderText('Type a command or search...');
       await user.keyboard('{ArrowDown}');
 
       const options = screen.getAllByRole('option');
@@ -145,7 +145,7 @@ describe('CommandPalette', () => {
     it('moves selection up with ArrowUp', async () => {
       const { user } = renderPalette(true);
 
-      const input = screen.getByPlaceholderText('Type a command or search...');
+      screen.getByPlaceholderText('Type a command or search...');
       // Move down once then up once should return to first item
       await user.keyboard('{ArrowDown}');
       await user.keyboard('{ArrowUp}');

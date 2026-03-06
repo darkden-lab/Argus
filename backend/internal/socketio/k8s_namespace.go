@@ -14,9 +14,9 @@ import (
 // registerK8sNamespace sets up the /k8s namespace for K8s watch events.
 // Clients emit "subscribe"/"unsubscribe" with {cluster, resource, namespace}
 // and receive "watch_event" when events occur on subscribed resources.
-func registerK8sNamespace(io *socket.Server, jwtService *auth.JWTService, hub *ws.Hub, clusterMgr *cluster.Manager) {
+func registerK8sNamespace(io *socket.Server, jwtService *auth.JWTService, apiKeyService *auth.APIKeyService, hub *ws.Hub, clusterMgr *cluster.Manager) {
 	nsp := io.Of("/k8s", nil)
-	nsp.Use(authMiddleware(jwtService))
+	nsp.Use(authMiddleware(jwtService, apiKeyService))
 
 	// Hook into the Hub to broadcast events to Socket.IO rooms
 	hub.OnEvent(func(event ws.WatchEvent) {

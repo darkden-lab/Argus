@@ -6,6 +6,7 @@ import {
   Users,
   Shield,
   KeyRound,
+  Key,
   Bell,
   Send,
   Brain,
@@ -37,6 +38,14 @@ const settingsSections = [
     icon: KeyRound,
     color: "text-purple-500",
     bg: "bg-purple-500/10",
+  },
+  {
+    label: "API Keys",
+    description: "Manage API keys for programmatic access",
+    href: "/settings/api-keys",
+    icon: Key,
+    color: "text-indigo-500",
+    bg: "bg-indigo-500/10",
   },
   {
     label: "Notification Rules",

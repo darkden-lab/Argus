@@ -1,5 +1,6 @@
 import React from 'react';
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function useTranslations(namespace?: string) {
   return function t(key: string, values?: Record<string, unknown>) {
     // Return the key with namespace stripped, simulating real translation

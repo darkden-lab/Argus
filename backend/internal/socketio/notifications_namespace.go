@@ -10,9 +10,9 @@ import (
 
 // registerNotificationsNamespace sets up the /notifications namespace.
 // Each user joins a room named after their userID so broadcasts can target them.
-func registerNotificationsNamespace(io *socket.Server, jwtService *auth.JWTService, notifWSHandler *notifications.WSHandler) {
+func registerNotificationsNamespace(io *socket.Server, jwtService *auth.JWTService, apiKeyService *auth.APIKeyService, notifWSHandler *notifications.WSHandler) {
 	nsp := io.Of("/notifications", nil)
-	nsp.Use(authMiddleware(jwtService))
+	nsp.Use(authMiddleware(jwtService, apiKeyService))
 
 	// Wire up the notifications WSHandler to broadcast via Socket.IO
 	notifWSHandler.SetSocketIOBroadcast(func(userID string, data []byte) {

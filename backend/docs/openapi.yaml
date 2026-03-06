@@ -295,8 +295,10 @@ paths:
               properties:
                 name:
                   type: string
+                  maxLength: 255
                 expires_in_days:
                   type: integer
+                  minimum: 0
       responses:
         "201":
           description: API key created (raw key returned only once)
@@ -304,6 +306,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/APIKeyCreateResponse"
+        "409":
+          description: Maximum number of API keys (25) reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
 
   /api/auth/api-keys/{id}:
     delete:

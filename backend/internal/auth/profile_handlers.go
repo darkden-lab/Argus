@@ -7,12 +7,18 @@ import (
 	"net/http"
 	"net/mail"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// passwordChangeLimiter tracks the last password change per user to prevent abuse.
+var passwordChangeLimiter sync.Map // map[string]time.Time
+
+const passwordChangeCooldown = 60 * time.Second
 
 // ProfileHandlers provides HTTP handlers for user profile and preferences management.
 type ProfileHandlers struct {
@@ -120,6 +126,14 @@ func (h *ProfileHandlers) handleChangePassword(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Per-user rate limit: 1 password change per 60 seconds
+	if lastChange, ok := passwordChangeLimiter.Load(claims.UserID); ok {
+		if time.Since(lastChange.(time.Time)) < passwordChangeCooldown {
+			writeJSON(w, http.StatusTooManyRequests, errorResponse{Error: "please wait before changing your password again"})
+			return
+		}
+	}
+
 	var req struct {
 		CurrentPassword string `json:"current_password"`
 		NewPassword     string `json:"new_password"`
@@ -171,6 +185,7 @@ func (h *ProfileHandlers) handleChangePassword(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	passwordChangeLimiter.Store(claims.UserID, time.Now())
 	writeJSON(w, http.StatusOK, map[string]string{"message": "password changed successfully"})
 }
 

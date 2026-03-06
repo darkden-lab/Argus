@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
 
@@ -31,6 +32,21 @@ interface ApiKey {
   last_used_at: string | null;
   expires_at: string | null;
   is_active: boolean;
+}
+
+function formatTimeAgo(dateStr: string): string {
+  const now = Date.now();
+  const date = new Date(dateStr).getTime();
+  const seconds = Math.floor((now - date) / 1000);
+
+  if (seconds < 60) return "Just now";
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
 }
 
 const expirationOptions = [
@@ -49,6 +65,7 @@ export default function ApiKeysPage() {
   const [expiresInDays, setExpiresInDays] = useState("0");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [revokeTarget, setRevokeTarget] = useState<ApiKey | null>(null);
 
   const fetchKeys = useCallback(async () => {
     try {
@@ -88,12 +105,15 @@ export default function ApiKeysPage() {
     }
   };
 
-  const handleRevoke = async (id: string) => {
+  const handleRevoke = async () => {
+    if (!revokeTarget) return;
+    const id = revokeTarget.id;
+    setRevokeTarget(null);
     setKeys((prev) =>
       prev.map((k) => (k.id === id ? { ...k, is_active: false } : k))
     );
     try {
-      await api.delete(`/api/auth/api-keys/${id}`);
+      await api.del(`/api/auth/api-keys/${id}`);
       toast("API key revoked", { variant: "success" });
     } catch {
       fetchKeys();
@@ -243,15 +263,15 @@ export default function ApiKeysPage() {
                           {key.key_prefix}...
                         </code>
                       </td>
-                      <td className="py-3 pr-4 text-muted-foreground">
-                        {new Date(key.created_at).toLocaleDateString()}
+                      <td className="py-3 pr-4 text-muted-foreground" title={new Date(key.created_at).toLocaleString()}>
+                        {formatTimeAgo(key.created_at)}
                       </td>
-                      <td className="py-3 pr-4 text-muted-foreground">
+                      <td className="py-3 pr-4 text-muted-foreground" title={key.last_used_at ? new Date(key.last_used_at).toLocaleString() : undefined}>
                         {key.last_used_at
-                          ? new Date(key.last_used_at).toLocaleDateString()
+                          ? formatTimeAgo(key.last_used_at)
                           : "Never"}
                       </td>
-                      <td className="py-3 pr-4 text-muted-foreground">
+                      <td className="py-3 pr-4 text-muted-foreground" title={key.expires_at ? new Date(key.expires_at).toLocaleString() : undefined}>
                         {key.expires_at
                           ? new Date(key.expires_at).toLocaleDateString()
                           : "Never"}
@@ -270,7 +290,7 @@ export default function ApiKeysPage() {
                           <Button
                             variant="destructive"
                             size="sm"
-                            onClick={() => handleRevoke(key.id)}
+                            onClick={() => setRevokeTarget(key)}
                           >
                             <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                             Revoke
@@ -285,6 +305,15 @@ export default function ApiKeysPage() {
           )}
         </CardContent>
       </Card>
+      <ConfirmDialog
+        open={!!revokeTarget}
+        onOpenChange={(open) => !open && setRevokeTarget(null)}
+        title="Revoke API Key"
+        description={`Are you sure you want to revoke "${revokeTarget?.name}"? This action cannot be undone. Any integrations using this key will stop working immediately.`}
+        confirmLabel="Revoke Key"
+        variant="destructive"
+        onConfirm={handleRevoke}
+      />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 package socketio
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -25,6 +26,7 @@ type Server struct {
 // Deps holds all dependencies needed by the Socket.IO namespaces.
 type Deps struct {
 	JWTService      *auth.JWTService
+	APIKeyService   *auth.APIKeyService
 	Hub             *ws.Hub
 	AIService       *ai.Service
 	ClusterMgr      *cluster.Manager
@@ -49,10 +51,10 @@ func NewServer(deps Deps) *Server {
 	io := socket.NewServer(nil, opts)
 
 	// Register namespaces
-	registerK8sNamespace(io, deps.JWTService, deps.Hub, deps.ClusterMgr)
-	registerAINamespace(io, deps.JWTService, deps.AIService, deps.HistoryStore, deps.TaskRunner)
-	registerTerminalNamespace(io, deps.JWTService, deps.ClusterMgr)
-	registerNotificationsNamespace(io, deps.JWTService, deps.NotifWSHandler)
+	registerK8sNamespace(io, deps.JWTService, deps.APIKeyService, deps.Hub, deps.ClusterMgr)
+	registerAINamespace(io, deps.JWTService, deps.APIKeyService, deps.AIService, deps.HistoryStore, deps.TaskRunner)
+	registerTerminalNamespace(io, deps.JWTService, deps.APIKeyService, deps.ClusterMgr)
+	registerNotificationsNamespace(io, deps.JWTService, deps.APIKeyService, deps.NotifWSHandler)
 
 	return &Server{
 		io:      io,
@@ -70,8 +72,9 @@ func (s *Server) Close() {
 	s.io.Close(nil)
 }
 
-// authMiddleware creates a Socket.IO middleware that validates JWT from handshake auth.
-func authMiddleware(jwtService *auth.JWTService) func(*socket.Socket, func(*socket.ExtendedError)) {
+// authMiddleware creates a Socket.IO middleware that validates JWT or API key from handshake auth.
+// Handshake auth format: { token: "jwt" } or { apiKey: "argus_..." }
+func authMiddleware(jwtService *auth.JWTService, apiKeyService *auth.APIKeyService) func(*socket.Socket, func(*socket.ExtendedError)) {
 	return func(s *socket.Socket, next func(*socket.ExtendedError)) {
 		authData := s.Handshake().Auth
 		if authData == nil {
@@ -85,9 +88,23 @@ func authMiddleware(jwtService *auth.JWTService) func(*socket.Socket, func(*sock
 			return
 		}
 
+		// Try API key first
+		if apiKey, ok := tokenRaw["apiKey"].(string); ok && apiKey != "" && apiKeyService != nil {
+			claims, err := apiKeyService.ValidateKey(context.Background(), apiKey)
+			if err != nil {
+				next(socket.NewExtendedError("invalid API key", nil))
+				return
+			}
+			s.SetData(claims)
+			log.Printf("socketio: authenticated user %s via API key on namespace %s", claims.UserID, s.Nsp().Name())
+			next(nil)
+			return
+		}
+
+		// Fall back to JWT
 		token, ok := tokenRaw["token"].(string)
 		if !ok || token == "" {
-			next(socket.NewExtendedError("token required", nil))
+			next(socket.NewExtendedError("token or apiKey required", nil))
 			return
 		}
 

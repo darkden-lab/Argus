@@ -15,6 +15,7 @@ import {
   Bell,
   Shield,
   Users,
+  Key,
   FolderOpen,
   Globe,
   X,
@@ -195,6 +196,14 @@ export const settingsCommands: CommandGroup = {
       icon: Shield,
       href: "/settings/roles",
       keywords: ["rbac", "access", "authorization"],
+    },
+    {
+      id: "settings-api-keys",
+      label: "API Keys",
+      description: "Manage API keys for programmatic access",
+      icon: Key,
+      href: "/settings/api-keys",
+      keywords: ["token", "api", "key", "programmatic", "authentication"],
     },
     {
       id: "settings-notifications",

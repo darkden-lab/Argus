@@ -10,7 +10,6 @@ import { useTerminal, type TerminalMode } from '@/hooks/use-terminal';
 // Mock socket.io-client via our socket lib
 const mockEmit = jest.fn();
 const mockOn = jest.fn();
-const mockOff = jest.fn();
 
 let connectHandler: (() => void) | undefined;
 

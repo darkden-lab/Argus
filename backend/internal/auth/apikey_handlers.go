@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -42,6 +43,15 @@ func (h *APIKeyHandlers) handleCreate(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "name is required")
 		return
 	}
+	if len(req.Name) > 255 {
+		httputil.WriteError(w, http.StatusBadRequest, "name must be 255 characters or less")
+		return
+	}
+
+	if req.ExpiresInDays < 0 {
+		httputil.WriteError(w, http.StatusBadRequest, "expires_in_days must not be negative")
+		return
+	}
 
 	var expiresAt *time.Time
 	if req.ExpiresInDays > 0 {
@@ -51,6 +61,10 @@ func (h *APIKeyHandlers) handleCreate(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.service.CreateKey(r.Context(), claims.UserID, req.Name, expiresAt)
 	if err != nil {
+		if strings.Contains(err.Error(), "maximum number of API keys") {
+			httputil.WriteError(w, http.StatusConflict, err.Error())
+			return
+		}
 		httputil.WriteError(w, http.StatusInternalServerError, "failed to create API key")
 		return
 	}

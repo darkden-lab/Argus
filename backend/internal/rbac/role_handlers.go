@@ -420,6 +420,11 @@ func (h *RoleHandlers) handleListRolePermissions(w http.ResponseWriter, r *http.
 		}
 		perms = append(perms, p)
 	}
+	if err := rows.Err(); err != nil {
+		log.Printf("ERROR: failed to iterate permissions: %v", err)
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to iterate permissions")
+		return
+	}
 	httputil.WriteJSON(w, http.StatusOK, perms)
 }
 

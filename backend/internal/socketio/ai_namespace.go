@@ -24,9 +24,9 @@ func validateStringLen(s string, max int) bool {
 }
 
 // registerAINamespace sets up the /ai namespace for AI chat streaming.
-func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, aiService *ai.Service, historyStore *ai.HistoryStore, taskRunner *ai.TaskRunner) {
+func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, apiKeyService *auth.APIKeyService, aiService *ai.Service, historyStore *ai.HistoryStore, taskRunner *ai.TaskRunner) {
 	nsp := io.Of("/ai", nil)
-	nsp.Use(authMiddleware(jwtService))
+	nsp.Use(authMiddleware(jwtService, apiKeyService))
 
 	_ = nsp.On("connection", func(clients ...interface{}) {
 		client := clients[0].(*socket.Socket)

@@ -267,6 +267,103 @@ func TestAuthMiddlewareMultipleAuthHeaders(t *testing.T) {
 	}
 }
 
+// --- API Key Authentication Tests ---
+
+// TestAuthMiddlewareAPIKeyHeaderWithoutService tests that X-API-Key is rejected when no service is provided.
+func TestAuthMiddlewareAPIKeyHeaderWithoutService(t *testing.T) {
+	jwtSvc := auth.NewJWTService("test-secret")
+	middleware := AuthMiddleware(jwtSvc) // no apiKeyService
+
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-API-Key", "argus_someapikey12345")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 when API key service not available, got %d", rec.Code)
+	}
+
+	var resp map[string]string
+	json.NewDecoder(rec.Body).Decode(&resp)
+	if resp["error"] != "API key authentication not available" {
+		t.Errorf("expected 'API key authentication not available', got %q", resp["error"])
+	}
+}
+
+// TestAuthMiddlewareAPIKeyHeaderWithNilService tests that X-API-Key is rejected when service is nil.
+func TestAuthMiddlewareAPIKeyHeaderWithNilService(t *testing.T) {
+	jwtSvc := auth.NewJWTService("test-secret")
+	var nilService *auth.APIKeyService
+	middleware := AuthMiddleware(jwtSvc, nilService)
+
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-API-Key", "argus_someapikey12345")
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 when API key service is nil, got %d", rec.Code)
+	}
+}
+
+// TestAuthMiddlewareAPIKeyTakesPrecedenceOverBearer verifies X-API-Key is checked first.
+func TestAuthMiddlewareAPIKeyTakesPrecedenceOverBearer(t *testing.T) {
+	jwtSvc := auth.NewJWTService("test-secret")
+	middleware := AuthMiddleware(jwtSvc) // no apiKeyService
+
+	token, _ := jwtSvc.GenerateToken("user-123", "test@test.com")
+
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	// Both headers present — X-API-Key should be checked first
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("X-API-Key", "argus_someapikey12345")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	// Should fail on API key (no service), not succeed with JWT
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401 (API key takes precedence over bearer), got %d", rec.Code)
+	}
+}
+
+// TestAuthMiddlewareFallsToJWTWithoutAPIKeyHeader verifies JWT is used when no X-API-Key header.
+func TestAuthMiddlewareFallsToJWTWithoutAPIKeyHeader(t *testing.T) {
+	jwtSvc := auth.NewJWTService("test-secret")
+	var nilService *auth.APIKeyService
+	middleware := AuthMiddleware(jwtSvc, nilService)
+
+	token, _ := jwtSvc.GenerateToken("user-123", "test@test.com")
+
+	handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest("GET", "/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 with valid JWT (no API key header), got %d", rec.Code)
+	}
+}
+
 func min(a, b int) int {
 	if a < b {
 		return a
