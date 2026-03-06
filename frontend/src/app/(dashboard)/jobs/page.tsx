@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useJobs } from "@/hooks/use-jobs";
 import { useClusterStore } from "@/stores/cluster";
@@ -20,12 +20,12 @@ import {
   Calendar,
   CheckCircle2,
   Clock,
-  Loader2,
   Play,
   Plus,
   Search,
   Timer,
 } from "lucide-react";
+import { ResourceListSkeleton } from "@/components/skeletons";
 
 const STATUS_FILTERS = [
   { value: "all", label: "All" },
@@ -53,6 +53,35 @@ function getStatusBadgeVariant(
     default:
       return "secondary";
   }
+}
+
+function NextRunCountdown({ nextRun }: { nextRun?: string }) {
+  const [timeLeft, setTimeLeft] = useState("");
+
+  const update = useCallback(() => {
+    if (!nextRun) return;
+    const diff = new Date(nextRun).getTime() - Date.now();
+    if (diff <= 0) { setTimeLeft("now"); return; }
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    setTimeLeft(h > 0 ? `${h}h ${m}m` : m > 0 ? `${m}m ${s}s` : `${s}s`);
+  }, [nextRun]);
+
+  useEffect(() => {
+    if (!nextRun) return;
+    update();
+    const id = setInterval(update, 1000);
+    return () => clearInterval(id);
+  }, [nextRun, update]);
+
+  if (!nextRun || !timeLeft) return null;
+  return (
+    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+      <Timer className="h-3.5 w-3.5" />
+      <span>Next run: {timeLeft}</span>
+    </div>
+  );
 }
 
 function JobCard({
@@ -104,6 +133,9 @@ function JobCard({
             <span>Last run: {formatAge(job.lastRun)} ago</span>
           </div>
         )}
+
+        {/* Next run countdown */}
+        {job.nextRun && <NextRunCountdown nextRun={job.nextRun} />}
 
         {/* Completions */}
         <div className="flex items-center gap-1.5 text-xs">
@@ -205,12 +237,7 @@ export default function JobsPage() {
 
       {/* Content */}
       {loading || clustersLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Loading jobs...</span>
-          </div>
-        </div>
+        <ResourceListSkeleton />
       ) : error ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
           <p>Failed to load jobs: {error}</p>

@@ -7,7 +7,8 @@ import { useClusterStore } from "@/stores/cluster";
 import { AppCard } from "@/components/apps/app-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Loader2, Plus, Rocket, Search } from "lucide-react";
+import { Plus, Rocket, Search } from "lucide-react";
+import { ResourceListSkeleton } from "@/components/skeletons";
 
 export default function AppsPage() {
   const router = useRouter();
@@ -63,12 +64,7 @@ export default function AppsPage() {
 
       {/* Content */}
       {loading || clustersLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Loading apps...</span>
-          </div>
-        </div>
+        <ResourceListSkeleton />
       ) : error ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
           <p>Failed to load apps: {error}</p>

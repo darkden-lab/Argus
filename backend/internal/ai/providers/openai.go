@@ -124,7 +124,10 @@ func (o *OpenAI) Chat(ctx context.Context, req ai.ChatRequest) (*ai.ChatResponse
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		if readErr != nil {
+			return nil, fmt.Errorf("openai: failed to read error response: %w", readErr)
+		}
 		return nil, fmt.Errorf("openai: API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -189,8 +192,11 @@ func (o *OpenAI) ChatStream(ctx context.Context, req ai.ChatRequest) (ai.StreamR
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
 		resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("openai: failed to read error response: %w", readErr)
+		}
 		return nil, fmt.Errorf("openai: API error %d: %s", resp.StatusCode, string(respBody))
 	}
 
@@ -226,7 +232,10 @@ func (o *OpenAI) Embed(ctx context.Context, req ai.EmbedRequest) (*ai.EmbedRespo
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		respBody, _ := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		respBody, readErr := io.ReadAll(io.LimitReader(resp.Body, 64*1024))
+		if readErr != nil {
+			return nil, fmt.Errorf("openai: failed to read error response: %w", readErr)
+		}
 		return nil, fmt.Errorf("openai: embed API error %d: %s", resp.StatusCode, string(respBody))
 	}
 

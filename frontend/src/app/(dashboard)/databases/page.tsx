@@ -11,10 +11,10 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Database as DatabaseIcon,
-  Loader2,
   Plus,
   Search,
 } from "lucide-react";
+import { ResourceListSkeleton } from "@/components/skeletons";
 
 const ENGINE_FILTERS = [
   { value: "all", label: "All" },
@@ -107,12 +107,7 @@ export default function DatabasesPage() {
 
       {/* Content */}
       {loading || clustersLoading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Loading databases...</span>
-          </div>
-        </div>
+        <ResourceListSkeleton />
       ) : error ? (
         <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
           <p>Failed to load databases: {error}</p>

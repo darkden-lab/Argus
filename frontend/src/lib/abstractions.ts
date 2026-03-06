@@ -5,6 +5,8 @@
  * All composition happens client-side — no backend changes needed.
  */
 
+import { CronExpressionParser } from 'cron-parser';
+
 // ---------- Raw K8s types (subset needed for composition) ----------
 
 export interface K8sMeta {
@@ -524,6 +526,16 @@ export function compositeJobs(
     else if (lastJob?.status?.succeeded) status = "completed";
     else if (lastJob?.status?.failed) status = "failed";
 
+    let nextRun: string | undefined;
+    if (cj.spec?.schedule && !cj.spec?.suspend) {
+      try {
+        const interval = CronExpressionParser.parse(cj.spec.schedule);
+        nextRun = interval.next().toISOString() ?? undefined;
+      } catch {
+        // invalid cron expression, skip
+      }
+    }
+
     result.push({
       id: cj.metadata.uid ?? cj.metadata.name,
       name: cj.metadata.name,
@@ -531,6 +543,7 @@ export function compositeJobs(
       status,
       schedule: cj.spec?.schedule,
       lastRun: cj.status?.lastScheduleTime ?? lastJob?.status?.startTime,
+      nextRun,
       image: container?.image ?? "",
       completions: {
         succeeded: relatedJobs.reduce((sum, j) => sum + (j.status?.succeeded ?? 0), 0),

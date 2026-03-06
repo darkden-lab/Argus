@@ -60,6 +60,7 @@
       "roles": "Roles",
       "plugins": "Plugins",
       "oidc": "OIDC",
+      "apiKeys": "API Keys",
       "audit": "Audit Log",
       "notifications": "Notifications",
       "channels": "Channels",
@@ -172,6 +173,28 @@
       "unknown": "Unknown",
       "connecting": "Connecting"
     }
+  },
+  "pvcBrowser": {
+    "title": "PVC File Browser",
+    "browse": "Browse Files",
+    "upload": "Upload",
+    "newFolder": "New Folder",
+    "refresh": "Refresh",
+    "download": "Download",
+    "delete": "Delete",
+    "rename": "Rename",
+    "emptyDir": "This directory is empty",
+    "confirmDelete": "Are you sure you want to delete this?",
+    "fileTooLarge": "File is too large to preview",
+    "binaryFile": "Binary file — download to view",
+    "sessionStarting": "Starting browser session...",
+    "sessionError": "Failed to start browser session"
+  },
+  "yamlExport": {
+    "download": "Download YAML"
+  },
+  "cronJob": {
+    "nextRun": "Next run"
   },
   "common": {
     "save": "Save",

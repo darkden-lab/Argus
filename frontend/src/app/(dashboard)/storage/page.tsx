@@ -7,8 +7,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { cn } from "@/lib/utils";
-import { HardDrive, Database, Loader2, FolderOpen, Plus } from "lucide-react";
+import { HardDrive, Database, FolderOpen, Plus, Search } from "lucide-react";
+import { StorageSkeleton } from "@/components/skeletons";
 import { CreatePVCWizard } from "@/components/resources/create-pvc-wizard";
+import { PVCBrowser } from "@/components/pvc-browser/pvc-browser";
 import { useClusterStore } from "@/stores/cluster";
 
 interface K8sMeta {
@@ -63,6 +65,7 @@ export default function StoragePage() {
   const selectedCluster = useClusterStore((s) => s.selectedClusterId) ?? "";
   const [loading, setLoading] = useState(true);
   const [showCreatePVC, setShowCreatePVC] = useState(false);
+  const [browsingPVC, setBrowsingPVC] = useState<{ ns: string; name: string } | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!selectedCluster) { setLoading(false); return; }
@@ -99,9 +102,7 @@ export default function StoragePage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <StorageSkeleton />
       ) : (
         <Tabs defaultValue="pvcs">
           <TabsList>
@@ -144,6 +145,22 @@ export default function StoragePage() {
                         <span>{pvc.spec?.accessModes?.join(", ") ?? "-"}</span>
                       </div>
                     </div>
+                    {pvc.status?.phase === "Bound" && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-3 w-full h-7 text-xs"
+                        onClick={() =>
+                          setBrowsingPVC({
+                            ns: pvc.metadata.namespace ?? "default",
+                            name: pvc.metadata.name,
+                          })
+                        }
+                      >
+                        <Search className="mr-1.5 h-3 w-3" />
+                        Browse Files
+                      </Button>
+                    )}
                   </CardContent>
                 </Card>
               ))}
@@ -226,6 +243,16 @@ export default function StoragePage() {
           onOpenChange={setShowCreatePVC}
           clusterId={selectedCluster}
           onCreated={fetchData}
+        />
+      )}
+
+      {selectedCluster && browsingPVC && (
+        <PVCBrowser
+          open={!!browsingPVC}
+          onOpenChange={(v) => { if (!v) setBrowsingPVC(null); }}
+          clusterId={selectedCluster}
+          namespace={browsingPVC.ns}
+          pvcName={browsingPVC.name}
         />
       )}
     </div>

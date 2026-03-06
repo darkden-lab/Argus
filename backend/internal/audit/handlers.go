@@ -37,6 +37,13 @@ func (h *Handlers) List(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(q.Get("limit"))
 	offset, _ := strconv.Atoi(q.Get("offset"))
 
+	if limit <= 0 || limit > 1000 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+
 	params := ListParams{
 		UserID:    q.Get("user_id"),
 		ClusterID: q.Get("cluster_id"),
