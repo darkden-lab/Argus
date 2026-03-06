@@ -41,6 +41,7 @@ import {
   XCircle,
   Settings,
 } from "lucide-react";
+import { StorageSkeleton } from "@/components/skeletons";
 
 interface K8sMeta {
   name: string;
@@ -322,9 +323,7 @@ export default function NetworkingPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-        </div>
+        <StorageSkeleton />
       ) : (
         <Tabs defaultValue="services">
           <TabsList className="flex-wrap">

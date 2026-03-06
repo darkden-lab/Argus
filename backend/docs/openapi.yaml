@@ -12,27 +12,66 @@ servers:
 
 tags:
   - name: Auth
-    description: Authentication endpoints (JWT, OIDC)
+    description: Authentication (JWT, OIDC)
+  - name: Users
+    description: User management (admin)
+  - name: Profile
+    description: User profile and preferences
+  - name: API Keys
+    description: API key authentication
+  - name: OIDC
+    description: OIDC provider settings and mappings
+  - name: RBAC
+    description: Permissions, roles, and assignments
   - name: Clusters
     description: Multi-cluster management
+  - name: Agent Tokens
+    description: Cluster agent token management
   - name: Resources
-    description: Core Kubernetes resource CRUD
+    description: Generic Kubernetes resource CRUD
+  - name: Projects
+    description: Project aggregation by label
   - name: Plugins
     description: Plugin management
+  - name: Istio
+    description: Istio service mesh plugin
   - name: Prometheus
     description: Prometheus Operator plugin
   - name: Calico
     description: Calico networking plugin
-  - name: Istio
-    description: Istio service mesh plugin
+  - name: CNPG
+    description: CloudNativePG plugin
+  - name: MariaDB
+    description: MariaDB Operator plugin
+  - name: KEDA
+    description: KEDA autoscaling plugin
+  - name: Ceph
+    description: Rook Ceph storage plugin
   - name: Helm
     description: Helm releases management plugin
+  - name: AI
+    description: AI assistant configuration and management
+  - name: AI Conversations
+    description: AI chat conversation history
+  - name: AI Memories
+    description: AI user memories
+  - name: AI Agents
+    description: AI agents and tasks
+  - name: Notifications
+    description: Notification system
+  - name: Settings
+    description: System settings
   - name: Audit
     description: Audit log
+  - name: Setup
+    description: First-run setup wizard
   - name: WebSocket
     description: Real-time event streaming
 
 paths:
+  # ──────────────────────────────────────────────
+  # Health
+  # ──────────────────────────────────────────────
   /healthz:
     get:
       summary: Health check
@@ -49,42 +88,14 @@ paths:
                     type: string
                     example: ok
 
-  /api/auth/register:
-    post:
-      tags: [Auth]
-      summary: Register a new local user
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [email, password, display_name]
-              properties:
-                email:
-                  type: string
-                  format: email
-                password:
-                  type: string
-                  minLength: 8
-                display_name:
-                  type: string
-      responses:
-        "201":
-          description: User created
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/AuthResponse"
-        "400":
-          $ref: "#/components/responses/BadRequest"
-        "409":
-          description: User already exists
-
+  # ──────────────────────────────────────────────
+  # Auth
+  # ──────────────────────────────────────────────
   /api/auth/login:
     post:
       tags: [Auth]
       summary: Login with email and password
+      operationId: login
       requestBody:
         required: true
         content:
@@ -111,6 +122,7 @@ paths:
     post:
       tags: [Auth]
       summary: Refresh access token
+      operationId: refreshToken
       requestBody:
         required: true
         content:
@@ -138,11 +150,13 @@ paths:
     get:
       tags: [Auth]
       summary: Get current user info
+      operationId: getCurrentUser
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       responses:
         "200":
-          description: User info
+          description: Current user
           content:
             application/json:
               schema:
@@ -150,11 +164,58 @@ paths:
         "401":
           $ref: "#/components/responses/Unauthorized"
 
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout and revoke refresh token
+      operationId: logout
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Logged out
+        "400":
+          $ref: "#/components/responses/BadRequest"
+
+  /api/auth/permissions:
+    get:
+      tags: [RBAC]
+      summary: Get current user permissions
+      operationId: getPermissions
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: User permissions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  permissions:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Permission"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+
   /api/auth/oidc/authorize:
     get:
       tags: [Auth]
       summary: Initiate OIDC login flow
-      description: Redirects to the OIDC provider's authorize endpoint
+      operationId: oidcAuthorize
       responses:
         "302":
           description: Redirect to OIDC provider
@@ -163,7 +224,7 @@ paths:
     get:
       tags: [Auth]
       summary: OIDC callback
-      description: Handles code exchange, validates ID token, creates/updates user, issues JWT
+      operationId: oidcCallback
       parameters:
         - name: code
           in: query
@@ -183,9 +244,10 @@ paths:
     get:
       tags: [Auth]
       summary: Get OIDC provider info
+      operationId: getOidcInfo
       responses:
         "200":
-          description: OIDC configuration status
+          description: OIDC status
           content:
             application/json:
               schema:
@@ -196,12 +258,482 @@ paths:
                   authorize_url:
                     type: string
 
+  # ──────────────────────────────────────────────
+  # API Keys
+  # ──────────────────────────────────────────────
+  /api/auth/api-keys:
+    get:
+      tags: [API Keys]
+      summary: List API keys for current user
+      operationId: listApiKeys
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: API key list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/APIKey"
+    post:
+      tags: [API Keys]
+      summary: Create a new API key
+      operationId: createApiKey
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  maxLength: 255
+                expires_in_days:
+                  type: integer
+                  minimum: 0
+      responses:
+        "201":
+          description: API key created (raw key returned only once)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIKeyCreateResponse"
+        "409":
+          description: Maximum number of API keys (25) reached
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /api/auth/api-keys/{id}:
+    delete:
+      tags: [API Keys]
+      summary: Revoke an API key
+      operationId: revokeApiKey
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: Key revoked
+        "404":
+          description: Key not found
+
+  # ──────────────────────────────────────────────
+  # Users (admin)
+  # ──────────────────────────────────────────────
+  /api/users:
+    get:
+      tags: [Users]
+      summary: List all users (admin)
+      operationId: listUsers
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: User list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/User"
+        "403":
+          description: Admin role required
+    post:
+      tags: [Users]
+      summary: Create a user (admin)
+      operationId: createUser
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, display_name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                display_name:
+                  type: string
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "409":
+          description: User already exists
+
+  /api/users/{id}:
+    delete:
+      tags: [Users]
+      summary: Delete a user (admin)
+      operationId: deleteUser
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User deleted
+        "400":
+          description: Cannot delete own account
+        "404":
+          description: User not found
+
+  # ──────────────────────────────────────────────
+  # Profile & Preferences
+  # ──────────────────────────────────────────────
+  /api/users/me:
+    patch:
+      tags: [Profile]
+      summary: Update current user profile
+      operationId: updateProfile
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name:
+                  type: string
+                email:
+                  type: string
+                  format: email
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /api/users/me/password:
+    patch:
+      tags: [Profile]
+      summary: Change password
+      operationId: changePassword
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password:
+                  type: string
+                new_password:
+                  type: string
+                  minLength: 8
+      responses:
+        "200":
+          description: Password changed
+        "401":
+          description: Current password incorrect
+
+  /api/users/me/preferences:
+    get:
+      tags: [Profile]
+      summary: Get user preferences
+      operationId: getPreferences
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+    put:
+      tags: [Profile]
+      summary: Save user preferences
+      operationId: setPreferences
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UserPreferences"
+      responses:
+        "200":
+          description: Saved preferences
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPreferences"
+
+  # ──────────────────────────────────────────────
+  # RBAC Roles
+  # ──────────────────────────────────────────────
+  /api/roles:
+    get:
+      tags: [RBAC]
+      summary: List all roles with permissions
+      operationId: listRoles
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Role list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Role"
+    post:
+      tags: [RBAC]
+      summary: Create a custom role
+      operationId: createRole
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+      responses:
+        "201":
+          description: Role created
+
+  /api/roles/{id}:
+    delete:
+      tags: [RBAC]
+      summary: Delete a custom role
+      operationId: deleteRole
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Role deleted
+        "400":
+          description: Cannot delete built-in role
+
+  /api/roles/{id}/permissions:
+    get:
+      tags: [RBAC]
+      summary: List permissions for a role
+      operationId: listRolePermissions
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Permission list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RolePermission"
+    post:
+      tags: [RBAC]
+      summary: Add permission to a role
+      operationId: addRolePermission
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resource, action, scope_type]
+              properties:
+                resource:
+                  type: string
+                action:
+                  type: string
+                scope_type:
+                  type: string
+                scope_id:
+                  type: string
+      responses:
+        "201":
+          description: Permission added
+
+  /api/roles/{id}/permissions/{permId}:
+    delete:
+      tags: [RBAC]
+      summary: Remove permission from a role
+      operationId: removeRolePermission
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: permId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Permission removed
+        "404":
+          description: Permission not found
+
+  /api/roles/assignments:
+    get:
+      tags: [RBAC]
+      summary: List all user-role assignments
+      operationId: listAssignments
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Assignment list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RoleAssignment"
+
+  /api/roles/assign:
+    post:
+      tags: [RBAC]
+      summary: Assign a role to a user
+      operationId: assignRole
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_email, role_name]
+              properties:
+                user_email:
+                  type: string
+                role_name:
+                  type: string
+                cluster_id:
+                  type: string
+                  format: uuid
+                namespace:
+                  type: string
+      responses:
+        "201":
+          description: Role assigned
+
+  /api/roles/revoke/{id}:
+    delete:
+      tags: [RBAC]
+      summary: Revoke a user-role assignment
+      operationId: revokeAssignment
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Assignment revoked
+        "404":
+          description: Assignment not found
+
+  # ──────────────────────────────────────────────
+  # Clusters
+  # ──────────────────────────────────────────────
   /api/clusters:
     get:
       tags: [Clusters]
       summary: List all clusters
+      operationId: listClusters
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       responses:
         "200":
           description: Cluster list
@@ -214,8 +746,10 @@ paths:
     post:
       tags: [Clusters]
       summary: Add a new cluster
+      operationId: createCluster
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       requestBody:
         required: true
         content:
@@ -230,7 +764,6 @@ paths:
                   type: string
                 kubeconfig:
                   type: string
-                  format: byte
       responses:
         "201":
           description: Cluster added
@@ -239,36 +772,511 @@ paths:
     get:
       tags: [Clusters]
       summary: Get cluster details
+      operationId: getCluster
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       parameters:
         - $ref: "#/components/parameters/ClusterId"
       responses:
         "200":
           description: Cluster details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Cluster"
+    put:
+      tags: [Clusters]
+      summary: Update cluster metadata
+      operationId: updateCluster
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                api_server_url:
+                  type: string
+      responses:
+        "200":
+          description: Cluster updated
     delete:
       tags: [Clusters]
       summary: Remove a cluster
+      operationId: deleteCluster
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       parameters:
         - $ref: "#/components/parameters/ClusterId"
       responses:
         "204":
           description: Cluster removed
 
-  /api/clusters/{id}/projects:
-    get:
-      tags: [Resources]
-      summary: List projects aggregated by argus.darkden.net/projects label
-      description: |
-        Scans namespaces and workloads for the `argus.darkden.net/projects` label
-        (comma-separated multi-value) and aggregates them into project summaries
-        with health status.
+  /api/clusters/{id}/health:
+    post:
+      tags: [Clusters]
+      summary: Check cluster health
+      operationId: healthCheckCluster
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       parameters:
         - $ref: "#/components/parameters/ClusterId"
+      responses:
+        "200":
+          description: Health status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [connected, unreachable]
+
+  # ──────────────────────────────────────────────
+  # Agent Tokens
+  # ──────────────────────────────────────────────
+  /api/clusters/agent-token:
+    get:
+      tags: [Agent Tokens]
+      summary: List agent tokens
+      operationId: listAgentTokens
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: Token list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/AgentToken"
+    post:
+      tags: [Agent Tokens]
+      summary: Generate a new agent token
+      operationId: generateAgentToken
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cluster_name]
+              properties:
+                cluster_name:
+                  type: string
+                permissions:
+                  type: string
+      responses:
+        "201":
+          description: Token generated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token_id:
+                    type: string
+                  install_command:
+                    type: string
+                  token:
+                    type: string
+                  token_info:
+                    $ref: "#/components/schemas/AgentToken"
+
+  /api/clusters/agent-token/{id}:
+    get:
+      tags: [Agent Tokens]
+      summary: Get agent token details
+      operationId: getAgentToken
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Token details
+    delete:
+      tags: [Agent Tokens]
+      summary: Revoke an agent token
+      operationId: revokeAgentToken
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Token revoked
+
+  /api/clusters/agent-token/{id}/install-command:
+    get:
+      tags: [Agent Tokens]
+      summary: Get install command for agent token
+      operationId: getInstallCommand
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Install command
+        "409":
+          description: Token already used
+
+  /api/agents/install.sh:
+    get:
+      tags: [Agent Tokens]
+      summary: Download agent install script
+      operationId: getInstallScript
+      responses:
+        "200":
+          description: Shell script
+          content:
+            text/x-shellscript:
+              schema:
+                type: string
+
+  # ──────────────────────────────────────────────
+  # Convenience endpoints (namespaces, nodes, events, api-resources)
+  # ──────────────────────────────────────────────
+  /api/clusters/{clusterID}/namespaces:
+    get:
+      tags: [Resources]
+      summary: List namespaces
+      operationId: listNamespaces
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+      responses:
+        "200":
+          description: Namespace list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+
+  /api/clusters/{clusterID}/nodes:
+    get:
+      tags: [Resources]
+      summary: List nodes
+      operationId: listNodes
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+      responses:
+        "200":
+          description: Node list
+
+  /api/clusters/{clusterID}/events:
+    get:
+      tags: [Resources]
+      summary: List events
+      operationId: listEvents
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - name: namespace
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Event list
+
+  /api/clusters/{clusterID}/api-resources:
+    get:
+      tags: [Resources]
+      summary: List available API resources
+      operationId: listApiResources
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+      responses:
+        "200":
+          description: API resource list
+
+  # ──────────────────────────────────────────────
+  # Generic K8s Resources
+  # ──────────────────────────────────────────────
+  /api/clusters/{clusterID}/resources/{group}/{version}/{resource}:
+    get:
+      tags: [Resources]
+      summary: List Kubernetes resources
+      operationId: listResources
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/K8sGroup"
+        - $ref: "#/components/parameters/K8sVersion"
+        - $ref: "#/components/parameters/K8sResource"
+        - name: namespace
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resource list
+    post:
+      tags: [Resources]
+      summary: Create a Kubernetes resource
+      operationId: createResource
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/K8sGroup"
+        - $ref: "#/components/parameters/K8sVersion"
+        - $ref: "#/components/parameters/K8sResource"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Resource created
+
+  /api/clusters/{clusterID}/resources/{group}/{version}/{resource}/{name}:
+    get:
+      tags: [Resources]
+      summary: Get a specific Kubernetes resource
+      operationId: getResource
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/K8sGroup"
+        - $ref: "#/components/parameters/K8sVersion"
+        - $ref: "#/components/parameters/K8sResource"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: namespace
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resource details
+    put:
+      tags: [Resources]
+      summary: Update a Kubernetes resource
+      operationId: updateResource
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/K8sGroup"
+        - $ref: "#/components/parameters/K8sVersion"
+        - $ref: "#/components/parameters/K8sResource"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: namespace
+          in: query
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Resource updated
+    delete:
+      tags: [Resources]
+      summary: Delete a Kubernetes resource
+      operationId: deleteResource
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/K8sGroup"
+        - $ref: "#/components/parameters/K8sVersion"
+        - $ref: "#/components/parameters/K8sResource"
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: namespace
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Resource deleted
+
+  # ──────────────────────────────────────────────
+  # Network Policy Simulator
+  # ──────────────────────────────────────────────
+  /api/clusters/{clusterID}/network-policies/simulate:
+    get:
+      tags: [Resources]
+      summary: Simulate network policy connectivity
+      operationId: simulateNetworkPolicy
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - name: sourceNamespace
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: sourcePod
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: destNamespace
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: destPod
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: port
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Simulation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  allowed:
+                    type: boolean
+                  reason:
+                    type: string
+                  matchedPolicies:
+                    type: array
+                    items:
+                      type: string
+
+  # ──────────────────────────────────────────────
+  # Pod Logs
+  # ──────────────────────────────────────────────
+  /api/clusters/{clusterID}/namespaces/{namespace}/pods/{pod}/logs:
+    get:
+      tags: [Resources]
+      summary: Get or stream pod logs
+      operationId: getPodLogs
+      description: Supports SSE streaming with follow=true. Auth via token query param or Authorization header.
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - name: namespace
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: pod
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: container
+          in: query
+          schema:
+            type: string
+        - name: tailLines
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: previous
+          in: query
+          schema:
+            type: boolean
+        - name: follow
+          in: query
+          schema:
+            type: boolean
+        - name: token
+          in: query
+          schema:
+            type: string
+          description: JWT token (alternative to Authorization header, for EventSource)
+      responses:
+        "200":
+          description: Log output (JSON or SSE stream)
+
+  # ──────────────────────────────────────────────
+  # Projects
+  # ──────────────────────────────────────────────
+  /api/clusters/{clusterID}/projects:
+    get:
+      tags: [Projects]
+      summary: List projects
+      operationId: listProjects
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
       responses:
         "200":
           description: Project list
@@ -281,25 +1289,46 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/ProjectSummary"
-        "502":
-          description: Cluster not available
-
-  /api/clusters/{id}/projects/{project}:
-    get:
-      tags: [Resources]
-      summary: Get project detail including all resources
-      description: |
-        Returns all namespaces and resources (Deployments, StatefulSets, Services)
-        that belong to the specified project via the `argus.darkden.net/projects` label.
+    post:
+      tags: [Projects]
+      summary: Create a project
+      operationId: createProject
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       parameters:
-        - $ref: "#/components/parameters/ClusterId"
-        - name: project
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/ClusterIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                color:
+                  type: string
+      responses:
+        "201":
+          description: Project created
+        "409":
+          description: Project already exists
+
+  /api/clusters/{clusterID}/projects/{project}:
+    get:
+      tags: [Projects]
+      summary: Get project detail
+      operationId: getProject
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/ProjectName"
       responses:
         "200":
           description: Project detail
@@ -307,87 +1336,665 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ProjectDetail"
-        "400":
-          description: Project name required
-        "502":
-          description: Cluster not available
-
-  /api/clusters/{id}/resources/{group}/{version}/{resource}:
-    get:
-      tags: [Resources]
-      summary: List Kubernetes resources
-      description: |
-        Most resource list endpoints accept an optional `namespace` query parameter
-        to filter results to a specific Kubernetes namespace.
+    put:
+      tags: [Projects]
+      summary: Update project metadata
+      operationId: updateProject
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       parameters:
-        - $ref: "#/components/parameters/ClusterId"
-        - name: group
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: resource
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: namespace
-          in: query
-          schema:
-            type: string
-          description: Filter results to a specific Kubernetes namespace
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/ProjectName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:
+                  type: string
+                description:
+                  type: string
+                color:
+                  type: string
       responses:
         "200":
-          description: Resource list
-    post:
-      tags: [Resources]
-      summary: Create a Kubernetes resource
+          description: Project updated
+    delete:
+      tags: [Projects]
+      summary: Delete a project
+      operationId: deleteProject
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       parameters:
-        - $ref: "#/components/parameters/ClusterId"
-        - name: group
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: version
-          in: path
-          required: true
-          schema:
-            type: string
-        - name: resource
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/ProjectName"
+      responses:
+        "200":
+          description: Project deleted
+
+  /api/clusters/{clusterID}/projects/{project}/namespaces:
+    post:
+      tags: [Projects]
+      summary: Assign namespaces to a project
+      operationId: assignNamespaces
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/ProjectName"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [namespaces]
+              properties:
+                namespaces:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Namespaces assigned
+
+  /api/clusters/{clusterID}/projects/{project}/namespaces/{namespace}:
+    delete:
+      tags: [Projects]
+      summary: Remove a namespace from a project
+      operationId: removeNamespace
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - $ref: "#/components/parameters/ClusterIdPath"
+        - $ref: "#/components/parameters/ProjectName"
+        - name: namespace
           in: path
           required: true
           schema:
             type: string
       responses:
-        "201":
-          description: Resource created
+        "200":
+          description: Namespace removed
+
+  # ──────────────────────────────────────────────
+  # Plugins
+  # ──────────────────────────────────────────────
+  /api/plugins:
+    get:
+      tags: [Plugins]
+      summary: List all plugins
+      operationId: listPlugins
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      responses:
+        "200":
+          description: All plugins with status
 
   /api/plugins/enabled:
     get:
       tags: [Plugins]
       summary: List enabled plugins
+      operationId: listEnabledPlugins
       security:
         - bearerAuth: []
+        - apiKeyAuth: []
       responses:
         "200":
           description: Enabled plugin manifests
+
+  /api/plugins/{id}/enable:
+    post:
+      tags: [Plugins]
+      summary: Enable a plugin
+      operationId: enablePlugin
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin enabled
+
+  /api/plugins/{id}/disable:
+    post:
+      tags: [Plugins]
+      summary: Disable a plugin
+      operationId: disablePlugin
+      security:
+        - bearerAuth: []
+        - apiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Plugin disabled
+
+  # ──────────────────────────────────────────────
+  # Istio Plugin
+  # ──────────────────────────────────────────────
+  /api/plugins/istio/virtualservices:
+    get:
+      tags: [Istio]
+      summary: List VirtualServices
+      operationId: listVirtualServices
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: VirtualService list
+    post:
+      tags: [Istio]
+      summary: Create VirtualService
+      operationId: createVirtualService
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/istio/virtualservices/{name}:
+    get:
+      tags: [Istio]
+      summary: Get VirtualService
+      operationId: getVirtualService
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: VirtualService details
+    put:
+      tags: [Istio]
+      summary: Update VirtualService
+      operationId: updateVirtualService
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [Istio]
+      summary: Delete VirtualService
+      operationId: deleteVirtualService
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/istio/gateways:
+    get:
+      tags: [Istio]
+      summary: List Gateways
+      operationId: listGateways
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: Gateway list
+    post:
+      tags: [Istio]
+      summary: Create Gateway
+      operationId: createGateway
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/istio/gateways/{name}:
+    get:
+      tags: [Istio]
+      summary: Get Gateway
+      operationId: getGateway
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Gateway details
+    delete:
+      tags: [Istio]
+      summary: Delete Gateway
+      operationId: deleteGateway
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/istio/destinationrules:
+    get:
+      tags: [Istio]
+      summary: List DestinationRules
+      operationId: listDestinationRules
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: DestinationRule list
+    post:
+      tags: [Istio]
+      summary: Create DestinationRule
+      operationId: createDestinationRule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/istio/destinationrules/{name}:
+    get:
+      tags: [Istio]
+      summary: Get DestinationRule
+      operationId: getDestinationRule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: DestinationRule details
+    delete:
+      tags: [Istio]
+      summary: Delete DestinationRule
+      operationId: deleteDestinationRule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/istio/serviceentries:
+    get:
+      tags: [Istio]
+      summary: List ServiceEntries
+      operationId: listServiceEntries
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: ServiceEntry list
+    post:
+      tags: [Istio]
+      summary: Create ServiceEntry
+      operationId: createServiceEntry
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/istio/serviceentries/{name}:
+    get:
+      tags: [Istio]
+      summary: Get ServiceEntry
+      operationId: getServiceEntry
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: ServiceEntry details
+    delete:
+      tags: [Istio]
+      summary: Delete ServiceEntry
+      operationId: deleteServiceEntry
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/istio/{cluster}/topology:
+    get:
+      tags: [Istio]
+      summary: Get service mesh topology
+      operationId: getIstioTopology
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Topology graph
+
+  /api/plugins/istio/{cluster}/traffic:
+    get:
+      tags: [Istio]
+      summary: Get traffic metrics topology
+      operationId: getIstioTraffic
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Traffic data
+
+  # ──────────────────────────────────────────────
+  # Prometheus Plugin
+  # ──────────────────────────────────────────────
+  /api/plugins/prometheus/{cluster}/discover:
+    get:
+      tags: [Prometheus]
+      summary: Discover Prometheus instances
+      operationId: discoverPrometheus
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Discovered instances
+
+  /api/plugins/prometheus/{cluster}/config:
+    get:
+      tags: [Prometheus]
+      summary: Get Prometheus plugin config
+      operationId: getPrometheusConfig
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Config
+    put:
+      tags: [Prometheus]
+      summary: Save Prometheus plugin config
+      operationId: savePrometheusConfig
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Saved
+
+  /api/plugins/prometheus/{cluster}/query:
+    get:
+      tags: [Prometheus]
+      summary: Proxy a PromQL query
+      operationId: proxyPromQuery
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - name: query
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Query result
+
+  /api/plugins/prometheus/{cluster}/alerts:
+    get:
+      tags: [Prometheus]
+      summary: Get Prometheus alerts
+      operationId: getPrometheusAlerts
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Alert list
+
+  /api/plugins/prometheus/{cluster}/targets:
+    get:
+      tags: [Prometheus]
+      summary: Get Prometheus targets
+      operationId: getPrometheusTargets
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Target list
+
+  /api/plugins/prometheus/{cluster}/metrics/overview:
+    get:
+      tags: [Prometheus]
+      summary: Get metrics overview
+      operationId: getMetricsOverview
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Metrics overview
+
+  /api/plugins/prometheus/{cluster}/servicemonitors:
+    get:
+      tags: [Prometheus]
+      summary: List ServiceMonitors
+      operationId: listServiceMonitors
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: ServiceMonitor list
+    post:
+      tags: [Prometheus]
+      summary: Create ServiceMonitor
+      operationId: createServiceMonitor
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/prometheus/{cluster}/servicemonitors/{namespace}/{name}:
+    get:
+      tags: [Prometheus]
+      summary: Get ServiceMonitor
+      operationId: getServiceMonitor
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: ServiceMonitor details
+    delete:
+      tags: [Prometheus]
+      summary: Delete ServiceMonitor
+      operationId: deleteServiceMonitor
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/prometheus/{cluster}/podmonitors:
+    get:
+      tags: [Prometheus]
+      summary: List PodMonitors
+      operationId: listPodMonitors
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: PodMonitor list
+    post:
+      tags: [Prometheus]
+      summary: Create PodMonitor
+      operationId: createPodMonitor
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/prometheus/{cluster}/podmonitors/{namespace}/{name}:
+    get:
+      tags: [Prometheus]
+      summary: Get PodMonitor
+      operationId: getPodMonitor
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: PodMonitor details
+    delete:
+      tags: [Prometheus]
+      summary: Delete PodMonitor
+      operationId: deletePodMonitor
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/prometheus/{cluster}/prometheusrules:
+    get:
+      tags: [Prometheus]
+      summary: List PrometheusRules
+      operationId: listPrometheusRules
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: PrometheusRule list
+    post:
+      tags: [Prometheus]
+      summary: Create PrometheusRule
+      operationId: createPrometheusRule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/prometheus/{cluster}/prometheusrules/{namespace}/{name}:
+    get:
+      tags: [Prometheus]
+      summary: Get PrometheusRule
+      operationId: getPrometheusRule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: PrometheusRule details
+    delete:
+      tags: [Prometheus]
+      summary: Delete PrometheusRule
+      operationId: deletePrometheusRule
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/prometheus/{cluster}/alertmanagers:
+    get:
+      tags: [Prometheus]
+      summary: List Alertmanagers
+      operationId: listAlertmanagers
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Alertmanager list
+
+  /api/plugins/prometheus/{cluster}/alertmanagers/{namespace}/{name}:
+    get:
+      tags: [Prometheus]
+      summary: Get Alertmanager
+      operationId: getAlertmanager
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Alertmanager details
 
   /api/plugins/prometheus/{cluster}/wizard/servicemonitor:
     post:
       tags: [Prometheus]
       summary: Create ServiceMonitor via wizard
-      security:
-        - bearerAuth: []
+      operationId: wizardCreateServiceMonitor
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
       requestBody:
@@ -398,14 +2005,14 @@ paths:
               $ref: "#/components/schemas/ServiceMonitorConfig"
       responses:
         "201":
-          description: ServiceMonitor created
+          description: Created
 
   /api/plugins/prometheus/{cluster}/wizard/servicemonitor/preview:
     post:
       tags: [Prometheus]
-      summary: Preview generated ServiceMonitor YAML
-      security:
-        - bearerAuth: []
+      summary: Preview ServiceMonitor YAML
+      operationId: wizardPreviewServiceMonitor
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
       requestBody:
@@ -416,14 +2023,1001 @@ paths:
               $ref: "#/components/schemas/ServiceMonitorConfig"
       responses:
         "200":
-          description: Generated ServiceMonitor object
+          description: Preview YAML
 
+  # ──────────────────────────────────────────────
+  # Calico Plugin
+  # ──────────────────────────────────────────────
+  /api/plugins/calico/{cluster}/networkpolicies:
+    get:
+      tags: [Calico]
+      summary: List Calico NetworkPolicies
+      operationId: listCalicoNetworkPolicies
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: Policy list
+    post:
+      tags: [Calico]
+      summary: Create Calico NetworkPolicy
+      operationId: createCalicoNetworkPolicy
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/calico/{cluster}/networkpolicies/{namespace}/{name}:
+    get:
+      tags: [Calico]
+      summary: Get Calico NetworkPolicy
+      operationId: getCalicoNetworkPolicy
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Policy details
+    delete:
+      tags: [Calico]
+      summary: Delete Calico NetworkPolicy
+      operationId: deleteCalicoNetworkPolicy
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/NamespacePath"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/calico/{cluster}/globalnetworkpolicies:
+    get:
+      tags: [Calico]
+      summary: List GlobalNetworkPolicies
+      operationId: listGlobalNetworkPolicies
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: Policy list
+    post:
+      tags: [Calico]
+      summary: Create GlobalNetworkPolicy
+      operationId: createGlobalNetworkPolicy
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/calico/{cluster}/globalnetworkpolicies/{name}:
+    get:
+      tags: [Calico]
+      summary: Get GlobalNetworkPolicy
+      operationId: getGlobalNetworkPolicy
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Policy details
+    delete:
+      tags: [Calico]
+      summary: Delete GlobalNetworkPolicy
+      operationId: deleteGlobalNetworkPolicy
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/calico/{cluster}/hostendpoints:
+    get:
+      tags: [Calico]
+      summary: List HostEndpoints
+      operationId: listHostEndpoints
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: HostEndpoint list
+
+  /api/plugins/calico/{cluster}/hostendpoints/{name}:
+    get:
+      tags: [Calico]
+      summary: Get HostEndpoint
+      operationId: getHostEndpoint
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: HostEndpoint details
+    delete:
+      tags: [Calico]
+      summary: Delete HostEndpoint
+      operationId: deleteHostEndpoint
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/calico/{cluster}/ippools:
+    get:
+      tags: [Calico]
+      summary: List IP Pools
+      operationId: listIpPools
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+      responses:
+        "200":
+          description: IP Pool list
+
+  /api/plugins/calico/{cluster}/ippools/{name}:
+    get:
+      tags: [Calico]
+      summary: Get IP Pool
+      operationId: getIpPool
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ClusterVar"
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: IP Pool details
+
+  # ──────────────────────────────────────────────
+  # CNPG Plugin — clusters, backups, scheduledbackups, poolers
+  # ──────────────────────────────────────────────
+  /api/plugins/cnpg/clusters:
+    get:
+      tags: [CNPG]
+      summary: List CNPG clusters
+      operationId: listCnpgClusters
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/PluginClusterQuery"
+        - $ref: "#/components/parameters/PluginNamespaceQuery"
+      responses:
+        "200":
+          description: Cluster list
+    post:
+      tags: [CNPG]
+      summary: Create CNPG cluster
+      operationId: createCnpgCluster
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/cnpg/clusters/{name}:
+    get:
+      tags: [CNPG]
+      summary: Get CNPG cluster
+      operationId: getCnpgCluster
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Cluster details
+    put:
+      tags: [CNPG]
+      summary: Update CNPG cluster
+      operationId: updateCnpgCluster
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [CNPG]
+      summary: Delete CNPG cluster
+      operationId: deleteCnpgCluster
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/cnpg/backups:
+    get:
+      tags: [CNPG]
+      summary: List CNPG backups
+      operationId: listCnpgBackups
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Backup list
+    post:
+      tags: [CNPG]
+      summary: Create CNPG backup
+      operationId: createCnpgBackup
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/cnpg/backups/{name}:
+    get:
+      tags: [CNPG]
+      summary: Get CNPG backup
+      operationId: getCnpgBackup
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Backup details
+    delete:
+      tags: [CNPG]
+      summary: Delete CNPG backup
+      operationId: deleteCnpgBackup
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/cnpg/scheduledbackups:
+    get:
+      tags: [CNPG]
+      summary: List ScheduledBackups
+      operationId: listCnpgScheduledBackups
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: ScheduledBackup list
+    post:
+      tags: [CNPG]
+      summary: Create ScheduledBackup
+      operationId: createCnpgScheduledBackup
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/cnpg/scheduledbackups/{name}:
+    get:
+      tags: [CNPG]
+      summary: Get ScheduledBackup
+      operationId: getCnpgScheduledBackup
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: ScheduledBackup details
+    delete:
+      tags: [CNPG]
+      summary: Delete ScheduledBackup
+      operationId: deleteCnpgScheduledBackup
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/cnpg/poolers:
+    get:
+      tags: [CNPG]
+      summary: List Poolers
+      operationId: listCnpgPoolers
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Pooler list
+    post:
+      tags: [CNPG]
+      summary: Create Pooler
+      operationId: createCnpgPooler
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/cnpg/poolers/{name}:
+    get:
+      tags: [CNPG]
+      summary: Get Pooler
+      operationId: getCnpgPooler
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Pooler details
+    delete:
+      tags: [CNPG]
+      summary: Delete Pooler
+      operationId: deleteCnpgPooler
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────────
+  # MariaDB Plugin — instances, backups, restores, connections, databases, users, grants
+  # ──────────────────────────────────────────────
+  /api/plugins/mariadb/instances:
+    get:
+      tags: [MariaDB]
+      summary: List MariaDB instances
+      operationId: listMariadbInstances
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Instance list
+    post:
+      tags: [MariaDB]
+      summary: Create MariaDB instance
+      operationId: createMariadbInstance
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/mariadb/instances/{name}:
+    get:
+      tags: [MariaDB]
+      summary: Get MariaDB instance
+      operationId: getMariadbInstance
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Instance details
+    put:
+      tags: [MariaDB]
+      summary: Update MariaDB instance
+      operationId: updateMariadbInstance
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [MariaDB]
+      summary: Delete MariaDB instance
+      operationId: deleteMariadbInstance
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/mariadb/backups:
+    get:
+      tags: [MariaDB]
+      summary: List MariaDB backups
+      operationId: listMariadbBackups
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Backup list
+    post:
+      tags: [MariaDB]
+      summary: Create MariaDB backup
+      operationId: createMariadbBackup
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/mariadb/backups/{name}:
+    delete:
+      tags: [MariaDB]
+      summary: Delete MariaDB backup
+      operationId: deleteMariadbBackup
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/mariadb/restores:
+    get:
+      tags: [MariaDB]
+      summary: List MariaDB restores
+      operationId: listMariadbRestores
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Restore list
+    post:
+      tags: [MariaDB]
+      summary: Create MariaDB restore
+      operationId: createMariadbRestore
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/mariadb/restores/{name}:
+    delete:
+      tags: [MariaDB]
+      summary: Delete MariaDB restore
+      operationId: deleteMariadbRestore
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/mariadb/connections:
+    get:
+      tags: [MariaDB]
+      summary: List MariaDB connections
+      operationId: listMariadbConnections
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Connection list
+    post:
+      tags: [MariaDB]
+      summary: Create MariaDB connection
+      operationId: createMariadbConnection
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/mariadb/connections/{name}:
+    delete:
+      tags: [MariaDB]
+      summary: Delete MariaDB connection
+      operationId: deleteMariadbConnection
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/mariadb/databases:
+    get:
+      tags: [MariaDB]
+      summary: List MariaDB databases
+      operationId: listMariadbDatabases
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Database list
+    post:
+      tags: [MariaDB]
+      summary: Create MariaDB database
+      operationId: createMariadbDatabase
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/mariadb/databases/{name}:
+    delete:
+      tags: [MariaDB]
+      summary: Delete MariaDB database
+      operationId: deleteMariadbDatabase
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/mariadb/users:
+    get:
+      tags: [MariaDB]
+      summary: List MariaDB users
+      operationId: listMariadbUsers
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: User list
+    post:
+      tags: [MariaDB]
+      summary: Create MariaDB user
+      operationId: createMariadbUser
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/mariadb/users/{name}:
+    delete:
+      tags: [MariaDB]
+      summary: Delete MariaDB user
+      operationId: deleteMariadbUser
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/mariadb/grants:
+    get:
+      tags: [MariaDB]
+      summary: List MariaDB grants
+      operationId: listMariadbGrants
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Grant list
+    post:
+      tags: [MariaDB]
+      summary: Create MariaDB grant
+      operationId: createMariadbGrant
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/mariadb/grants/{name}:
+    delete:
+      tags: [MariaDB]
+      summary: Delete MariaDB grant
+      operationId: deleteMariadbGrant
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────────
+  # KEDA Plugin
+  # ──────────────────────────────────────────────
+  /api/plugins/keda/scaledobjects:
+    get:
+      tags: [KEDA]
+      summary: List ScaledObjects
+      operationId: listScaledObjects
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: ScaledObject list
+    post:
+      tags: [KEDA]
+      summary: Create ScaledObject
+      operationId: createScaledObject
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/keda/scaledobjects/{name}:
+    get:
+      tags: [KEDA]
+      summary: Get ScaledObject
+      operationId: getScaledObject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Details
+    put:
+      tags: [KEDA]
+      summary: Update ScaledObject
+      operationId: updateScaledObject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [KEDA]
+      summary: Delete ScaledObject
+      operationId: deleteScaledObject
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/keda/scaledjobs:
+    get:
+      tags: [KEDA]
+      summary: List ScaledJobs
+      operationId: listScaledJobs
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: ScaledJob list
+    post:
+      tags: [KEDA]
+      summary: Create ScaledJob
+      operationId: createScaledJob
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/keda/scaledjobs/{name}:
+    get:
+      tags: [KEDA]
+      summary: Get ScaledJob
+      operationId: getScaledJob
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Details
+    put:
+      tags: [KEDA]
+      summary: Update ScaledJob
+      operationId: updateScaledJob
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [KEDA]
+      summary: Delete ScaledJob
+      operationId: deleteScaledJob
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/keda/triggerauthentications:
+    get:
+      tags: [KEDA]
+      summary: List TriggerAuthentications
+      operationId: listTriggerAuthentications
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: TriggerAuthentication list
+    post:
+      tags: [KEDA]
+      summary: Create TriggerAuthentication
+      operationId: createTriggerAuthentication
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/keda/triggerauthentications/{name}:
+    get:
+      tags: [KEDA]
+      summary: Get TriggerAuthentication
+      operationId: getTriggerAuthentication
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Details
+    delete:
+      tags: [KEDA]
+      summary: Delete TriggerAuthentication
+      operationId: deleteTriggerAuthentication
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/keda/clustertriggerauthentications:
+    get:
+      tags: [KEDA]
+      summary: List ClusterTriggerAuthentications
+      operationId: listClusterTriggerAuthentications
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: List
+    post:
+      tags: [KEDA]
+      summary: Create ClusterTriggerAuthentication
+      operationId: createClusterTriggerAuthentication
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/keda/clustertriggerauthentications/{name}:
+    get:
+      tags: [KEDA]
+      summary: Get ClusterTriggerAuthentication
+      operationId: getClusterTriggerAuthentication
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Details
+    delete:
+      tags: [KEDA]
+      summary: Delete ClusterTriggerAuthentication
+      operationId: deleteClusterTriggerAuthentication
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────────
+  # Ceph Plugin — clusters, blockpools, filesystems, objectstores, objectstoreusers
+  # ──────────────────────────────────────────────
+  /api/plugins/ceph/clusters:
+    get:
+      tags: [Ceph]
+      summary: List CephClusters
+      operationId: listCephClusters
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Cluster list
+    post:
+      tags: [Ceph]
+      summary: Create CephCluster
+      operationId: createCephCluster
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/ceph/clusters/{name}:
+    get:
+      tags: [Ceph]
+      summary: Get CephCluster
+      operationId: getCephCluster
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Details
+    put:
+      tags: [Ceph]
+      summary: Update CephCluster
+      operationId: updateCephCluster
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [Ceph]
+      summary: Delete CephCluster
+      operationId: deleteCephCluster
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/ceph/blockpools:
+    get:
+      tags: [Ceph]
+      summary: List CephBlockPools
+      operationId: listCephBlockPools
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: BlockPool list
+    post:
+      tags: [Ceph]
+      summary: Create CephBlockPool
+      operationId: createCephBlockPool
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/ceph/blockpools/{name}:
+    get:
+      tags: [Ceph]
+      summary: Get CephBlockPool
+      operationId: getCephBlockPool
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Details
+    put:
+      tags: [Ceph]
+      summary: Update CephBlockPool
+      operationId: updateCephBlockPool
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [Ceph]
+      summary: Delete CephBlockPool
+      operationId: deleteCephBlockPool
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/ceph/filesystems:
+    get:
+      tags: [Ceph]
+      summary: List CephFilesystems
+      operationId: listCephFilesystems
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Filesystem list
+    post:
+      tags: [Ceph]
+      summary: Create CephFilesystem
+      operationId: createCephFilesystem
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/ceph/filesystems/{name}:
+    get:
+      tags: [Ceph]
+      summary: Get CephFilesystem
+      operationId: getCephFilesystem
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Details
+    put:
+      tags: [Ceph]
+      summary: Update CephFilesystem
+      operationId: updateCephFilesystem
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [Ceph]
+      summary: Delete CephFilesystem
+      operationId: deleteCephFilesystem
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/ceph/objectstores:
+    get:
+      tags: [Ceph]
+      summary: List CephObjectStores
+      operationId: listCephObjectStores
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: ObjectStore list
+    post:
+      tags: [Ceph]
+      summary: Create CephObjectStore
+      operationId: createCephObjectStore
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/ceph/objectstores/{name}:
+    get:
+      tags: [Ceph]
+      summary: Get CephObjectStore
+      operationId: getCephObjectStore
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Details
+    put:
+      tags: [Ceph]
+      summary: Update CephObjectStore
+      operationId: updateCephObjectStore
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [Ceph]
+      summary: Delete CephObjectStore
+      operationId: deleteCephObjectStore
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  /api/plugins/ceph/objectstoreusers:
+    get:
+      tags: [Ceph]
+      summary: List CephObjectStoreUsers
+      operationId: listCephObjectStoreUsers
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: User list
+    post:
+      tags: [Ceph]
+      summary: Create CephObjectStoreUser
+      operationId: createCephObjectStoreUser
+      security: [{ bearerAuth: [] }]
+      responses:
+        "201":
+          description: Created
+
+  /api/plugins/ceph/objectstoreusers/{name}:
+    delete:
+      tags: [Ceph]
+      summary: Delete CephObjectStoreUser
+      operationId: deleteCephObjectStoreUser
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ResourceName"
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────────
+  # Helm Plugin
+  # ──────────────────────────────────────────────
   /api/plugins/helm/{cluster}/releases:
     get:
       tags: [Helm]
       summary: List Helm releases
-      security:
-        - bearerAuth: []
+      operationId: listHelmReleases
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
         - name: namespace
@@ -442,8 +3036,8 @@ paths:
     post:
       tags: [Helm]
       summary: Install a Helm release
-      security:
-        - bearerAuth: []
+      operationId: installHelmRelease
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
       requestBody:
@@ -454,68 +3048,52 @@ paths:
               $ref: "#/components/schemas/InstallRequest"
       responses:
         "201":
-          description: Release installed
+          description: Installed
 
   /api/plugins/helm/{cluster}/releases/{name}:
     get:
       tags: [Helm]
       summary: Get Helm release details
-      security:
-        - bearerAuth: []
+      operationId: getHelmRelease
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/ResourceName"
       responses:
         "200":
           description: Release details
     put:
       tags: [Helm]
       summary: Upgrade a Helm release
-      security:
-        - bearerAuth: []
+      operationId: upgradeHelmRelease
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/ResourceName"
       responses:
         "200":
-          description: Release upgraded
+          description: Upgraded
     delete:
       tags: [Helm]
       summary: Uninstall a Helm release
-      security:
-        - bearerAuth: []
+      operationId: uninstallHelmRelease
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/ResourceName"
       responses:
         "200":
-          description: Release uninstalled
+          description: Uninstalled
 
   /api/plugins/helm/{cluster}/releases/{name}/rollback:
     post:
       tags: [Helm]
       summary: Rollback a Helm release
-      security:
-        - bearerAuth: []
+      operationId: rollbackHelmRelease
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/ResourceName"
       requestBody:
         content:
           application/json:
@@ -526,21 +3104,17 @@ paths:
                   type: integer
       responses:
         "200":
-          description: Release rolled back
+          description: Rolled back
 
   /api/plugins/helm/{cluster}/releases/{name}/history:
     get:
       tags: [Helm]
       summary: Get release revision history
-      security:
-        - bearerAuth: []
+      operationId: getHelmReleaseHistory
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/ResourceName"
       responses:
         "200":
           description: Revision history
@@ -549,15 +3123,11 @@ paths:
     get:
       tags: [Helm]
       summary: Get release values
-      security:
-        - bearerAuth: []
+      operationId: getHelmReleaseValues
+      security: [{ bearerAuth: [] }]
       parameters:
         - $ref: "#/components/parameters/ClusterVar"
-        - name: name
-          in: path
-          required: true
-          schema:
-            type: string
+        - $ref: "#/components/parameters/ResourceName"
         - name: all
           in: query
           schema:
@@ -566,12 +3136,732 @@ paths:
         "200":
           description: Release values
 
+  # ──────────────────────────────────────────────
+  # AI Admin
+  # ──────────────────────────────────────────────
+  /api/ai/status:
+    get:
+      tags: [AI]
+      summary: Get AI assistant status
+      operationId: getAiStatus
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: AI status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AIStatus"
+
+  /api/ai/config:
+    get:
+      tags: [AI]
+      summary: Get AI configuration
+      operationId: getAiConfig
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: AI config
+    put:
+      tags: [AI]
+      summary: Update AI configuration
+      operationId: updateAiConfig
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Updated config
+
+  /api/ai/config/test:
+    post:
+      tags: [AI]
+      summary: Test AI provider connection
+      operationId: testAiConnection
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Connection test result
+
+  /api/ai/rag/status:
+    get:
+      tags: [AI]
+      summary: Get RAG indexer status
+      operationId: getRagStatus
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: RAG status
+
+  /api/ai/rag/reindex:
+    post:
+      tags: [AI]
+      summary: Trigger RAG reindex
+      operationId: triggerReindex
+      security: [{ bearerAuth: [] }]
+      responses:
+        "202":
+          description: Reindex started
+
+  # ──────────────────────────────────────────────
+  # AI Conversations
+  # ──────────────────────────────────────────────
+  /api/ai/conversations:
+    get:
+      tags: [AI Conversations]
+      summary: List conversations
+      operationId: listConversations
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        "200":
+          description: Conversation list
+
+  /api/ai/conversations/{id}:
+    get:
+      tags: [AI Conversations]
+      summary: Get conversation with messages
+      operationId: getConversation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Conversation with messages
+    put:
+      tags: [AI Conversations]
+      summary: Update conversation title
+      operationId: updateConversation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [AI Conversations]
+      summary: Delete conversation
+      operationId: deleteConversation
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────────
+  # AI Memories
+  # ──────────────────────────────────────────────
+  /api/ai/memories:
+    get:
+      tags: [AI Memories]
+      summary: List user AI memories
+      operationId: listMemories
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Memory list
+    post:
+      tags: [AI Memories]
+      summary: Create a memory
+      operationId: createMemory
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                category:
+                  type: string
+      responses:
+        "201":
+          description: Memory created
+
+  /api/ai/memories/{id}:
+    put:
+      tags: [AI Memories]
+      summary: Update a memory
+      operationId: updateMemory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content]
+              properties:
+                content:
+                  type: string
+                category:
+                  type: string
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [AI Memories]
+      summary: Delete a memory
+      operationId: deleteMemory
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deleted
+
+  # ──────────────────────────────────────────────
+  # AI Agents & Tasks
+  # ──────────────────────────────────────────────
+  /api/ai/agents:
+    get:
+      tags: [AI Agents]
+      summary: List AI agents
+      operationId: listAgents
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Agent list
+    post:
+      tags: [AI Agents]
+      summary: Create AI agent
+      operationId: createAgent
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, name, system_prompt]
+              properties:
+                slug:
+                  type: string
+                name:
+                  type: string
+                description:
+                  type: string
+                icon:
+                  type: string
+                category:
+                  type: string
+                system_prompt:
+                  type: string
+                allowed_tools:
+                  type: array
+                  items:
+                    type: string
+                tool_permission_level:
+                  type: string
+                is_public:
+                  type: boolean
+      responses:
+        "201":
+          description: Agent created
+
+  /api/ai/agents/{id}:
+    get:
+      tags: [AI Agents]
+      summary: Get AI agent
+      operationId: getAgent
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Agent details
+    put:
+      tags: [AI Agents]
+      summary: Update AI agent
+      operationId: updateAgent
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [AI Agents]
+      summary: Delete AI agent
+      operationId: deleteAgent
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Deleted
+
+  /api/ai/tasks:
+    get:
+      tags: [AI Agents]
+      summary: List AI tasks
+      operationId: listTasks
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Task list
+    post:
+      tags: [AI Agents]
+      summary: Create AI task
+      operationId: createTask
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [agent_id, title]
+              properties:
+                agent_id:
+                  type: string
+                title:
+                  type: string
+                input_params:
+                  type: object
+      responses:
+        "201":
+          description: Task created
+
+  /api/ai/tasks/{id}:
+    get:
+      tags: [AI Agents]
+      summary: Get AI task
+      operationId: getTask
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task details
+
+  /api/ai/tasks/{id}/cancel:
+    post:
+      tags: [AI Agents]
+      summary: Cancel AI task
+      operationId: cancelTask
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Task cancelled
+
+  # ──────────────────────────────────────────────
+  # Notifications
+  # ──────────────────────────────────────────────
+  /api/notifications:
+    get:
+      tags: [Notifications]
+      summary: List notifications
+      operationId: listNotifications
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: category
+          in: query
+          schema:
+            type: string
+        - name: read
+          in: query
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Notification list
+
+  /api/notifications/unread-count:
+    get:
+      tags: [Notifications]
+      summary: Get unread notification count
+      operationId: getUnreadCount
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Unread count
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  unread_count:
+                    type: integer
+
+  /api/notifications/{id}/read:
+    put:
+      tags: [Notifications]
+      summary: Mark notification as read
+      operationId: markNotificationRead
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Marked as read
+
+  /api/notifications/read-all:
+    put:
+      tags: [Notifications]
+      summary: Mark all notifications as read
+      operationId: markAllNotificationsRead
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: All marked as read
+
+  /api/notifications/preferences:
+    get:
+      tags: [Notifications]
+      summary: Get notification preferences
+      operationId: getNotificationPreferences
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Preferences with available channels
+    put:
+      tags: [Notifications]
+      summary: Update notification preferences
+      operationId: updateNotificationPreferences
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                preferences:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      category:
+                        type: string
+                      channel_id:
+                        type: string
+                      frequency:
+                        type: string
+                      enabled:
+                        type: boolean
+      responses:
+        "200":
+          description: Updated
+
+  /api/notifications/channels:
+    get:
+      tags: [Notifications]
+      summary: List notification channels
+      operationId: listNotificationChannels
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Channel list
+    post:
+      tags: [Notifications]
+      summary: Create notification channel (admin)
+      operationId: createNotificationChannel
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [type, name]
+              properties:
+                type:
+                  type: string
+                  enum: [email, slack, teams, telegram, webhook]
+                name:
+                  type: string
+                config:
+                  type: object
+                enabled:
+                  type: boolean
+      responses:
+        "201":
+          description: Channel created
+
+  /api/notifications/channels/{id}:
+    put:
+      tags: [Notifications]
+      summary: Update notification channel (admin)
+      operationId: updateNotificationChannel
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Updated
+    delete:
+      tags: [Notifications]
+      summary: Delete notification channel (admin)
+      operationId: deleteNotificationChannel
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deleted
+
+  /api/notifications/channels/{id}/test:
+    post:
+      tags: [Notifications]
+      summary: Send test notification (admin)
+      operationId: testNotificationChannel
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Test sent
+
+  # ──────────────────────────────────────────────
+  # Settings
+  # ──────────────────────────────────────────────
+  /api/settings/oidc:
+    get:
+      tags: [Settings]
+      summary: Get OIDC settings
+      operationId: getOidcSettings
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: OIDC config
+    put:
+      tags: [Settings]
+      summary: Update OIDC settings (admin)
+      operationId: updateOidcSettings
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OidcConfig"
+      responses:
+        "200":
+          description: Updated
+
+  /api/settings/oidc/test:
+    post:
+      tags: [Settings]
+      summary: Test OIDC provider discovery
+      operationId: testOidcProvider
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [issuer_url]
+              properties:
+                issuer_url:
+                  type: string
+      responses:
+        "200":
+          description: Test result
+
+  /api/settings/oidc/providers:
+    get:
+      tags: [Settings]
+      summary: Get OIDC provider presets (public)
+      operationId: getOidcProviders
+      responses:
+        "200":
+          description: Provider presets
+
+  /api/settings/oidc/mappings:
+    get:
+      tags: [OIDC]
+      summary: List OIDC group-to-role mappings
+      operationId: listOidcMappings
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Mapping list
+    post:
+      tags: [OIDC]
+      summary: Create OIDC group-to-role mapping (admin)
+      operationId: createOidcMapping
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oidc_group, role_name]
+              properties:
+                oidc_group:
+                  type: string
+                role_name:
+                  type: string
+                cluster_id:
+                  type: string
+                  format: uuid
+                namespace:
+                  type: string
+      responses:
+        "201":
+          description: Mapping created
+
+  /api/settings/oidc/mappings/{id}:
+    delete:
+      tags: [OIDC]
+      summary: Delete OIDC mapping (admin)
+      operationId: deleteOidcMapping
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Deleted
+
+  /api/settings/oidc/default-role:
+    get:
+      tags: [OIDC]
+      summary: Get OIDC default role
+      operationId: getOidcDefaultRole
+      security: [{ bearerAuth: [] }]
+      responses:
+        "200":
+          description: Default role
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  default_role:
+                    type: string
+    put:
+      tags: [OIDC]
+      summary: Set OIDC default role (admin)
+      operationId: updateOidcDefaultRole
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                default_role:
+                  type: string
+                  enum: ["", none, viewer, developer, operator, admin]
+      responses:
+        "200":
+          description: Updated
+
+  # ──────────────────────────────────────────────
+  # Audit Log
+  # ──────────────────────────────────────────────
   /api/audit-log:
     get:
       tags: [Audit]
       summary: Query audit log entries
-      security:
-        - bearerAuth: []
+      operationId: listAuditLog
+      security: [{ bearerAuth: [] }]
       parameters:
         - name: user_id
           in: query
@@ -627,13 +3917,66 @@ paths:
                   offset:
                     type: integer
 
+  # ──────────────────────────────────────────────
+  # Setup Wizard
+  # ──────────────────────────────────────────────
+  /api/setup/status:
+    get:
+      tags: [Setup]
+      summary: Check if initial setup is required
+      operationId: getSetupStatus
+      responses:
+        "200":
+          description: Setup status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  setup_required:
+                    type: boolean
+
+  /api/setup/init:
+    post:
+      tags: [Setup]
+      summary: Initialize admin account (first-run only)
+      operationId: initSetup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, display_name]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 8
+                display_name:
+                  type: string
+      responses:
+        "201":
+          description: Admin created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthResponse"
+        "403":
+          description: Setup already completed
+        "422":
+          description: Validation failed
+
+  # ──────────────────────────────────────────────
+  # WebSocket
+  # ──────────────────────────────────────────────
   /ws:
     get:
       tags: [WebSocket]
-      summary: WebSocket connection for real-time K8s watch events
-      description: |
-        Connect via WebSocket with JWT token as query parameter.
-        Subscribe to resource watches and receive ADDED/MODIFIED/DELETED events.
+      summary: WebSocket for real-time K8s watch events (legacy)
+      operationId: websocketConnect
       parameters:
         - name: token
           in: query
@@ -641,12 +3984,19 @@ paths:
           schema:
             type: string
 
+# ==============================================
+# Components
+# ==============================================
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
 
   parameters:
     ClusterId:
@@ -656,10 +4006,64 @@ components:
       schema:
         type: string
         format: uuid
+    ClusterIdPath:
+      name: clusterID
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
     ClusterVar:
       name: cluster
       in: path
       required: true
+      schema:
+        type: string
+    ProjectName:
+      name: project
+      in: path
+      required: true
+      schema:
+        type: string
+    ResourceName:
+      name: name
+      in: path
+      required: true
+      schema:
+        type: string
+    NamespacePath:
+      name: namespace
+      in: path
+      required: true
+      schema:
+        type: string
+    K8sGroup:
+      name: group
+      in: path
+      required: true
+      schema:
+        type: string
+      description: API group ("_" for core group)
+    K8sVersion:
+      name: version
+      in: path
+      required: true
+      schema:
+        type: string
+    K8sResource:
+      name: resource
+      in: path
+      required: true
+      schema:
+        type: string
+    PluginClusterQuery:
+      name: cluster
+      in: query
+      schema:
+        type: string
+    PluginNamespaceQuery:
+      name: namespace
+      in: query
       schema:
         type: string
 
@@ -697,7 +4101,7 @@ components:
           type: string
         auth_provider:
           type: string
-          enum: [local, oidc, ldap]
+          enum: [local, oidc]
         created_at:
           type: string
           format: date-time
@@ -715,6 +4119,116 @@ components:
         refresh_token:
           type: string
 
+    UserPreferences:
+      type: object
+      properties:
+        theme:
+          type: string
+          enum: [dark, light, system]
+        language:
+          type: string
+        sidebar_compact:
+          type: boolean
+        animations_enabled:
+          type: boolean
+
+    APIKey:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+        last_used_at:
+          type: string
+          format: date-time
+
+    APIKeyCreateResponse:
+      type: object
+      properties:
+        key:
+          type: string
+          description: Raw API key (shown only once)
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        prefix:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        expires_at:
+          type: string
+          format: date-time
+
+    Permission:
+      type: object
+      properties:
+        resource:
+          type: string
+        action:
+          type: string
+        scope_type:
+          type: string
+        scope_id:
+          type: string
+
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        permissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/RolePermission"
+
+    RolePermission:
+      type: object
+      properties:
+        id:
+          type: string
+        resource:
+          type: string
+        action:
+          type: string
+        scope_type:
+          type: string
+        scope_id:
+          type: string
+
+    RoleAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+        display_name:
+          type: string
+        role_name:
+          type: string
+        cluster_id:
+          type: string
+        namespace:
+          type: string
+
     Cluster:
       type: object
       properties:
@@ -728,6 +4242,8 @@ components:
         status:
           type: string
           enum: [connected, disconnected, error, unreachable]
+        node_count:
+          type: integer
         labels:
           type: object
           additionalProperties:
@@ -735,6 +4251,103 @@ components:
         created_at:
           type: string
           format: date-time
+
+    AgentToken:
+      type: object
+      properties:
+        id:
+          type: string
+        cluster_name:
+          type: string
+        created_by:
+          type: string
+        used:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+
+    ProjectSummary:
+      type: object
+      properties:
+        name:
+          type: string
+        namespaces:
+          type: array
+          items:
+            type: string
+        workloads:
+          type: integer
+        podsRunning:
+          type: integer
+        podsTotal:
+          type: integer
+        health:
+          type: string
+          enum: [healthy, degraded, unknown]
+
+    ProjectDetail:
+      type: object
+      properties:
+        name:
+          type: string
+        namespaces:
+          type: array
+          items:
+            type: string
+        resources:
+          type: array
+          items:
+            type: object
+            properties:
+              kind:
+                type: string
+              name:
+                type: string
+              namespace:
+                type: string
+
+    OidcConfig:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        provider_type:
+          type: string
+        provider_name:
+          type: string
+        issuer_url:
+          type: string
+        client_id:
+          type: string
+        client_secret:
+          type: string
+        redirect_url:
+          type: string
+        groups_claim:
+          type: string
+        extra_scopes:
+          type: array
+          items:
+            type: string
+        tenant_id:
+          type: string
+
+    AIStatus:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        configured:
+          type: boolean
+        provider:
+          type: string
+        model:
+          type: string
+        tool_permission_level:
+          type: string
+        message:
+          type: string
 
     ServiceMonitorConfig:
       type: object
@@ -795,46 +4408,6 @@ components:
           type: object
         repo_url:
           type: string
-
-    ProjectSummary:
-      type: object
-      properties:
-        name:
-          type: string
-        namespaces:
-          type: array
-          items:
-            type: string
-        workloads:
-          type: integer
-        podsRunning:
-          type: integer
-        podsTotal:
-          type: integer
-        health:
-          type: string
-          enum: [healthy, degraded, unknown]
-
-    ProjectDetail:
-      type: object
-      properties:
-        name:
-          type: string
-        namespaces:
-          type: array
-          items:
-            type: string
-        resources:
-          type: array
-          items:
-            type: object
-            properties:
-              kind:
-                type: string
-              name:
-                type: string
-              namespace:
-                type: string
 
     AuditEntry:
       type: object

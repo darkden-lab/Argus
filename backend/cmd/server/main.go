@@ -30,6 +30,7 @@ import (
 	"github.com/darkden-lab/argus/backend/internal/notifications"
 	"github.com/darkden-lab/argus/backend/internal/plugin"
 	"github.com/darkden-lab/argus/backend/internal/proxy"
+	"github.com/darkden-lab/argus/backend/internal/pvcbrowser"
 	"github.com/darkden-lab/argus/backend/internal/rbac"
 	"github.com/darkden-lab/argus/backend/internal/settings"
 	sio "github.com/darkden-lab/argus/backend/internal/socketio"
@@ -92,6 +93,7 @@ func main() {
 	jwtService := auth.NewJWTService(cfg.JWTSecret)
 	authService := auth.NewAuthService(database, jwtService)
 	authHandlers := auth.NewHandlers(authService)
+	apiKeyService := auth.NewAPIKeyService(pool)
 
 	// Setup wizard
 	setupService := setup.NewService(pool)
@@ -203,7 +205,7 @@ func main() {
 
 	// Protected routes
 	protected := r.PathPrefix("").Subrouter()
-	protected.Use(mw.AuthMiddleware(jwtService))
+	protected.Use(mw.AuthMiddleware(jwtService, apiKeyService))
 	// Guard: block all protected routes if initial setup is pending
 	protected.Use(setup.GuardMiddleware(setupService))
 	if pool != nil {
@@ -226,6 +228,10 @@ func main() {
 	profileHandlers := auth.NewProfileHandlers(authService, pool)
 	profileHandlers.RegisterRoutes(protected)
 
+	// API Key management routes
+	apiKeyHandlers := auth.NewAPIKeyHandlers(apiKeyService)
+	apiKeyHandlers.RegisterRoutes(protected)
+
 	// OIDC group -> role mapping routes (write endpoints require settings:write RBAC)
 	oidcMappingHandlers := auth.NewOIDCMappingHandlers(pool, rbac.RBACMiddleware(rbacEngine, "settings", "write"))
 	oidcMappingHandlers.RegisterRoutes(protected)
@@ -242,7 +248,7 @@ func main() {
 	resourceHandler.RegisterRoutes(protected)
 
 	// Convenience routes (namespaces, nodes, events)
-	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr, pool)
+	convenienceHandlers := core.NewConvenienceHandlers(clusterMgr, pool, clustersWriteGuard)
 	convenienceHandlers.RegisterRoutes(protected)
 
 	// Pod logs endpoint (auth handled internally to support EventSource SSE)
@@ -289,6 +295,13 @@ func main() {
 	// Legacy Terminal WebSocket
 	terminalHandler := terminal.NewHandler(jwtService, clusterMgr)
 	terminalHandler.RegisterRoutes(r)
+
+	// PVC Browser
+	pvcSessionMgr := pvcbrowser.NewSessionManager()
+	pvcSessionMgr.StartCleanup()
+	defer pvcSessionMgr.StopCleanup()
+	pvcBrowserHandlers := pvcbrowser.NewHandlers(pvcSessionMgr, clusterMgr)
+	pvcBrowserHandlers.RegisterRoutes(protected)
 
 	// AI Chat system — load from env vars first, then override with DB values
 	aiCfg := ai.LoadConfigFromEnv()
@@ -359,6 +372,7 @@ func main() {
 	// Socket.IO server (new transport layer alongside legacy WebSockets)
 	sioServer := sio.NewServer(sio.Deps{
 		JWTService:      jwtService,
+		APIKeyService:   apiKeyService,
 		Hub:             hub,
 		AIService:       aiService,
 		ClusterMgr:      clusterMgr,
@@ -528,8 +542,8 @@ func corsMiddleware(next http.Handler) http.Handler {
 				w.Header().Set("Access-Control-Allow-Origin", o)
 			}
 		}
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-API-Key")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Max-Age", "86400")
 

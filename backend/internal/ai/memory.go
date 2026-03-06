@@ -53,6 +53,9 @@ func (s *MemoryStore) List(ctx context.Context, userID string) ([]Memory, error)
 		}
 		memories = append(memories, m)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
 	return memories, nil
 }
 
@@ -128,6 +131,9 @@ func (s *MemoryStore) Search(ctx context.Context, userID, query string) ([]Memor
 			continue
 		}
 		memories = append(memories, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return memories, nil
 }

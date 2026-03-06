@@ -11,7 +11,6 @@ import { useDashboardStore } from "@/stores/dashboard";
 import { useClusterStore } from "@/stores/cluster";
 import { api } from "@/lib/api";
 import {
-  Loader2,
   Rocket,
   Database,
   Timer,
@@ -26,6 +25,7 @@ import {
   FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DashboardSkeleton } from "@/components/skeletons";
 import type { WatchEvent } from "@/lib/socket";
 
 interface K8sEvent {
@@ -154,12 +154,7 @@ export default function DashboardPage() {
       </div>
 
       {loading ? (
-        <div className="flex items-center justify-center py-20">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <span>Loading dashboard...</span>
-          </div>
-        </div>
+        <DashboardSkeleton />
       ) : (
         <>
           {/* Stat Cards */}

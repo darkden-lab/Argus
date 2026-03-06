@@ -192,7 +192,9 @@ func (h *Handlers) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 		status = "unreachable"
 	}
 
-	_ = h.manager.store.UpdateClusterStatus(r.Context(), id, status)
+	if err := h.manager.store.UpdateClusterStatus(r.Context(), id, status); err != nil {
+		log.Printf("cluster: failed to persist status for %s: %v", id, err)
+	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": status})
 }

@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import {
   Trash2,
   Save,
+  Download,
   MessageSquare,
   Copy,
   Check,
@@ -403,14 +404,32 @@ export function ResourceDetail({
 
         <TabsContent value="yaml" className="mt-4 space-y-3">
           <YamlEditor value={editedYaml} onChange={setEditedYaml} />
-          {onSaveYaml && yamlChanged && (
-            <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                const blob = new Blob([editedYaml], { type: "text/yaml" });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${name ?? "resource"}.yaml`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+              }}
+            >
+              <Download className="mr-1.5 h-3.5 w-3.5" />
+              Download YAML
+            </Button>
+            {onSaveYaml && yamlChanged && (
               <Button size="sm" onClick={() => onSaveYaml(editedYaml)}>
                 <Save className="mr-1.5 h-3.5 w-3.5" />
                 Save Changes
               </Button>
-            </div>
-          )}
+            )}
+          </div>
         </TabsContent>
 
         <TabsContent value="events" className="mt-4">

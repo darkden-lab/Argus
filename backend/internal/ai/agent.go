@@ -92,6 +92,9 @@ func (s *AgentStore) List(ctx context.Context, userID string) ([]Agent, error) {
 		}
 		agents = append(agents, a)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("agent store: rows iteration: %w", err)
+	}
 	return agents, nil
 }
 
@@ -289,6 +292,9 @@ func (s *AgentStore) ListTasks(ctx context.Context, userID string) ([]AgentTask,
 			return nil, fmt.Errorf("agent store: scan task: %w", err)
 		}
 		tasks = append(tasks, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("agent store: rows iteration: %w", err)
 	}
 	return tasks, nil
 }

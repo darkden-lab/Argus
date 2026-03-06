@@ -130,6 +130,7 @@ func (e *Engine) InvalidateUsersWithRole(ctx context.Context, roleID string) {
 			userIDs = append(userIDs, uid)
 		}
 	}
+	// Best-effort: ignore rows.Err() for cache invalidation
 
 	for _, uid := range userIDs {
 		e.InvalidateCache(uid)

@@ -43,10 +43,21 @@ interface K8sResource {
   };
   status?: {
     phase?: string;
-    conditions?: Array<{ type: string; status: string }>;
+    conditions?: Array<{ type: string; status: string; message?: string }>;
   };
   [key: string]: unknown;
 }
+
+interface K8sNode {
+  metadata: { name: string; creationTimestamp?: string; uid?: string; labels?: Record<string, string> };
+  status?: {
+    conditions?: Array<{ type: string; status: string; message?: string }>;
+    nodeInfo?: { osImage?: string; kubeletVersion?: string; architecture?: string };
+    addresses?: Array<{ type: string; address: string }>;
+  };
+}
+
+const PRESSURE_CONDITIONS = ["DiskPressure", "MemoryPressure", "PIDPressure"] as const;
 
 interface ResourceListResponse {
   items: K8sResource[];
@@ -162,7 +173,7 @@ export default function ClusterDetailPage() {
   const [resources, setResources] = useState<Record<string, K8sResource[]>>({});
   const [loading, setLoading] = useState<Record<string, boolean>>({});
   const [namespaces, setNamespaces] = useState<string[]>([]);
-  const [nodeCount, setNodeCount] = useState(0);
+  const [nodes, setNodes] = useState<K8sNode[]>([]);
   const [isDownloading, setIsDownloading] = useState(false);
   const [copied, setCopied] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -236,8 +247,8 @@ export default function ClusterDetailPage() {
       .catch(() => {});
 
     api
-      .get<ResourceListResponse>(`/api/clusters/${clusterId}/nodes`)
-      .then((res) => setNodeCount(res.items.length))
+      .get<{ items: K8sNode[] }>(`/api/clusters/${clusterId}/nodes`)
+      .then((res) => setNodes(res.items ?? []))
       .catch(() => {});
   }, [clusterId]);
 
@@ -320,7 +331,7 @@ export default function ClusterDetailPage() {
               Cluster: {clusterId}
             </h1>
             <p className="text-muted-foreground">
-              {nodeCount} nodes, {namespaces.length} namespaces
+              {nodes.length} nodes, {namespaces.length} namespaces
             </p>
           </div>
         </div>
@@ -388,7 +399,7 @@ export default function ClusterDetailPage() {
           <div className="grid gap-4 md:grid-cols-3">
             <div className="rounded-md border p-4">
               <p className="text-sm text-muted-foreground">Nodes</p>
-              <p className="text-2xl font-bold">{nodeCount}</p>
+              <p className="text-2xl font-bold">{nodes.length}</p>
             </div>
             <div className="rounded-md border p-4">
               <p className="text-sm text-muted-foreground">Namespaces</p>
@@ -401,6 +412,77 @@ export default function ClusterDetailPage() {
               </p>
             </div>
           </div>
+          {/* Nodes */}
+          {nodes.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-sm font-medium">Nodes</p>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {nodes.map((node) => {
+                  const isReady = node.status?.conditions?.some(
+                    (c) => c.type === "Ready" && c.status === "True"
+                  );
+                  const pressures = node.status?.conditions?.filter(
+                    (c) =>
+                      PRESSURE_CONDITIONS.includes(c.type as typeof PRESSURE_CONDITIONS[number]) &&
+                      c.status === "True"
+                  ) ?? [];
+                  return (
+                    <div
+                      key={node.metadata.name}
+                      className="rounded-lg border p-3 space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div
+                            className={cn(
+                              "h-2 w-2 rounded-full shrink-0",
+                              isReady ? "bg-emerald-500" : "bg-red-500"
+                            )}
+                          />
+                          <span className="text-sm font-medium truncate">
+                            {node.metadata.name}
+                          </span>
+                        </div>
+                        <Badge
+                          variant="outline"
+                          className={cn(
+                            "text-[10px] shrink-0",
+                            isReady
+                              ? "border-emerald-500/30 text-emerald-500"
+                              : "border-red-500/30 text-red-500"
+                          )}
+                        >
+                          {isReady ? "Ready" : "NotReady"}
+                        </Badge>
+                      </div>
+                      {pressures.length > 0 && (
+                        <div className="flex flex-wrap gap-1">
+                          {pressures.map((c) => (
+                            <Badge
+                              key={c.type}
+                              variant="destructive"
+                              className="text-[10px]"
+                            >
+                              {c.type}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+                      <div className="text-xs text-muted-foreground space-y-0.5">
+                        {node.status?.nodeInfo?.kubeletVersion && (
+                          <p>Kubelet: {node.status.nodeInfo.kubeletVersion}</p>
+                        )}
+                        {node.status?.nodeInfo?.osImage && (
+                          <p>{node.status.nodeInfo.osImage}</p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <div className="rounded-md border p-4">
             <p className="mb-2 text-sm font-medium">Namespaces</p>
             <div className="flex flex-wrap gap-1.5">

@@ -76,6 +76,10 @@ func (h *OIDCMappingHandlers) listMappings(w http.ResponseWriter, r *http.Reques
 		}
 		mappings = append(mappings, m)
 	}
+	if err := rows.Err(); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to iterate mappings")
+		return
+	}
 	if mappings == nil {
 		mappings = []mappingResponse{}
 	}
@@ -172,8 +176,12 @@ func (h *OIDCMappingHandlers) updateDefaultRole(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	raw, _ := json.Marshal(req.DefaultRole)
-	_, err := h.pool.Exec(r.Context(),
+	raw, err := json.Marshal(req.DefaultRole)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "failed to encode role")
+		return
+	}
+	_, err = h.pool.Exec(r.Context(),
 		`INSERT INTO settings (key, value, updated_at)
 		 VALUES ($1, $2, NOW())
 		 ON CONFLICT (key) DO UPDATE

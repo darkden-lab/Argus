@@ -102,6 +102,10 @@ async function fetchWithAuth<T>(path: string, method: string, body?: unknown, re
     throw err;
   }
 
+  if (res.status === 204) {
+    return undefined as T;
+  }
+
   return res.json() as Promise<T>;
 }
 
@@ -111,4 +115,25 @@ export const api = {
   put: <T>(path: string, body?: unknown) => fetchWithAuth<T>(path, 'PUT', body),
   patch: <T>(path: string, body?: unknown) => fetchWithAuth<T>(path, 'PATCH', body),
   del: <T>(path: string) => fetchWithAuth<T>(path, 'DELETE'),
+
+  downloadBlob: async (url: string): Promise<Blob> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const res = await fetch(`${API_URL}${url}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    if (!res.ok) throw new ApiError(await res.text(), res.status);
+    return res.blob();
+  },
+
+  uploadFile: async (url: string, file: File): Promise<void> => {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('access_token') : null;
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${API_URL}${url}`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    if (!res.ok) throw new ApiError(await res.text(), res.status);
+  },
 };
