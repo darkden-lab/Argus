@@ -39,11 +39,6 @@ func sanitizePath(base, userPath string) (string, error) {
 	return full, nil
 }
 
-// shellEscape wraps a string in single quotes, escaping internal single quotes.
-func shellEscape(s string) string {
-	return "'" + strings.ReplaceAll(s, "'", "'\\''") + "'"
-}
-
 // ListDir lists the contents of a directory inside the PVC.
 func ListDir(ctx context.Context, mgr *cluster.Manager, session *Session, path string) ([]FileInfo, error) {
 	fullPath, err := sanitizePath(basePath, path)
