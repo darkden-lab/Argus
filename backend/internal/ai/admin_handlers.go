@@ -88,6 +88,16 @@ func (h *AdminHandlers) getStatus(w http.ResponseWriter, r *http.Request) {
 					dbCfg.APIKey = string(plain)
 				}
 			}
+			// Fall back to the in-memory service config for secrets (env vars / hot-reload)
+			if h.service != nil {
+				_, svcCfg := h.service.Snapshot()
+				if dbCfg.APIKey == "" && svcCfg.APIKey != "" {
+					dbCfg.APIKey = svcCfg.APIKey
+				}
+				if len(dbCfg.CustomHeaders) == 0 && len(svcCfg.CustomHeaders) > 0 {
+					dbCfg.CustomHeaders = svcCfg.CustomHeaders
+				}
+			}
 			cfg = dbCfg
 		}
 	}
@@ -133,10 +143,19 @@ func (h *AdminHandlers) getConfig(w http.ResponseWriter, r *http.Request) {
 	if len(headersJSON) > 0 {
 		_ = json.Unmarshal(headersJSON, &cfg.CustomHeaders)
 	}
-	// Signal the frontend that an API key is stored without exposing it
+	// Signal the frontend that an API key is stored without exposing it.
+	// Check both DB (encrypted_api_key) and in-memory service (env var fallback).
 	if len(encAPIKey) > 0 {
-		cfg.APIKey = "••••••••"
+		cfg.APIKey = maskedValue
+	} else if h.service != nil {
+		_, svcCfg := h.service.Snapshot()
+		if svcCfg.APIKey != "" {
+			cfg.APIKey = maskedValue
+		}
 	}
+
+	// Mask custom header values (they often contain API keys / subscription keys)
+	cfg.CustomHeaders = maskHeaderValues(cfg.CustomHeaders)
 
 	writeAIJSON(w, http.StatusOK, cfg)
 }
@@ -153,16 +172,49 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Ensure tool_permission_level is never empty — default to "all"
+	if cfg.ToolPermissionLevel == "" {
+		cfg.ToolPermissionLevel = ToolsAll
+	}
+
+	// Resolve custom headers: merge masked values with existing stored values.
+	// This prevents losing header secrets when the frontend sends them back masked.
+	var storedHeaders map[string]string
+	if h.pool != nil {
+		var storedJSON []byte
+		_ = h.pool.QueryRow(r.Context(), `SELECT COALESCE(custom_headers, '{}') FROM ai_config LIMIT 1`).Scan(&storedJSON)
+		if len(storedJSON) > 0 {
+			_ = json.Unmarshal(storedJSON, &storedHeaders)
+		}
+	}
+	// Fall back to in-memory service headers if DB has none
+	if len(storedHeaders) == 0 && h.service != nil {
+		_, svcCfg := h.service.Snapshot()
+		storedHeaders = svcCfg.CustomHeaders
+	}
+	headersChanged := !headersAllMasked(cfg.CustomHeaders)
+	if headersChanged {
+		// Merge: replace masked values with stored, keep new values
+		cfg.CustomHeaders = mergeHeaders(cfg.CustomHeaders, storedHeaders)
+	} else {
+		// All values are masked or no headers sent — keep existing
+		cfg.CustomHeaders = storedHeaders
+	}
+
 	headersJSON, err := json.Marshal(cfg.CustomHeaders)
 	if err != nil {
 		headersJSON = []byte("{}")
 	}
 
 	// Determine if we need to update the encrypted API key.
-	// The masked placeholder "••••••••" means "keep existing", empty means clear it.
+	// The masked placeholder "••••••••" means "keep existing".
+	// Empty string also means "keep existing" (frontend may not have the key
+	// when it was set via env vars and never stored in DB).
 	var encAPIKey []byte
-	apiKeyChanged := cfg.APIKey != "••••••••"
-	if apiKeyChanged && cfg.APIKey != "" {
+	apiKeyChanged := cfg.APIKey != maskedValue && cfg.APIKey != ""
+	log.Printf("ai: updateConfig: provider=%s model=%s enabled=%v tools=%s apiKeyLen=%d apiKeyChanged=%v headersChanged=%v headerCount=%d",
+		cfg.Provider, cfg.Model, cfg.Enabled, cfg.ToolPermissionLevel, len(cfg.APIKey), apiKeyChanged, headersChanged, len(cfg.CustomHeaders))
+	if apiKeyChanged {
 		encAPIKey, err = crypto.Encrypt([]byte(cfg.APIKey), h.encryptionKey)
 		if err != nil {
 			log.Printf("ai: failed to encrypt api key: %v", err)
@@ -199,20 +251,30 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 	// Hot-reload the AI provider so changes take effect immediately.
 	if h.service != nil && h.providerFactory != nil {
 		_, current := h.service.Snapshot()
-		if !apiKeyChanged || cfg.APIKey == "••••••••" {
+		if !apiKeyChanged || cfg.APIKey == maskedValue || cfg.APIKey == "" {
 			cfg.APIKey = current.APIKey
 		}
-		if cfg.CustomHeaders == nil {
+		if len(cfg.CustomHeaders) == 0 {
 			cfg.CustomHeaders = current.CustomHeaders
+		}
+		if cfg.ToolPermissionLevel == "" {
+			cfg.ToolPermissionLevel = current.ToolPermissionLevel
+		}
+		if cfg.Provider == "" {
+			cfg.Provider = current.Provider
+		}
+		if cfg.Model == "" {
+			cfg.Model = current.Model
 		}
 		newProvider := h.providerFactory(cfg)
 		h.service.UpdateProvider(newProvider, cfg)
 	}
 
-	// Don't leak the actual key back to the frontend
+	// Don't leak secrets back to the frontend
 	if cfg.APIKey != "" {
-		cfg.APIKey = "••••••••"
+		cfg.APIKey = maskedValue
 	}
+	cfg.CustomHeaders = maskHeaderValues(cfg.CustomHeaders)
 	writeAIJSON(w, http.StatusOK, cfg)
 }
 
@@ -228,16 +290,31 @@ func (h *AdminHandlers) testConnection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// If the API key is the masked placeholder, substitute the stored key
-	if cfg.APIKey == "••••••••" && h.pool != nil {
-		var encKey []byte
-		err := h.pool.QueryRow(r.Context(), `SELECT encrypted_api_key FROM ai_config LIMIT 1`).Scan(&encKey)
-		if err == nil && len(encKey) > 0 {
-			decrypted, err := crypto.Decrypt(encKey, h.encryptionKey)
-			if err == nil {
-				cfg.APIKey = string(decrypted)
+	// Resolve masked/empty secrets from stored config
+	if cfg.APIKey == maskedValue || cfg.APIKey == "" {
+		if h.pool != nil {
+			var encKey []byte
+			err := h.pool.QueryRow(r.Context(), `SELECT encrypted_api_key FROM ai_config LIMIT 1`).Scan(&encKey)
+			if err == nil && len(encKey) > 0 {
+				decrypted, err := crypto.Decrypt(encKey, h.encryptionKey)
+				if err == nil {
+					cfg.APIKey = string(decrypted)
+				}
 			}
 		}
+		if cfg.APIKey == maskedValue || cfg.APIKey == "" {
+			if h.service != nil {
+				_, svcCfg := h.service.Snapshot()
+				if svcCfg.APIKey != "" {
+					cfg.APIKey = svcCfg.APIKey
+				}
+			}
+		}
+	}
+	// Resolve masked custom header values
+	if headersAllMasked(cfg.CustomHeaders) && h.service != nil {
+		_, svcCfg := h.service.Snapshot()
+		cfg.CustomHeaders = mergeHeaders(cfg.CustomHeaders, svcCfg.CustomHeaders)
 	}
 
 	if h.providerFactory == nil {
@@ -280,6 +357,53 @@ func (h *AdminHandlers) triggerReindex(w http.ResponseWriter, r *http.Request) {
 
 	go h.indexer.RunOnce(context.Background())
 	writeAIJSON(w, http.StatusAccepted, map[string]string{"status": "reindex_started"})
+}
+
+const maskedValue = "••••••••"
+
+// maskHeaderValues returns a copy of headers with all values replaced by the mask.
+func maskHeaderValues(headers map[string]string) map[string]string {
+	if len(headers) == 0 {
+		return headers
+	}
+	masked := make(map[string]string, len(headers))
+	for k := range headers {
+		masked[k] = maskedValue
+	}
+	return masked
+}
+
+// headersAllMasked returns true if every value in headers equals the mask.
+func headersAllMasked(headers map[string]string) bool {
+	if len(headers) == 0 {
+		return false
+	}
+	for _, v := range headers {
+		if v != maskedValue {
+			return false
+		}
+	}
+	return true
+}
+
+// mergeHeaders merges incoming headers with the current stored headers.
+// Masked values ("••••••••") are replaced with values from stored.
+func mergeHeaders(incoming, stored map[string]string) map[string]string {
+	if len(incoming) == 0 {
+		return stored
+	}
+	result := make(map[string]string, len(incoming))
+	for k, v := range incoming {
+		if v == maskedValue {
+			if sv, ok := stored[k]; ok {
+				result[k] = sv
+			}
+			// If the key doesn't exist in stored, skip it (don't store the mask)
+		} else {
+			result[k] = v
+		}
+	}
+	return result
 }
 
 func writeAIJSON(w http.ResponseWriter, status int, data interface{}) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import {
   AlertTriangle,
   AlertOctagon,
@@ -8,9 +8,12 @@ import {
   CheckCircle2,
   Filter,
   CheckCheck,
+  Search,
+  X,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import {
   Select,
@@ -108,12 +111,41 @@ export default function NotificationsPage() {
   const [total, setTotal] = useState(0);
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
   const [severityFilter, setSeverityFilter] = useState<string>("all");
+  const [searchInput, setSearchInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const router = useRouter();
   const perPage = 20;
 
   const fetchUnreadCount = useNotificationStore(
     (state) => state.fetchUnreadCount
   );
+
+  function handleSearchChange(value: string) {
+    setSearchInput(value);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setSearchQuery(value);
+      setPage(1);
+    }, 300);
+  }
+
+  function clearSearch() {
+    setSearchInput("");
+    setSearchQuery("");
+    setPage(1);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+  }
+
+  const filteredNotifications = useMemo(() => {
+    if (!searchQuery.trim()) return notifications;
+    const q = searchQuery.toLowerCase();
+    return notifications.filter(
+      (n) =>
+        n.title.toLowerCase().includes(q) ||
+        n.body.toLowerCase().includes(q)
+    );
+  }, [notifications, searchQuery]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -159,8 +191,10 @@ export default function NotificationsPage() {
     }
   }
 
+  const displayNotifications = filteredNotifications;
   const totalPages = Math.ceil(total / perPage);
   const hasUnread = notifications.some((n) => !n.read);
+  const isSearchActive = searchQuery.trim().length > 0;
 
   return (
     <div className="space-y-6">
@@ -179,8 +213,26 @@ export default function NotificationsPage() {
         )}
       </div>
 
-      {/* Filters */}
+      {/* Search & Filters */}
       <div className="flex items-center gap-3">
+        <div className="relative">
+          <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search notifications..."
+            value={searchInput}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            className="h-8 w-[220px] pl-8 pr-8 text-xs"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={clearSearch}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
         <Filter className="h-4 w-4 text-muted-foreground" />
         <Select value={categoryFilter} onValueChange={(v) => { setCategoryFilter(v); setPage(1); }}>
           <SelectTrigger className="h-8 w-[160px] text-xs">
@@ -215,21 +267,35 @@ export default function NotificationsPage() {
             <div key={i} className="h-20 animate-pulse rounded-md bg-muted" />
           ))}
         </div>
-      ) : notifications.length === 0 ? (
+      ) : displayNotifications.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <CheckCircle2 className="h-12 w-12 text-muted-foreground/30 mb-3" />
-          <p className="text-lg font-medium text-muted-foreground">
-            No notifications
-          </p>
-          <p className="text-sm text-muted-foreground/60">
-            {categoryFilter !== "all" || severityFilter !== "all"
-              ? "Try adjusting your filters."
-              : "You're all caught up!"}
-          </p>
+          {isSearchActive ? (
+            <>
+              <Search className="h-12 w-12 text-muted-foreground/30 mb-3" />
+              <p className="text-lg font-medium text-muted-foreground">
+                No notifications matching search
+              </p>
+              <p className="text-sm text-muted-foreground/60">
+                Try a different search term or clear the search.
+              </p>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="h-12 w-12 text-muted-foreground/30 mb-3" />
+              <p className="text-lg font-medium text-muted-foreground">
+                No notifications
+              </p>
+              <p className="text-sm text-muted-foreground/60">
+                {categoryFilter !== "all" || severityFilter !== "all"
+                  ? "Try adjusting your filters."
+                  : "You're all caught up!"}
+              </p>
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-6">
-          {Array.from(groupNotificationsByTime(notifications)).map(([group, items]) => (
+          {Array.from(groupNotificationsByTime(displayNotifications)).map(([group, items]) => (
             <div key={group}>
               <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">
                 {group}

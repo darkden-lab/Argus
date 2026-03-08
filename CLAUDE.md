@@ -94,6 +94,7 @@ Key internal packages:
 | `settings` | System settings key-value store (admin-only) |
 | `proxy` | K8s reverse proxy for kubectl auth |
 | `crypto` | AES-256-GCM encrypt/decrypt for kubeconfig and API keys |
+| `pvcbrowser` | PVC file browser: HTTP endpoints, file operations, session management |
 | `agentpb` | Generated protobuf/gRPC code for cluster agent (in `pkg/agentpb`) |
 
 **API docs**: OpenAPI spec at `backend/docs/openapi.yaml`, served via Swagger handler in `backend/docs/handler.go`
@@ -102,7 +103,8 @@ Key internal packages:
 
 - **Framework**: Next.js 16 (App Router, React 19, TypeScript)
 - **Styling**: Tailwind CSS 4 + shadcn/ui (radix-ui)
-- **State**: Zustand stores in `src/stores/` (auth, cluster, dashboard, notifications, ai-chat, plugins, permissions, toast, ui)
+- **State**: Zustand stores in `src/stores/` (auth, cluster, dashboard, notifications, ai-chat, plugins, permissions, toast, ui, pvc-browser)
+- **i18n**: next-intl v4 — messages in `frontend/messages/en.json` (800+ strings)
 - **Testing**: Jest 30 + React Testing Library (unit), Playwright (e2e)
 
 Route structure (`src/app/`):
@@ -141,7 +143,7 @@ Standalone Go binary that connects to dashboard via gRPC bidirectional streaming
 
 ### CLI (`cli/`)
 
-`argus` CLI tool for managing clusters from terminal. Supports login, cluster listing, and kubeconfig download.
+`argus` CLI tool for managing clusters from terminal. Supports login, cluster listing, kubeconfig generate/list/remove, logout, and version. Uses cobra for commands, config at `~/.argus/config.json`.
 
 ### Deployment (`deploy/`)
 
@@ -172,7 +174,9 @@ See `.env.example` for a complete list with descriptions.
 - **Backend tests**: `*_test.go` files alongside source. Run with `go test ./...`
 - **Frontend unit tests**: `src/__tests__/**/*.test.{ts,tsx}`, setup in `src/__tests__/setup.ts`
 - **Frontend e2e**: `e2e/` directory, Playwright config targets `http://localhost:3000`
-- **Frontend scope**: 28 test suites, 336+ tests
+- **Frontend scope**: 51 test files, ~973 tests (17/37 pages tested, 14/105 components tested)
+- **Backend scope**: 65 test files, 587 test functions, 20/22 packages covered
+- **Backend gaps**: `socketio/` and `pvcbrowser/` have zero tests; `ai/service.go` mostly untested
 - **Jest config**: `jest.config.mjs` (ESM `.mjs`, not `.ts` — avoids ts-node dependency with Jest 30)
 - **Coverage reporters**: text, json-summary, lcov
 - **E2E smoke test**: `scripts/e2e-smoke.sh` (Docker Compose integration test)
@@ -206,3 +210,8 @@ See `.env.example` for a complete list with descriptions.
 - **golangci-lint exclusions**: `pkg/agentpb` is excluded (generated code); errcheck and gocritic relaxed in `_test.go`
 - **Socket.IO + WebSocket coexistence**: The `ws` package (Hub) still exists as the internal event bus, but clients connect via Socket.IO namespaces in `socketio` package. Legacy `/ws` WebSocket endpoint is still wired for backward compat but new features should use Socket.IO namespaces
 - **Go module paths**: Three separate Go modules — `backend/`, `agent/`, `cli/` — each with their own `go.mod`. The CI lints and tests `backend` and `agent` separately
+- **AI system scope**: 38 tools (25 read-only + 8 write + memory), 7 builtin agents, confirmation flow for destructive ops. Tools defined in `ai/tools/definitions.go`, executor in `ai/tools/executor.go`
+- **OpenAPI spec**: `backend/docs/openapi.yaml` has 155+ paths (4,432 lines) — keep in sync when adding endpoints
+- **Plugin endpoint counts**: Prometheus(23), Calico(13), Istio(17), CNPG(17), MariaDB(23), KEDA(18), Ceph(23), Helm(8) = 142 total
+- **Notification system**: 5 channels, digest aggregator (daily/weekly), routing by category, preferences per-user. Templates in `notifications/channels/` are currently hardcoded
+- **Terminal security**: Command sanitization blocks dangerous patterns (rm -rf /, fork bombs, mkfs, pipe-to-shell). Rate limit: 10 cmd/s per user. Middleware in `terminal/middleware.go`

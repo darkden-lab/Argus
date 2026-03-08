@@ -286,6 +286,8 @@ export default function AiSettingsPage() {
             <Label>API Key</Label>
             <Input
               type="password"
+              name="argus-ai-api-key"
+              autoComplete="off"
               value={config.api_key}
               onChange={(e) =>
                 setConfig({ ...config, api_key: e.target.value })
@@ -383,6 +385,7 @@ export default function AiSettingsPage() {
                 <Input
                   className="flex-1"
                   type="password"
+                  autoComplete="off"
                   placeholder="Header value"
                   value={entry.value}
                   onChange={(e) => updateHeaderEntry(index, "value", e.target.value)}

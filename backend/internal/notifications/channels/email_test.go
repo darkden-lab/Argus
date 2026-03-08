@@ -125,7 +125,15 @@ func TestRenderEmailTemplate(t *testing.T) {
 		Timestamp: time.Now(),
 	}
 
-	html, err := renderEmailTemplate(msg)
+	data := TemplateData{
+		Title:     msg.Title,
+		Body:      msg.Body,
+		Severity:  msg.Severity,
+		Category:  msg.Category,
+		Timestamp: msg.Timestamp.Format("2006-01-02 15:04:05 UTC"),
+		AppName:   "Argus K8s Dashboard",
+	}
+	html, err := renderDefaultEmailTemplate(data)
 	if err != nil {
 		t.Fatalf("render failed: %v", err)
 	}

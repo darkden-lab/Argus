@@ -96,6 +96,7 @@ func TestNewHandlers_Notifications(t *testing.T) {
 		NewNotificationStore(nil),
 		NewPreferencesStore(nil),
 		NewChannelStore(nil),
+		NewTemplateStore(nil),
 		NewRouter(nil, nil, nil),
 		"test-encryption-key",
 		nil,

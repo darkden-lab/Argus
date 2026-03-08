@@ -27,6 +27,7 @@ After logging in, kubectl commands are routed through the dashboard with full RB
 		newLoginCmd(),
 		newLogoutCmd(),
 		newContextsCmd(),
+		newKubeconfigCmd(),
 		newVersionCmd(),
 	)
 

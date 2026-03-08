@@ -150,7 +150,12 @@ func main() {
 		notifStore := notifications.NewNotificationStore(pool)
 		prefStore := notifications.NewPreferencesStore(pool)
 		chanStore := notifications.NewChannelStore(pool)
+		tmplStore := notifications.NewTemplateStore(pool)
 		notifRouter := notifications.NewRouter(notifStore, prefStore, chanStore)
+
+		// Wire template provider so email channels use DB-stored templates
+		tmplProvider := notifications.NewDBTemplateProvider(tmplStore)
+		notifRouter.SetTemplateProvider(tmplProvider)
 
 		// EventProducer: hooks into K8s watch events and publishes to broker
 		producer := notifications.NewEventProducer(broker)
@@ -166,7 +171,7 @@ func main() {
 		digest := notifications.NewDigestAggregator(prefStore, chanStore, notifStore, notifRouter.GetChannels())
 		digest.Start()
 
-		notifHandlers = notifications.NewHandlers(notifStore, prefStore, chanStore, notifRouter, cfg.EncryptionKey, notificationsWriteGuard)
+		notifHandlers = notifications.NewHandlers(notifStore, prefStore, chanStore, tmplStore, notifRouter, cfg.EncryptionKey, notificationsWriteGuard)
 		log.Println("Notifications system initialized")
 	}
 
