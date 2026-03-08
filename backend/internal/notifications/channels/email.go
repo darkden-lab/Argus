@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"html/template"
+	"log"
 	"net/http"
 	"net/smtp"
 	"strings"
@@ -22,11 +23,33 @@ type EmailConfig struct {
 	FromName    string `json:"from_name"`
 }
 
+// TemplateData holds the data available to notification templates.
+type TemplateData struct {
+	Title     string
+	Body      string
+	Severity  string
+	Category  string
+	Timestamp string
+	AppName   string
+}
+
+// TemplateProvider allows the email channel to load templates from an external source.
+type TemplateProvider interface {
+	// GetSubjectTemplate returns the subject template string for the given channel type.
+	// Returns empty string if no custom template is found.
+	GetSubjectTemplate(channelType string) string
+
+	// GetBodyTemplate returns the body template string for the given channel type.
+	// Returns empty string if no custom template is found.
+	GetBodyTemplate(channelType string) string
+}
+
 // EmailChannel sends notifications via email using SMTP or SendGrid.
 type EmailChannel struct {
-	name   string
-	config EmailConfig
-	sender emailSender
+	name             string
+	config           EmailConfig
+	sender           emailSender
+	templateProvider TemplateProvider
 }
 
 // emailSender abstracts the sending mechanism for testing.
@@ -59,9 +82,27 @@ func NewEmailChannel(name string, config EmailConfig) (*EmailChannel, error) {
 	return ch, nil
 }
 
+// SetTemplateProvider sets a provider for loading custom templates from the database.
+func (c *EmailChannel) SetTemplateProvider(tp TemplateProvider) {
+	c.templateProvider = tp
+}
+
 func (c *EmailChannel) Send(msg Message, recipients []string) error {
-	subject := fmt.Sprintf("[%s] %s", strings.ToUpper(msg.Severity), msg.Title)
-	htmlBody, err := renderEmailTemplate(msg)
+	data := TemplateData{
+		Title:     msg.Title,
+		Body:      msg.Body,
+		Severity:  msg.Severity,
+		Category:  msg.Category,
+		Timestamp: msg.Timestamp.Format("2006-01-02 15:04:05 UTC"),
+		AppName:   "Argus K8s Dashboard",
+	}
+
+	subject, err := c.renderSubject(data)
+	if err != nil {
+		return fmt.Errorf("render subject template: %w", err)
+	}
+
+	htmlBody, err := c.renderBody(data)
 	if err != nil {
 		return fmt.Errorf("render email template: %w", err)
 	}
@@ -81,6 +122,66 @@ func (c *EmailChannel) Send(msg Message, recipients []string) error {
 
 func (c *EmailChannel) Name() string { return c.name }
 func (c *EmailChannel) Type() string { return "email" }
+
+// templateFuncMap provides helper functions available inside templates.
+var templateFuncMap = template.FuncMap{
+	"upper": strings.ToUpper,
+	"lower": strings.ToLower,
+}
+
+// renderSubject renders the subject line using a custom template or the default.
+func (c *EmailChannel) renderSubject(data TemplateData) (string, error) {
+	subjectTmplStr := ""
+	if c.templateProvider != nil {
+		subjectTmplStr = c.templateProvider.GetSubjectTemplate("email")
+	}
+
+	if subjectTmplStr == "" {
+		// Fallback: default subject format
+		return fmt.Sprintf("[%s] %s", strings.ToUpper(data.Severity), data.Title), nil
+	}
+
+	tmpl, err := template.New("subject").Funcs(templateFuncMap).Parse(subjectTmplStr)
+	if err != nil {
+		log.Printf("notifications: invalid subject template, falling back to default: %v", err)
+		return fmt.Sprintf("[%s] %s", strings.ToUpper(data.Severity), data.Title), nil
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		log.Printf("notifications: subject template execution failed, falling back to default: %v", err)
+		return fmt.Sprintf("[%s] %s", strings.ToUpper(data.Severity), data.Title), nil
+	}
+
+	return buf.String(), nil
+}
+
+// renderBody renders the email body using a custom template or the default.
+func (c *EmailChannel) renderBody(data TemplateData) (string, error) {
+	bodyTmplStr := ""
+	if c.templateProvider != nil {
+		bodyTmplStr = c.templateProvider.GetBodyTemplate("email")
+	}
+
+	if bodyTmplStr == "" {
+		// Fallback: use the hardcoded default template
+		return renderDefaultEmailTemplate(data)
+	}
+
+	tmpl, err := template.New("body").Funcs(templateFuncMap).Parse(bodyTmplStr)
+	if err != nil {
+		log.Printf("notifications: invalid body template, falling back to default: %v", err)
+		return renderDefaultEmailTemplate(data)
+	}
+
+	var buf bytes.Buffer
+	if err := tmpl.Execute(&buf, data); err != nil {
+		log.Printf("notifications: body template execution failed, falling back to default: %v", err)
+		return renderDefaultEmailTemplate(data)
+	}
+
+	return buf.String(), nil
+}
 
 // smtpSender sends email via SMTP.
 type smtpSender struct {
@@ -151,7 +252,8 @@ func (s *sendGridSender) send(from, to, subject, htmlBody string) error {
 	return nil
 }
 
-var emailTmpl = template.Must(template.New("email").Parse(`<!DOCTYPE html>
+// defaultEmailTmpl is the fallback template used when no custom template is configured.
+var defaultEmailTmpl = template.Must(template.New("email").Parse(`<!DOCTYPE html>
 <html>
 <head><style>
 body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; background: #f5f5f5; }
@@ -167,14 +269,14 @@ body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; pa
 <div class="card severity-{{.Severity}}">
   <div class="title">{{.Title}}</div>
   <div class="body">{{.Body}}</div>
-  <div class="meta">Category: {{.Category}} | {{.Timestamp.Format "2006-01-02 15:04:05 UTC"}}</div>
+  <div class="meta">Category: {{.Category}} | {{.Timestamp}}</div>
 </div>
 </body>
 </html>`))
 
-func renderEmailTemplate(msg Message) (string, error) {
+func renderDefaultEmailTemplate(data TemplateData) (string, error) {
 	var buf bytes.Buffer
-	if err := emailTmpl.Execute(&buf, msg); err != nil {
+	if err := defaultEmailTmpl.Execute(&buf, data); err != nil {
 		return "", err
 	}
 	return buf.String(), nil

@@ -272,7 +272,15 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 		}
 	}
 
-	messages = append(messages, Message{Role: RoleUser, Content: userMessage})
+	// The caller (ai_namespace.go) saves the user message to DB BEFORE calling
+	// this method, so it may already be included in the history loaded above.
+	// Only append if not already the last message in history.
+	lastIsCurrentMsg := len(history) > 0 &&
+		history[len(history)-1].Role == RoleUser &&
+		history[len(history)-1].Content == userMessage
+	if !lastIsCurrentMsg {
+		messages = append(messages, Message{Role: RoleUser, Content: userMessage})
+	}
 
 	toolDefs := tools.ToolsForLevel(string(cfg.ToolPermissionLevel))
 	req := ChatRequest{

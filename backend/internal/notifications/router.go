@@ -11,10 +11,11 @@ import (
 // Router routes incoming notification events to the appropriate channels based
 // on user preferences. It also stores notifications in the database.
 type Router struct {
-	notifStore *NotificationStore
-	prefStore  *PreferencesStore
-	chanStore  *ChannelStore
-	channels   map[string]channels.Channel // channel ID -> Channel instance
+	notifStore       *NotificationStore
+	prefStore        *PreferencesStore
+	chanStore        *ChannelStore
+	channels         map[string]channels.Channel // channel ID -> Channel instance
+	templateProvider channels.TemplateProvider
 }
 
 // NewRouter creates a Router. Call LoadChannels() to initialize channel instances.
@@ -27,8 +28,19 @@ func NewRouter(notifStore *NotificationStore, prefStore *PreferencesStore, chanS
 	}
 }
 
+// SetTemplateProvider sets the template provider that will be injected into
+// email channels on registration so they can load custom templates from the DB.
+func (r *Router) SetTemplateProvider(tp channels.TemplateProvider) {
+	r.templateProvider = tp
+}
+
 // RegisterChannel registers a Channel instance by ID for event delivery.
+// If the channel is an EmailChannel and a template provider is configured,
+// the provider is automatically injected.
 func (r *Router) RegisterChannel(id string, ch channels.Channel) {
+	if emailCh, ok := ch.(*channels.EmailChannel); ok && r.templateProvider != nil {
+		emailCh.SetTemplateProvider(r.templateProvider)
+	}
 	r.channels[id] = ch
 }
 

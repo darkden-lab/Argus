@@ -18,17 +18,19 @@ type Handlers struct {
 	notifStore     *NotificationStore
 	prefStore      *PreferencesStore
 	chanStore      *ChannelStore
+	tmplStore      *TemplateStore
 	router         *Router
 	encryptionKey  string
 	rbacWriteGuard mux.MiddlewareFunc
 }
 
 // NewHandlers creates a new Handlers.
-func NewHandlers(notifStore *NotificationStore, prefStore *PreferencesStore, chanStore *ChannelStore, router *Router, encryptionKey string, rbacWriteGuard mux.MiddlewareFunc) *Handlers {
+func NewHandlers(notifStore *NotificationStore, prefStore *PreferencesStore, chanStore *ChannelStore, tmplStore *TemplateStore, router *Router, encryptionKey string, rbacWriteGuard mux.MiddlewareFunc) *Handlers {
 	return &Handlers{
 		notifStore:     notifStore,
 		prefStore:      prefStore,
 		chanStore:      chanStore,
+		tmplStore:      tmplStore,
 		router:         router,
 		encryptionKey:  encryptionKey,
 		rbacWriteGuard: rbacWriteGuard,
@@ -55,6 +57,12 @@ func (h *Handlers) RegisterRoutes(r *mux.Router) {
 	writeRoutes.HandleFunc("/api/notifications/channels/{id}", h.UpdateChannel).Methods("PUT")
 	writeRoutes.HandleFunc("/api/notifications/channels/{id}", h.DeleteChannel).Methods("DELETE")
 	writeRoutes.HandleFunc("/api/notifications/channels/{id}/test", h.TestChannel).Methods("POST")
+
+	// Template management (admin, requires notifications:write RBAC)
+	r.HandleFunc("/api/notifications/templates", h.ListTemplates).Methods("GET")
+	writeRoutes.HandleFunc("/api/notifications/templates", h.CreateTemplate).Methods("POST")
+	writeRoutes.HandleFunc("/api/notifications/templates/{id}", h.UpdateTemplate).Methods("PUT")
+	writeRoutes.HandleFunc("/api/notifications/templates/{id}", h.DeleteTemplate).Methods("DELETE")
 }
 
 // getUserID extracts the user ID from the JWT claims in the request context.
@@ -362,4 +370,108 @@ func (h *Handlers) TestChannel(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+}
+
+// ListTemplates handles GET /api/notifications/templates
+func (h *Handlers) ListTemplates(w http.ResponseWriter, r *http.Request) {
+	channelType := r.URL.Query().Get("channel_type")
+
+	templates, err := h.tmplStore.List(r.Context(), channelType)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, templates)
+}
+
+// CreateTemplate handles POST /api/notifications/templates
+func (h *Handlers) CreateTemplate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		ChannelType     string `json:"channel_type"`
+		Name            string `json:"name"`
+		SubjectTemplate string `json:"subject_template"`
+		BodyTemplate    string `json:"body_template"`
+		IsDefault       bool   `json:"is_default"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.ChannelType == "" || req.Name == "" || req.BodyTemplate == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "channel_type, name, and body_template are required")
+		return
+	}
+
+	tmpl := &NotificationTemplate{
+		ChannelType:     req.ChannelType,
+		Name:            req.Name,
+		SubjectTemplate: req.SubjectTemplate,
+		BodyTemplate:    req.BodyTemplate,
+		IsDefault:       req.IsDefault,
+	}
+
+	if err := h.tmplStore.Create(r.Context(), tmpl); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusCreated, tmpl)
+}
+
+// UpdateTemplate handles PUT /api/notifications/templates/:id
+func (h *Handlers) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	var req struct {
+		ChannelType     string `json:"channel_type"`
+		Name            string `json:"name"`
+		SubjectTemplate string `json:"subject_template"`
+		BodyTemplate    string `json:"body_template"`
+		IsDefault       bool   `json:"is_default"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if req.ChannelType == "" || req.Name == "" || req.BodyTemplate == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "channel_type, name, and body_template are required")
+		return
+	}
+
+	tmpl := &NotificationTemplate{
+		ID:              id,
+		ChannelType:     req.ChannelType,
+		Name:            req.Name,
+		SubjectTemplate: req.SubjectTemplate,
+		BodyTemplate:    req.BodyTemplate,
+		IsDefault:       req.IsDefault,
+	}
+
+	if err := h.tmplStore.Update(r.Context(), tmpl); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, tmpl)
+}
+
+// DeleteTemplate handles DELETE /api/notifications/templates/:id
+func (h *Handlers) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
+	id := mux.Vars(r)["id"]
+
+	if err := h.tmplStore.Delete(r.Context(), id); err != nil {
+		if err.Error() == "cannot delete the default template; set another template as default first" {
+			httputil.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		httputil.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
