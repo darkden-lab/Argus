@@ -77,6 +77,7 @@ type Executor struct {
 	pluginEngine *plugin.Engine
 	pool         *pgxpool.Pool
 	memoryOps    MemoryOps
+	auditLogger  *AuditLogger
 }
 
 // NewExecutor creates a tool executor.
@@ -107,24 +108,41 @@ func (e *Executor) SetMemoryOps(ops MemoryOps) {
 	e.memoryOps = ops
 }
 
+// SetAuditLogger sets the audit logger for tool execution tracking.
+func (e *Executor) SetAuditLogger(logger *AuditLogger) {
+	e.auditLogger = logger
+}
+
 // ExecuteForUser runs a tool call with a user ID context, enabling memory tools.
-// Falls back to Execute for non-memory tools.
+// Falls back to Execute for non-memory tools. Logs execution to audit trail.
 func (e *Executor) ExecuteForUser(ctx context.Context, call ToolCall, userID string) ToolResult {
+	start := time.Now()
+
+	var result ToolResult
 	if e.memoryOps != nil && isMemoryTool(call.Name) {
-		result, err := e.dispatchMemory(ctx, call, userID)
+		res, err := e.dispatchMemory(ctx, call, userID)
 		if err != nil {
-			return ToolResult{
+			result = ToolResult{
 				ToolCallID: call.ID,
 				Content:    fmt.Sprintf("Error: %s", err.Error()),
 				IsError:    true,
 			}
+		} else {
+			result = ToolResult{
+				ToolCallID: call.ID,
+				Content:    res,
+			}
 		}
-		return ToolResult{
-			ToolCallID: call.ID,
-			Content:    result,
-		}
+	} else {
+		result = e.Execute(ctx, call)
 	}
-	return e.Execute(ctx, call)
+
+	durationMs := time.Since(start).Milliseconds()
+	if e.auditLogger != nil {
+		e.auditLogger.Log(ctx, userID, call.Name, call.Arguments, result.Content, result.IsError, durationMs)
+	}
+
+	return result
 }
 
 func (e *Executor) dispatchMemory(ctx context.Context, call ToolCall, userID string) (string, error) {
