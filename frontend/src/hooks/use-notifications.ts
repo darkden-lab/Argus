@@ -2,11 +2,10 @@
 
 import { useEffect, useRef } from "react";
 import { useNotificationStore, type Notification } from "@/stores/notifications";
-import { getSocket, disconnectSocket } from "@/lib/socket";
-import type { Socket } from "socket.io-client";
+import { SSEClient, getToken } from "@/lib/sse-client";
 
 /**
- * Hook that manages real-time notification updates via Socket.IO
+ * Hook that manages real-time notification updates via SSE
  * and initial data fetching for the notification system.
  */
 export function useNotifications() {
@@ -21,7 +20,7 @@ export function useNotifications() {
     addRealtimeNotification,
   } = useNotificationStore();
 
-  const socketRef = useRef<Socket | null>(null);
+  const clientRef = useRef<SSEClient | null>(null);
 
   useEffect(() => {
     fetchNotifications();
@@ -29,29 +28,29 @@ export function useNotifications() {
   }, [fetchNotifications, fetchUnreadCount]);
 
   useEffect(() => {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("access_token")
-        : null;
-
+    const token = getToken();
     if (!token) return;
 
-    const socket = getSocket("/notifications");
-    socketRef.current = socket;
-
-    socket.on("notification", (data: Notification | string) => {
-      try {
-        const notification: Notification =
-          typeof data === "string" ? JSON.parse(data) : data;
-        addRealtimeNotification(notification);
-      } catch {
-        // Ignore malformed messages
-      }
+    const client = new SSEClient({
+      url: "/api/notifications/stream",
+      getToken,
+      onEvent: (_type, data) => {
+        try {
+          const notification: Notification =
+            typeof data === "string" ? JSON.parse(data) : (data as Notification);
+          addRealtimeNotification(notification);
+        } catch {
+          // Ignore malformed messages
+        }
+      },
     });
 
+    clientRef.current = client;
+    client.connect();
+
     return () => {
-      disconnectSocket("/notifications");
-      socketRef.current = null;
+      client.disconnect();
+      clientRef.current = null;
     };
   }, [addRealtimeNotification]);
 

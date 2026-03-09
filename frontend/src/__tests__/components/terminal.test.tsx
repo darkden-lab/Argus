@@ -52,7 +52,7 @@ const mockUseTerminal = jest.fn(() => ({
   connect: mockConnect,
 }));
 
-jest.mock('@/hooks/use-terminal', () => ({
+jest.mock('@/hooks/use-terminal-ws', () => ({
   useTerminal: (...args: unknown[]) => mockUseTerminal(...args),
 }));
 

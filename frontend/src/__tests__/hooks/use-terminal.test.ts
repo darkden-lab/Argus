@@ -1,37 +1,44 @@
 /**
- * Tests for the terminal line-buffering logic in use-terminal.ts.
+ * Tests for the terminal line-buffering logic in use-terminal-ws.ts.
  *
- * The hook now uses Socket.IO via getSocket/disconnectSocket.
- * We mock those to test the core smart-mode line buffer and raw-mode behavior.
+ * The hook now uses a native WebSocket via getToken from sse-client.
+ * We mock WebSocket and getToken to test the core smart-mode line buffer and raw-mode behavior.
  */
 import { renderHook, act } from '@testing-library/react';
-import { useTerminal, type TerminalMode } from '@/hooks/use-terminal';
+import { useTerminal, type TerminalMode } from '@/hooks/use-terminal-ws';
 
-// Mock socket.io-client via our socket lib
+// Mock the SSE client module (only getToken is used by the terminal hook)
 const mockEmit = jest.fn();
 const mockOn = jest.fn();
 
-let connectHandler: (() => void) | undefined;
+// Mock WebSocket
+class MockWebSocket {
+  onopen: (() => void) | null = null;
+  onmessage: ((event: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
 
-const mockSocket = {
-  on: jest.fn((event: string, handler: (...args: unknown[]) => void) => {
-    mockOn(event, handler);
-    if (event === 'connect') {
-      connectHandler = handler as () => void;
-    }
-  }),
-  off: jest.fn(),
-  emit: mockEmit,
-  disconnect: jest.fn(),
-  connected: false,
-};
+  send = jest.fn((data: string) => {
+    const parsed = JSON.parse(data);
+    mockEmit(parsed.type, parsed);
+  });
+  close = jest.fn();
 
-const mockGetSocket = jest.fn(() => mockSocket);
-const mockDisconnectSocket = jest.fn();
+  constructor() {
+    // Store reference so tests can trigger events
+    mockWsInstance = this; // eslint-disable-line @typescript-eslint/no-this-alias
+  }
+}
 
-jest.mock('@/lib/socket', () => ({
-  getSocket: (...args: unknown[]) => mockGetSocket(...args),
-  disconnectSocket: (...args: unknown[]) => mockDisconnectSocket(...args),
+let mockWsInstance: MockWebSocket | null = null;
+const mockWsConstructor = jest.fn(() => new MockWebSocket());
+
+// @ts-expect-error - mock WebSocket globally
+global.WebSocket = mockWsConstructor as unknown as typeof WebSocket;
+
+jest.mock('@/lib/sse-client', () => ({
+  SSEClient: jest.fn(),
+  getToken: jest.fn(() => 'test-token'),
 }));
 
 // Provide a token so the hook connects
@@ -39,15 +46,8 @@ beforeEach(() => {
   localStorage.setItem('access_token', 'test-token');
   mockEmit.mockReset();
   mockOn.mockReset();
-  mockSocket.on.mockImplementation((event: string, handler: (...args: unknown[]) => void) => {
-    mockOn(event, handler);
-    if (event === 'connect') {
-      connectHandler = handler as () => void;
-    }
-  });
-  mockGetSocket.mockReturnValue(mockSocket);
-  mockDisconnectSocket.mockReset();
-  connectHandler = undefined;
+  mockWsConstructor.mockClear();
+  mockWsInstance = null;
 });
 
 afterEach(() => {
@@ -109,13 +109,13 @@ describe('handleInput - smart mode', () => {
     // Should have echoed \r\n
     expect(writes).toContain('\r\n');
 
-    // Socket should have emitted input with "ls"
+    // WebSocket should have sent input with "ls"
     const inputCalls = mockEmit.mock.calls.filter(
       ([event]: string[]) => event === 'input'
     );
     expect(inputCalls.length).toBeGreaterThanOrEqual(1);
     const lastInput = inputCalls[inputCalls.length - 1];
-    expect(lastInput[1]).toEqual({ data: 'ls' });
+    expect(lastInput[1]).toEqual({ type: 'input', data: 'ls' });
   });
 
   it('handles backspace by removing last character', () => {
@@ -188,12 +188,12 @@ describe('handleInput - raw mode', () => {
     // In raw mode, nothing should be written locally (terminal handles echo)
     expect(writes).toHaveLength(0);
 
-    // Socket should have emitted the character
+    // WebSocket should have sent the character
     const inputCalls = mockEmit.mock.calls.filter(
       ([event]: string[]) => event === 'input'
     );
     expect(inputCalls.length).toBeGreaterThanOrEqual(1);
-    expect(inputCalls[inputCalls.length - 1][1]).toEqual({ data: 'h' });
+    expect(inputCalls[inputCalls.length - 1][1]).toEqual({ type: 'input', data: 'h' });
   });
 });
 
@@ -254,8 +254,8 @@ describe('handleInput - history navigation', () => {
   });
 });
 
-describe('Socket.IO lifecycle', () => {
-  it('creates socket with /terminal namespace on mount', () => {
+describe('WebSocket lifecycle', () => {
+  it('creates WebSocket connection on mount', () => {
     renderHook(() =>
       useTerminal({
         cluster: 'c1',
@@ -264,10 +264,12 @@ describe('Socket.IO lifecycle', () => {
       })
     );
 
-    expect(mockGetSocket).toHaveBeenCalledWith('/terminal');
+    expect(mockWsConstructor).toHaveBeenCalled();
+    const url = mockWsConstructor.mock.calls[0][0] as string;
+    expect(url).toContain('/ws/terminal');
   });
 
-  it('emits set_context on connect', () => {
+  it('sends set_context on open', () => {
     renderHook(() =>
       useTerminal({
         cluster: 'c1',
@@ -276,18 +278,19 @@ describe('Socket.IO lifecycle', () => {
       })
     );
 
-    // Simulate socket connect
+    // Simulate WebSocket open
     act(() => {
-      connectHandler?.();
+      mockWsInstance?.onopen?.();
     });
 
     expect(mockEmit).toHaveBeenCalledWith('set_context', {
+      type: 'set_context',
       cluster_id: 'c1',
       namespace: 'default',
     });
   });
 
-  it('disconnects socket on unmount', () => {
+  it('closes WebSocket on unmount', () => {
     const { unmount } = renderHook(() =>
       useTerminal({
         cluster: 'c1',
@@ -298,24 +301,23 @@ describe('Socket.IO lifecycle', () => {
 
     unmount();
 
-    expect(mockDisconnectSocket).toHaveBeenCalledWith('/terminal');
+    expect(mockWsInstance?.close).toHaveBeenCalled();
   });
 
-  it('cluster change reconnects with new socket', () => {
+  it('cluster change reconnects with new WebSocket', () => {
     const { rerender } = renderHook(
       ({ cluster, namespace, mode }: { cluster: string; namespace: string; mode: TerminalMode }) =>
         useTerminal({ cluster, namespace, mode }),
       { initialProps: { cluster: 'c1', namespace: 'default', mode: 'smart' as TerminalMode } }
     );
 
-    const initialCallCount = mockGetSocket.mock.calls.length;
+    const initialCallCount = mockWsConstructor.mock.calls.length;
 
     // Change cluster — SHOULD reconnect
     rerender({ cluster: 'c2', namespace: 'default', mode: 'smart' as TerminalMode });
 
-    // Should have disconnected old and created new
-    expect(mockDisconnectSocket).toHaveBeenCalledWith('/terminal');
-    expect(mockGetSocket.mock.calls.length).toBeGreaterThan(initialCallCount);
+    // Should have created a new WebSocket
+    expect(mockWsConstructor.mock.calls.length).toBeGreaterThan(initialCallCount);
   });
 
   it('intentional disconnect does not auto-reconnect', () => {
@@ -327,15 +329,15 @@ describe('Socket.IO lifecycle', () => {
       })
     );
 
-    const callCountBefore = mockGetSocket.mock.calls.length;
+    const callCountBefore = mockWsConstructor.mock.calls.length;
 
     act(() => {
       result.current.disconnect();
     });
 
-    expect(mockDisconnectSocket).toHaveBeenCalledWith('/terminal');
+    expect(mockWsInstance?.close).toHaveBeenCalled();
 
-    // No new socket should have been created after disconnect
-    expect(mockGetSocket.mock.calls.length).toBe(callCountBefore);
+    // No new WebSocket should have been created after disconnect
+    expect(mockWsConstructor.mock.calls.length).toBe(callCountBefore);
   });
 });

@@ -25,13 +25,21 @@ type SocketIOBroadcastFunc func(userID string, data []byte)
 // SocketIOBroadcastAllFunc sends data to all connected Socket.IO clients.
 type SocketIOBroadcastAllFunc func(data []byte)
 
-// WSHandler manages real-time notification delivery via WebSocket and Socket.IO.
+// SSEBroadcastFunc sends data to a specific user via SSE.
+type SSEBroadcastFunc func(userID string, data []byte)
+
+// SSEBroadcastAllFunc sends data to all connected SSE clients.
+type SSEBroadcastAllFunc func(data []byte)
+
+// WSHandler manages real-time notification delivery via WebSocket, Socket.IO, and SSE.
 type WSHandler struct {
 	jwtService          *auth.JWTService
 	mu                  sync.RWMutex
 	clients             map[string]map[*websocket.Conn]struct{} // userID -> set of connections
 	sioBroadcast        SocketIOBroadcastFunc
 	sioBroadcastAll     SocketIOBroadcastAllFunc
+	sseBroadcast        SSEBroadcastFunc
+	sseBroadcastAll     SSEBroadcastAllFunc
 }
 
 // NewWSHandler creates a new notifications WebSocket handler.
@@ -112,7 +120,21 @@ func (h *WSHandler) SetSocketIOBroadcastAll(fn SocketIOBroadcastAllFunc) {
 	h.sioBroadcastAll = fn
 }
 
-// Broadcast sends a notification to all connections (WebSocket + Socket.IO) for a given user.
+// SetSSEBroadcast sets the SSE broadcast function for targeted user notifications.
+func (h *WSHandler) SetSSEBroadcast(fn SSEBroadcastFunc) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.sseBroadcast = fn
+}
+
+// SetSSEBroadcastAll sets the SSE broadcast-all function for system-wide notifications.
+func (h *WSHandler) SetSSEBroadcastAll(fn SSEBroadcastAllFunc) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.sseBroadcastAll = fn
+}
+
+// Broadcast sends a notification to all connections (WebSocket + Socket.IO + SSE) for a given user.
 func (h *WSHandler) Broadcast(userID string, notification Notification) {
 	data, err := json.Marshal(notification)
 	if err != nil {
@@ -122,6 +144,7 @@ func (h *WSHandler) Broadcast(userID string, notification Notification) {
 	h.mu.RLock()
 	conns := h.clients[userID]
 	sioBroadcast := h.sioBroadcast
+	sseBroadcast := h.sseBroadcast
 	h.mu.RUnlock()
 
 	// Legacy WebSocket clients
@@ -137,6 +160,11 @@ func (h *WSHandler) Broadcast(userID string, notification Notification) {
 	if sioBroadcast != nil {
 		sioBroadcast(userID, data)
 	}
+
+	// SSE clients
+	if sseBroadcast != nil {
+		sseBroadcast(userID, data)
+	}
 }
 
 // BroadcastAll sends a notification to all connected users (system-wide alerts).
@@ -148,6 +176,7 @@ func (h *WSHandler) BroadcastAll(notification Notification) {
 
 	h.mu.RLock()
 	sioBroadcastAll := h.sioBroadcastAll
+	sseBroadcastAll := h.sseBroadcastAll
 	h.mu.RUnlock()
 
 	// Legacy WebSocket clients
@@ -164,6 +193,11 @@ func (h *WSHandler) BroadcastAll(notification Notification) {
 	// Socket.IO clients
 	if sioBroadcastAll != nil {
 		sioBroadcastAll(data)
+	}
+
+	// SSE clients
+	if sseBroadcastAll != nil {
+		sseBroadcastAll(data)
 	}
 }
 

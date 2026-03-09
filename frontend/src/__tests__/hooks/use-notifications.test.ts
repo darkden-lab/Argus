@@ -10,25 +10,22 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
-// Mock socket.io-client via our socket lib
-const mockOn = jest.fn();
-const mockOff = jest.fn();
+// Mock SSE client used by the notifications hook
+const mockConnect = jest.fn();
 const mockDisconnect = jest.fn();
 
-const mockSocket = {
-  on: mockOn,
-  off: mockOff,
-  emit: jest.fn(),
-  disconnect: mockDisconnect,
-  connected: true,
-};
+let capturedOnEvent: ((type: string, data: unknown) => void) | undefined;
 
-const mockGetSocket = jest.fn(() => mockSocket);
-const mockDisconnectSocket = jest.fn();
-
-jest.mock('@/lib/socket', () => ({
-  getSocket: (...args: unknown[]) => mockGetSocket(...args),
-  disconnectSocket: (...args: unknown[]) => mockDisconnectSocket(...args),
+jest.mock('@/lib/sse-client', () => ({
+  SSEClient: jest.fn().mockImplementation((opts: { onEvent: (type: string, data: unknown) => void }) => {
+    capturedOnEvent = opts.onEvent;
+    return {
+      connect: mockConnect,
+      disconnect: mockDisconnect,
+      connected: false,
+    };
+  }),
+  getToken: jest.fn(() => null),
 }));
 
 const sampleNotification: Notification = {
@@ -43,11 +40,9 @@ const sampleNotification: Notification = {
 
 describe('useNotifications', () => {
   beforeEach(() => {
-    mockOn.mockReset();
-    mockOff.mockReset();
+    mockConnect.mockReset();
     mockDisconnect.mockReset();
-    mockGetSocket.mockReturnValue(mockSocket);
-    mockDisconnectSocket.mockReset();
+    capturedOnEvent = undefined;
     useNotificationStore.setState({
       notifications: [],
       unreadCount: 0,
@@ -98,38 +93,35 @@ describe('useNotifications', () => {
     expect(result.current.fetchNotifications).toBe(fetchNotifications);
   });
 
-  it('does not create a socket when there is no access token', () => {
-    // No token in localStorage
+  it('does not create an SSE connection when there is no access token', () => {
+    // No token in localStorage — getToken returns null
     renderHook(() => useNotifications());
 
-    expect(mockGetSocket).not.toHaveBeenCalled();
+    expect(mockConnect).not.toHaveBeenCalled();
   });
 
-  it('creates a socket connection when an access token exists', () => {
+  it('creates an SSE connection when an access token exists', () => {
+    // Make getToken return a token
+    const sseClientModule = jest.requireMock<{ getToken: jest.Mock }>('@/lib/sse-client');
+    sseClientModule.getToken.mockReturnValue('test-jwt-token');
     localStorage.setItem('access_token', 'test-jwt-token');
 
     renderHook(() => useNotifications());
 
-    expect(mockGetSocket).toHaveBeenCalledWith('/notifications');
+    expect(mockConnect).toHaveBeenCalled();
   });
 
-  it('adds realtime notification when socket receives a valid message', () => {
+  it('adds realtime notification when SSE receives a valid message', () => {
+    const sseClientModule = jest.requireMock<{ getToken: jest.Mock }>('@/lib/sse-client');
+    sseClientModule.getToken.mockReturnValue('test-jwt-token');
     localStorage.setItem('access_token', 'test-jwt-token');
-
-    // Capture the "notification" event handler
-    let notificationHandler: ((data: unknown) => void) | undefined;
-    mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
-      if (event === 'notification') {
-        notificationHandler = handler;
-      }
-    });
 
     renderHook(() => useNotifications());
 
-    expect(notificationHandler).toBeDefined();
+    expect(capturedOnEvent).toBeDefined();
 
     act(() => {
-      notificationHandler!(sampleNotification);
+      capturedOnEvent!('notification', sampleNotification);
     });
 
     const state = useNotificationStore.getState();
@@ -139,19 +131,14 @@ describe('useNotifications', () => {
   });
 
   it('handles string notification data (JSON)', () => {
+    const sseClientModule = jest.requireMock<{ getToken: jest.Mock }>('@/lib/sse-client');
+    sseClientModule.getToken.mockReturnValue('test-jwt-token');
     localStorage.setItem('access_token', 'test-jwt-token');
-
-    let notificationHandler: ((data: unknown) => void) | undefined;
-    mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
-      if (event === 'notification') {
-        notificationHandler = handler;
-      }
-    });
 
     renderHook(() => useNotifications());
 
     act(() => {
-      notificationHandler!(JSON.stringify(sampleNotification));
+      capturedOnEvent!('notification', JSON.stringify(sampleNotification));
     });
 
     const state = useNotificationStore.getState();
@@ -160,33 +147,30 @@ describe('useNotifications', () => {
   });
 
   it('ignores malformed messages without crashing', () => {
+    const sseClientModule = jest.requireMock<{ getToken: jest.Mock }>('@/lib/sse-client');
+    sseClientModule.getToken.mockReturnValue('test-jwt-token');
     localStorage.setItem('access_token', 'test-jwt-token');
-
-    let notificationHandler: ((data: unknown) => void) | undefined;
-    mockOn.mockImplementation((event: string, handler: (data: unknown) => void) => {
-      if (event === 'notification') {
-        notificationHandler = handler;
-      }
-    });
 
     renderHook(() => useNotifications());
 
     // Should not throw
     act(() => {
-      notificationHandler!('not valid json{{{');
+      capturedOnEvent!('notification', 'not valid json{{{');
     });
 
     const state = useNotificationStore.getState();
     expect(state.notifications).toHaveLength(0);
   });
 
-  it('disconnects socket on unmount', () => {
+  it('disconnects SSE client on unmount', () => {
+    const sseClientModule = jest.requireMock<{ getToken: jest.Mock }>('@/lib/sse-client');
+    sseClientModule.getToken.mockReturnValue('test-jwt-token');
     localStorage.setItem('access_token', 'test-jwt-token');
 
     const { unmount } = renderHook(() => useNotifications());
 
     unmount();
 
-    expect(mockDisconnectSocket).toHaveBeenCalledWith('/notifications');
+    expect(mockDisconnect).toHaveBeenCalled();
   });
 });

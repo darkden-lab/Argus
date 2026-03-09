@@ -9,8 +9,8 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
-jest.mock('@/hooks/use-k8s-socket', () => ({
-  useK8sSocket: jest.fn(() => ({
+jest.mock('@/hooks/use-k8s-watch', () => ({
+  useK8sWatch: jest.fn(() => ({
     lastEvent: null,
     lastUpdated: null,
     isConnected: false,

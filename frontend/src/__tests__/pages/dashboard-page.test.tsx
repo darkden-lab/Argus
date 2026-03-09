@@ -9,8 +9,8 @@ jest.mock('@/lib/api', () => ({
   },
 }));
 
-// Mock the websocket hook
-jest.mock('@/hooks/use-k8s-socket', () => ({
+// Mock the K8s watch hook (SSE-based)
+jest.mock('@/hooks/use-k8s-watch', () => ({
   useK8sWildcard: () => ({
     lastUpdated: null,
     isConnected: false,

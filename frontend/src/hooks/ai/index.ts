@@ -1,3 +1,2 @@
-export { useAiConnection } from "./use-ai-connection";
-export { useAiStream } from "./use-ai-stream";
-export { useAiEvents } from "./use-ai-events";
+export { useAiSSE } from "./use-ai-sse";
+export { useAiActions } from "./use-ai-actions";
