@@ -19,6 +19,7 @@ type Retriever struct {
 	store    *Store
 	embedder Embedder
 	topK     int
+	MinScore float64 // Minimum similarity score; 0 means use defaultMinSimilarity
 }
 
 // NewRetriever creates a new RAG retriever.
@@ -30,6 +31,7 @@ func NewRetriever(store *Store, embedder Embedder, topK int) *Retriever {
 		store:    store,
 		embedder: embedder,
 		topK:     topK,
+		MinScore: defaultMinSimilarity,
 	}
 }
 
@@ -45,7 +47,7 @@ func (r *Retriever) RetrieveContext(ctx context.Context, query string, sourceTyp
 		return nil, fmt.Errorf("retriever: no embedding returned")
 	}
 
-	results, err := r.store.Search(ctx, vecs[0], r.topK, sourceType)
+	results, err := r.store.Search(ctx, vecs[0], r.topK, sourceType, r.MinScore)
 	if err != nil {
 		return nil, fmt.Errorf("retriever: search: %w", err)
 	}

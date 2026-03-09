@@ -81,7 +81,9 @@ func (h *AdminHandlers) getStatus(w http.ResponseWriter, r *http.Request) {
 		).Scan(&dbCfg.Provider, &dbCfg.Model, &dbCfg.EmbedModel, &dbCfg.BaseURL, &dbCfg.MaxTokens, &dbCfg.Temperature, &dbCfg.Enabled, &dbCfg.ToolPermissionLevel, &headersJSON, &encAPIKey)
 		if err == nil {
 			if len(headersJSON) > 0 {
-				_ = json.Unmarshal(headersJSON, &dbCfg.CustomHeaders)
+				if unmarshalErr := json.Unmarshal(headersJSON, &dbCfg.CustomHeaders); unmarshalErr != nil {
+					log.Printf("ai: getStatus: failed to unmarshal custom_headers: %v", unmarshalErr)
+				}
 			}
 			if len(encAPIKey) > 0 {
 				if plain, err := crypto.Decrypt(encAPIKey, h.encryptionKey); err == nil {
@@ -141,7 +143,9 @@ func (h *AdminHandlers) getConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(headersJSON) > 0 {
-		_ = json.Unmarshal(headersJSON, &cfg.CustomHeaders)
+		if unmarshalErr := json.Unmarshal(headersJSON, &cfg.CustomHeaders); unmarshalErr != nil {
+			log.Printf("ai: getConfig: failed to unmarshal custom_headers: %v", unmarshalErr)
+		}
 	}
 	// Signal the frontend that an API key is stored without exposing it.
 	// Check both DB (encrypted_api_key) and in-memory service (env var fallback).
@@ -172,6 +176,23 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parameter validation before DB write
+	validProviders := map[ProviderType]bool{ProviderClaude: true, ProviderOpenAI: true, ProviderOllama: true}
+	if !validProviders[cfg.Provider] {
+		writeAIJSON(w, http.StatusBadRequest, map[string]string{"error": "provider must be one of: claude, openai, ollama"})
+		return
+	}
+	if cfg.Model == "" {
+		writeAIJSON(w, http.StatusBadRequest, map[string]string{"error": "model must not be empty"})
+		return
+	}
+	if cfg.MaxTokens < 1 || cfg.MaxTokens > 128000 {
+		cfg.MaxTokens = 4096
+	}
+	if cfg.Temperature < 0 || cfg.Temperature > 2 {
+		cfg.Temperature = 0.1
+	}
+
 	// Ensure tool_permission_level is never empty — default to "all"
 	if cfg.ToolPermissionLevel == "" {
 		cfg.ToolPermissionLevel = ToolsAll
@@ -184,7 +205,9 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		var storedJSON []byte
 		_ = h.pool.QueryRow(r.Context(), `SELECT COALESCE(custom_headers, '{}') FROM ai_config LIMIT 1`).Scan(&storedJSON)
 		if len(storedJSON) > 0 {
-			_ = json.Unmarshal(storedJSON, &storedHeaders)
+			if unmarshalErr := json.Unmarshal(storedJSON, &storedHeaders); unmarshalErr != nil {
+				log.Printf("ai: updateConfig: failed to unmarshal stored custom_headers: %v", unmarshalErr)
+			}
 		}
 	}
 	// Fall back to in-memory service headers if DB has none
@@ -246,6 +269,30 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		log.Printf("ai: failed to update config: %v", err)
 		writeAIJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update config"})
 		return
+	}
+
+	// Post-save validation: resolve actual API key and validate if enabled
+	if cfg.Enabled {
+		resolvedCfg := cfg
+		// Resolve the actual API key (same logic as testConnection)
+		if resolvedCfg.APIKey == maskedValue || resolvedCfg.APIKey == "" {
+			if h.pool != nil {
+				var encKey []byte
+				scanErr := h.pool.QueryRow(r.Context(), `SELECT encrypted_api_key FROM ai_config LIMIT 1`).Scan(&encKey)
+				if scanErr == nil && len(encKey) > 0 {
+					if decrypted, decErr := crypto.Decrypt(encKey, h.encryptionKey); decErr == nil {
+						resolvedCfg.APIKey = string(decrypted)
+					}
+				}
+			}
+			if (resolvedCfg.APIKey == maskedValue || resolvedCfg.APIKey == "") && h.service != nil {
+				_, svcCfg := h.service.Snapshot()
+				resolvedCfg.APIKey = svcCfg.APIKey
+			}
+		}
+		if validErr := resolvedCfg.Validate(); validErr != nil {
+			log.Printf("ai: updateConfig: saved config is enabled but invalid: %v", validErr)
+		}
 	}
 
 	// Hot-reload the AI provider so changes take effect immediately.

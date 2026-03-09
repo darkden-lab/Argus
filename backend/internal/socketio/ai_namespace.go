@@ -53,8 +53,11 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, apiKeyS
 				"error":   "not configured",
 				"content": "AI assistant is not enabled. Please enable it in Settings > AI Configuration.",
 			})
-			connCancel()
-			client.Disconnect(true)
+			// Delay disconnect to allow the emit to be flushed to the client
+			time.AfterFunc(200*time.Millisecond, func() {
+				connCancel()
+				client.Disconnect(true)
+			})
 			return
 		}
 		if validErr := config.Validate(); validErr != nil {
@@ -62,8 +65,11 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, apiKeyS
 				"error":   "not configured",
 				"content": "AI provider is not fully configured: " + validErr.Error() + ". Update the configuration in Settings > AI Configuration.",
 			})
-			connCancel()
-			client.Disconnect(true)
+			// Delay disconnect to allow the emit to be flushed to the client
+			time.AfterFunc(200*time.Millisecond, func() {
+				connCancel()
+				client.Disconnect(true)
+			})
 			return
 		}
 

@@ -147,6 +147,30 @@ func (e *Executor) analyzeRBAC(ctx context.Context, args map[string]string) (str
 	return fmt.Sprintf("RBAC Analysis:\n%s", string(data)), nil
 }
 
+// execAllowedCommands is the allowlist of base commands permitted for AI pod exec.
+var execAllowedCommands = map[string]bool{
+	"ls": true, "cat": true, "head": true, "tail": true, "env": true,
+	"ps": true, "kubectl": true, "grep": true, "find": true, "df": true,
+	"du": true, "whoami": true, "hostname": true, "date": true, "uname": true,
+	"id": true, "wc": true, "sort": true, "uniq": true, "tr": true,
+	"cut": true, "awk": true, "sed": true, "top": true, "free": true,
+	"uptime": true, "printenv": true, "stat": true, "file": true,
+	"which": true, "echo": true,
+}
+
+// execBlockedPatterns contains dangerous command patterns (from terminal/middleware.go).
+var execBlockedPatterns = []string{
+	"rm -rf /",
+	":(){ :|:& };:",
+	"> /dev/sda",
+	"mkfs",
+	"dd if=/dev/zero",
+	"chmod -R 777 /",
+}
+
+// execShellMetachars are shell metacharacters blocked in AI exec commands.
+var execShellMetachars = []string{"|", "&&", "||", ";", "$(", "`"}
+
 func (e *Executor) getPodExec(ctx context.Context, args map[string]string) (string, error) {
 	client, err := e.clusterMgr.GetClient(args["cluster_id"])
 	if err != nil {
@@ -157,9 +181,36 @@ func (e *Executor) getPodExec(ctx context.Context, args map[string]string) (stri
 		return "", fmt.Errorf("exec not available: no REST config for cluster %s", args["cluster_id"])
 	}
 
-	command := strings.Fields(args["command"])
+	rawCmd := args["command"]
+
+	// Block shell metacharacters in the raw command string
+	for _, meta := range execShellMetachars {
+		if strings.Contains(rawCmd, meta) {
+			return "", fmt.Errorf("command not allowed: shell metacharacter %q is not permitted", meta)
+		}
+	}
+
+	// Block dangerous patterns (reused from terminal/middleware.go)
+	lowerCmd := strings.ToLower(rawCmd)
+	for _, pattern := range execBlockedPatterns {
+		if strings.Contains(lowerCmd, strings.ToLower(pattern)) {
+			return "", fmt.Errorf("command not allowed: contains dangerous pattern %q", pattern)
+		}
+	}
+
+	command := strings.Fields(rawCmd)
 	if len(command) == 0 {
 		return "", fmt.Errorf("command is required")
+	}
+
+	// Check that the base command is in the allowlist
+	baseCmd := command[0]
+	// Handle absolute paths like /bin/ls -> ls
+	if idx := strings.LastIndex(baseCmd, "/"); idx >= 0 {
+		baseCmd = baseCmd[idx+1:]
+	}
+	if !execAllowedCommands[baseCmd] {
+		return "", fmt.Errorf("command not allowed: %s", baseCmd)
 	}
 
 	execOpts := &corev1.PodExecOptions{

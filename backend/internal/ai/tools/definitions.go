@@ -42,14 +42,17 @@ func RequiresConfirm(toolName string) bool {
 }
 
 // ToolsForLevel returns the tools available for the given permission level.
+// Uses deny-by-default: unrecognized levels get no tools.
 func ToolsForLevel(level string) []Tool {
 	switch level {
-	case "disabled":
-		return nil
+	case "all":
+		return AllTools()
 	case "read_only":
 		return ReadOnlyTools()
+	case "disabled":
+		return nil
 	default:
-		return AllTools()
+		return nil
 	}
 }
 
