@@ -60,7 +60,7 @@ func (r *TimeoutStreamReader) Next() (*StreamDelta, error) {
 		}
 		return result.delta, result.err
 	case <-time.After(r.timeout):
-		r.Close()
+		_ = r.Close()
 		return nil, fmt.Errorf("stream timeout: no data received for %s", r.timeout)
 	}
 }

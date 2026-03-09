@@ -73,10 +73,7 @@ func (m *ConfirmationManager) RequestConfirmation(ctx context.Context, userID st
 
 	defer func() {
 		m.mu.Lock()
-		// Idempotent cleanup: only delete if still present
-		if _, exists := m.pending[reqID]; exists {
-			delete(m.pending, reqID)
-		}
+		delete(m.pending, reqID)
 		m.mu.Unlock()
 	}()
 
@@ -172,10 +169,7 @@ func (m *ConfirmationManager) WaitForRequest(ctx context.Context, reqID string) 
 
 	defer func() {
 		m.mu.Lock()
-		// Idempotent cleanup: only delete if still present
-		if _, exists := m.pending[reqID]; exists {
-			delete(m.pending, reqID)
-		}
+		delete(m.pending, reqID)
 		m.mu.Unlock()
 	}()
 
