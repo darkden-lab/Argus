@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/darkden-lab/argus/backend/internal/ai/rag"
 	"github.com/darkden-lab/argus/backend/internal/ai/tools"
@@ -40,6 +41,7 @@ type Service struct {
 	config      AIConfig
 	memoryStore *MemoryStore
 	agentStore  *AgentStore
+	rateLimiter *RateLimiter
 }
 
 // NewService creates a new AI service orchestrator.
@@ -56,6 +58,10 @@ func NewService(
 	if memoryStore != nil {
 		exec.SetMemoryOps(memoryStore)
 	}
+	// Set up audit logger for tool executions
+	auditLogger := tools.NewAuditLogger(pool)
+	exec.SetAuditLogger(auditLogger)
+
 	return &Service{
 		provider:    provider,
 		retriever:   retriever,
@@ -64,6 +70,7 @@ func NewService(
 		pool:        pool,
 		config:      config,
 		memoryStore: memoryStore,
+		rateLimiter: NewRateLimiter(defaultMaxMessages, defaultWindowPeriod),
 	}
 }
 
@@ -177,6 +184,12 @@ func (s *Service) buildConversationMessages(ctx context.Context, userID, convers
 // 4. Call LLM with tools
 // 5. Handle tool calls or return text response
 func (s *Service) ProcessMessage(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext) (*ChatResponse, error) {
+	start := time.Now()
+
+	if err := s.rateLimiter.Allow(userID); err != nil {
+		return nil, err
+	}
+
 	provider, cfg := s.Snapshot()
 
 	if !cfg.Enabled {
@@ -208,6 +221,7 @@ func (s *Service) ProcessMessage(ctx context.Context, userID string, conversatio
 	s.saveMessage(ctx, conversationID, Message{Role: RoleUser, Content: userMessage})
 	s.saveMessage(ctx, conversationID, resp.Message)
 
+	log.Printf("ai: ProcessMessage user=%s conv=%s provider=%s model=%s duration_ms=%d", userID, conversationID, cfg.Provider, cfg.Model, time.Since(start).Milliseconds())
 	return resp, nil
 }
 
@@ -254,6 +268,12 @@ func (s *Service) handleToolCalls(ctx context.Context, userID string, messages [
 
 // ProcessMessageStream handles a user message with streaming response.
 func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext) (StreamReader, error) {
+	start := time.Now()
+
+	if err := s.rateLimiter.Allow(userID); err != nil {
+		return nil, err
+	}
+
 	provider, cfg := s.Snapshot()
 
 	if !cfg.Enabled {
@@ -271,7 +291,12 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 		Stream:      true,
 	}
 
-	return provider.ChatStream(ctx, req)
+	stream, err := provider.ChatStream(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	log.Printf("ai: ProcessMessageStream user=%s conv=%s provider=%s model=%s setup_ms=%d", userID, conversationID, cfg.Provider, cfg.Model, time.Since(start).Milliseconds())
+	return NewTimeoutStreamReader(stream, defaultChunkTimeout), nil
 }
 
 // ConfirmNotifyFunc is called before blocking on a confirmation request, giving the
@@ -283,6 +308,8 @@ type ConfirmNotifyFunc func(req *tools.ConfirmationRequest)
 // If confirmNotify is non-nil, it is called before blocking on each
 // confirmation (for Socket.IO event emission).
 func (s *Service) ExecuteTools(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext, assistantContent string, toolCalls []ToolCall, confirmNotify ConfirmNotifyFunc) (*ChatResponse, error) {
+	start := time.Now()
+
 	provider, cfg := s.Snapshot()
 
 	messages := s.buildConversationMessages(ctx, userID, conversationID, userMessage, pageCtx)
@@ -340,6 +367,7 @@ func (s *Service) ExecuteTools(ctx context.Context, userID string, conversationI
 		Temperature: cfg.Temperature,
 	}
 
+	log.Printf("ai: ExecuteTools user=%s conv=%s tools=%d duration_ms=%d", userID, conversationID, len(toolCalls), time.Since(start).Milliseconds())
 	return provider.Chat(ctx, req)
 }
 
@@ -529,20 +557,17 @@ func (s *Service) getHistoryWithSummary(ctx context.Context, conversationID stri
 		return s.loadHistory(ctx, conversationID)
 	}
 
-	// If we have enough unsummarized messages, trigger summarization
+	// If we have enough unsummarized messages, trigger summarization asynchronously.
+	// The summary will be available for the next request.
 	if unsummarizedCount > 20 {
-		s.triggerSummarization(ctx, conversationID)
+		go s.triggerSummarization(ctx, conversationID)
 	}
 
 	// Build the response: summary + last 20 messages
 	var messages []Message
 
-	// Re-read summary (may have been updated by summarization)
-	err = s.pool.QueryRow(ctx,
-		`SELECT summary FROM ai_conversations WHERE id = $1`,
-		conversationID,
-	).Scan(&summary)
-	if err == nil && summary != nil && *summary != "" {
+	// Use existing summary if available (the async summarization will update it for next time)
+	if summary != nil && *summary != "" {
 		messages = append(messages, Message{
 			Role:    RoleSystem,
 			Content: "Previous conversation summary:\n" + *summary,
@@ -593,7 +618,12 @@ func (s *Service) getHistoryWithSummary(ctx context.Context, conversationID stri
 }
 
 // triggerSummarization summarizes older messages and stores the summary.
-func (s *Service) triggerSummarization(ctx context.Context, conversationID string) {
+// It uses its own context with a timeout so it is safe to call from a goroutine
+// after the caller's context has been cancelled.
+func (s *Service) triggerSummarization(_ context.Context, conversationID string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
 	provider, cfg := s.Snapshot()
 	if provider == nil {
 		return

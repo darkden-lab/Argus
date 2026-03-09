@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"log"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/gorilla/mux"
@@ -25,6 +26,7 @@ type AdminHandlers struct {
 	service         *Service
 	providerFactory ProviderFactory
 	encryptionKey   string
+	reloadMu        sync.Mutex
 }
 
 // NewAdminHandlers creates admin API handlers for AI.
@@ -246,6 +248,10 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Lock to ensure DB write + provider hot-reload are atomic with respect to
+	// concurrent config update requests.
+	h.reloadMu.Lock()
+
 	if apiKeyChanged {
 		// Update everything including the API key
 		_, err = h.pool.Exec(r.Context(),
@@ -266,6 +272,7 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		)
 	}
 	if err != nil {
+		h.reloadMu.Unlock()
 		log.Printf("ai: failed to update config: %v", err)
 		writeAIJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to update config"})
 		return
@@ -316,6 +323,8 @@ func (h *AdminHandlers) updateConfig(w http.ResponseWriter, r *http.Request) {
 		newProvider := h.providerFactory(cfg)
 		h.service.UpdateProvider(newProvider, cfg)
 	}
+
+	h.reloadMu.Unlock()
 
 	// Don't leak secrets back to the frontend
 	if cfg.APIKey != "" {

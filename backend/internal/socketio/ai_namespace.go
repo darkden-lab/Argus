@@ -405,7 +405,7 @@ func registerAINamespace(io *socket.Server, jwtService *auth.JWTService, apiKeyS
 					})
 				}
 
-				go taskRunner.RunTaskWithCallbacks(context.Background(), task, agent, userID, progressCb, completeCb, failCb)
+				go taskRunner.RunTaskWithCallbacks(connCtx, task, agent, userID, progressCb, completeCb, failCb)
 			}
 		}))
 
