@@ -95,6 +95,13 @@ interface AiChatState {
   setConnectionState: (state: ConnectionState) => void;
   connectionError: string | null;
   setConnectionError: (error: string | null) => void;
+  connectionRetryCount: number;
+  setConnectionRetryCount: (count: number) => void;
+  incrementConnectionRetryCount: () => void;
+
+  // History loading
+  isHistoryLoading: boolean;
+  setIsHistoryLoading: (loading: boolean) => void;
 
   // Conversations
   conversations: Conversation[];
@@ -111,9 +118,15 @@ interface AiChatState {
   updateMessage: (id: string, updates: Partial<ChatMessage>) => void;
   appendToMessage: (id: string, chunk: string) => void;
 
+  // Pending confirmation
+  pendingConfirmationId: string | null;
+  setPendingConfirmationId: (id: string | null) => void;
+
   // Streaming
   isStreaming: boolean;
   setIsStreaming: (streaming: boolean) => void;
+  streamFinishReason: string | null;
+  setStreamFinishReason: (reason: string | null) => void;
 
   // Page context
   pageContext: PageContext;
@@ -145,6 +158,8 @@ interface AiChatState {
   // Config version (increments when AI config changes to trigger reconnect)
   configVersion: number;
   incrementConfigVersion: () => void;
+  configChangedWhileOpen: boolean;
+  setConfigChangedWhileOpen: (changed: boolean) => void;
 }
 
 export const useAiChatStore = create<AiChatState>((set) => ({
@@ -167,6 +182,13 @@ export const useAiChatStore = create<AiChatState>((set) => ({
   setConnectionState: (state) => set({ connectionState: state }),
   connectionError: null,
   setConnectionError: (error) => set({ connectionError: error }),
+  connectionRetryCount: 0,
+  setConnectionRetryCount: (count) => set({ connectionRetryCount: count }),
+  incrementConnectionRetryCount: () => set((s) => ({ connectionRetryCount: s.connectionRetryCount + 1 })),
+
+  // History loading
+  isHistoryLoading: false,
+  setIsHistoryLoading: (loading) => set({ isHistoryLoading: loading }),
 
   // Conversations
   conversations: [],
@@ -202,9 +224,15 @@ export const useAiChatStore = create<AiChatState>((set) => ({
       ),
     })),
 
+  // Pending confirmation
+  pendingConfirmationId: null,
+  setPendingConfirmationId: (id) => set({ pendingConfirmationId: id }),
+
   // Streaming
   isStreaming: false,
   setIsStreaming: (streaming) => set({ isStreaming: streaming }),
+  streamFinishReason: null,
+  setStreamFinishReason: (reason) => set({ streamFinishReason: reason }),
 
   // Page context
   pageContext: {},
@@ -241,4 +269,6 @@ export const useAiChatStore = create<AiChatState>((set) => ({
   // Config version
   configVersion: 0,
   incrementConfigVersion: () => set((s) => ({ configVersion: s.configVersion + 1 })),
+  configChangedWhileOpen: false,
+  setConfigChangedWhileOpen: (changed) => set({ configChangedWhileOpen: changed }),
 }));

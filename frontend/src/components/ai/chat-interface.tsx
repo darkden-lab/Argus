@@ -17,6 +17,8 @@ import {
   PanelLeftClose,
   Plus,
   Trash2,
+  Info,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -102,6 +104,10 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
     agents,
     activeAgentId,
     tasks,
+    pendingConfirmationId,
+    isHistoryLoading,
+    configChangedWhileOpen,
+    setConfigChangedWhileOpen,
   } = useAiChatStore();
 
   const {
@@ -120,6 +126,9 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
 
   const [sidebarSearch, setSidebarSearch] = useState("");
   const [editorOpen, setEditorOpen] = useState(false);
+
+  const hasPendingConfirmation = pendingConfirmationId !== null;
+  const inputDisabled = !!(aiStatus && !aiStatus.configured) || hasPendingConfirmation;
 
   const filteredConversations = useMemo(() => {
     if (!sidebarSearch.trim()) return conversations;
@@ -149,9 +158,18 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
     }
   }, [mode]);
 
+  // Auto-dismiss config changed banner after 5 seconds
+  useEffect(() => {
+    if (!configChangedWhileOpen || connectionState !== "connected") return;
+    const timer = setTimeout(() => {
+      setConfigChangedWhileOpen(false);
+    }, 5_000);
+    return () => clearTimeout(timer);
+  }, [configChangedWhileOpen, connectionState, setConfigChangedWhileOpen]);
+
   const handleSubmit = () => {
     const trimmed = inputValue.trim();
-    if (!trimmed || isStreaming) return;
+    if (!trimmed || isStreaming || hasPendingConfirmation) return;
     sendMessage(trimmed);
     setInputValue("");
   };
@@ -178,10 +196,15 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
 
   const inputArea = (
     <div className={cn(isEmpty && !isPanel ? "max-w-2xl w-full" : "w-full")}>
+      {hasPendingConfirmation && (
+        <p className="mb-1.5 text-xs text-yellow-600 dark:text-yellow-400">
+          Awaiting action confirmation...
+        </p>
+      )}
       <div className={cn(
         "flex items-end gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 transition-colors",
         "focus-within:border-primary/50 focus-within:ring-1 focus-within:ring-primary/20",
-        (aiStatus && !aiStatus.configured) && "opacity-50"
+        inputDisabled && "opacity-50"
       )}>
         <textarea
           ref={inputRef}
@@ -191,12 +214,14 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
           placeholder={
             aiStatus && !aiStatus.configured
               ? "AI assistant is not configured..."
-              : connectionState !== "connected"
-                ? "Connecting to AI assistant..."
-                : "Ask about your clusters..."
+              : hasPendingConfirmation
+                ? "Confirm or reject the pending action first..."
+                : connectionState !== "connected"
+                  ? "Connecting to AI assistant..."
+                  : "Ask about your clusters..."
           }
           rows={1}
-          disabled={!!(aiStatus && !aiStatus.configured)}
+          disabled={inputDisabled}
           aria-label="Message to AI assistant"
           className="flex-1 resize-none bg-transparent text-sm outline-none placeholder:text-muted-foreground disabled:cursor-not-allowed"
           style={{
@@ -213,7 +238,7 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
         <Button
           size="icon"
           className="h-7 w-7 shrink-0"
-          disabled={!inputValue.trim() || isStreaming || !!(aiStatus && !aiStatus.configured)}
+          disabled={!inputValue.trim() || isStreaming || inputDisabled}
           onClick={handleSubmit}
           aria-label="Send message"
         >
@@ -415,10 +440,33 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
             </div>
           )}
 
+          {/* Config updated banner */}
+          {configChangedWhileOpen && connectionState === "connected" && (
+            <div className="mx-3 mt-2 flex items-center justify-between gap-2 rounded-md border border-blue-500/50 bg-blue-500/10 p-3 text-xs text-blue-700 dark:text-blue-400 animate-in fade-in slide-in-from-top-1 duration-300">
+              <div className="flex items-center gap-2">
+                <Info className="h-3.5 w-3.5 shrink-0" />
+                <span>AI configuration was updated. Reconnected successfully.</span>
+              </div>
+              <button
+                onClick={() => setConfigChangedWhileOpen(false)}
+                className="shrink-0 rounded p-0.5 hover:bg-blue-500/20 transition-colors"
+                aria-label="Dismiss banner"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          )}
+
           {/* Task progress */}
           <TaskProgress tasks={tasks} onCancelTask={handleCancelTask} />
 
-          {isEmpty ? (
+          {isEmpty && isHistoryLoading ? (
+            /* History loading spinner */
+            <div className="flex flex-1 flex-col items-center justify-center min-h-0 gap-3">
+              <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+              <p className="text-sm text-muted-foreground">Loading conversation...</p>
+            </div>
+          ) : isEmpty ? (
             /* Centered layout when no messages */
             <div className="flex flex-1 flex-col items-center justify-center min-h-0">
               <div className={cn(
@@ -521,6 +569,12 @@ export function ChatInterface({ mode }: ChatInterfaceProps) {
             <>
               <ScrollArea className="flex-1">
                 <div className={cn("py-4", !isPanel && "max-w-3xl mx-auto px-4")}>
+                  {isHistoryLoading && (
+                    <div className="flex items-center justify-center gap-2 py-3 text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span className="text-xs">Loading history...</span>
+                    </div>
+                  )}
                   {messages.map((msg) => (
                     <div key={msg.id}>
                       <ChatMessage message={msg} />
