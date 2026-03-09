@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/darkden-lab/argus/backend/internal/ai"
+	"github.com/google/uuid"
 )
 
 // Ollama implements ai.LLMProvider using the Ollama HTTP API for local models.
@@ -133,6 +134,7 @@ func (o *Ollama) Chat(ctx context.Context, req ai.ChatRequest) (*ai.ChatResponse
 	}
 	for _, tc := range or.Message.ToolCalls {
 		msg.ToolCalls = append(msg.ToolCalls, ai.ToolCall{
+			ID:        "ollama-" + uuid.New().String()[:8],
 			Name:      tc.Function.Name,
 			Arguments: string(tc.Function.Arguments),
 		})
@@ -303,6 +305,7 @@ func (r *ollamaStreamReader) Next() (*ai.StreamDelta, error) {
 	}
 	for _, tc := range resp.Message.ToolCalls {
 		delta.ToolCalls = append(delta.ToolCalls, ai.ToolCall{
+			ID:        "ollama-" + uuid.New().String()[:8],
 			Name:      tc.Function.Name,
 			Arguments: string(tc.Function.Arguments),
 		})

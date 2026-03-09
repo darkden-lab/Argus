@@ -6,9 +6,40 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const (
+	maxMemoryContentLen = 500  // max runes per individual memory
+	maxMemoryTotalLen   = 4000 // max runes for total memory text
+)
+
+// memoryInjectionPatterns are prompt injection patterns stripped from memory content.
+var memoryInjectionPatterns = []string{
+	"[system]:",
+	"[SYSTEM]",
+	"## System",
+	"You are",
+	"Ignore previous",
+	"Forget all",
+	"Override",
+}
+
+// sanitizeMemoryContent strips prompt injection patterns and truncates by runes.
+func sanitizeMemoryContent(content string) string {
+	for _, pattern := range memoryInjectionPatterns {
+		content = strings.ReplaceAll(content, pattern, "")
+	}
+	content = strings.TrimSpace(content)
+	// Truncate to maxMemoryContentLen runes for UTF-8 safety
+	if utf8.RuneCountInString(content) > maxMemoryContentLen {
+		runes := []rune(content)
+		content = string(runes[:maxMemoryContentLen])
+	}
+	return content
+}
 
 // Memory represents a user-saved fact or preference for AI personalization.
 type Memory struct {
@@ -170,6 +201,7 @@ func (s *MemoryStore) DeleteForTool(ctx context.Context, id, userID string) erro
 }
 
 // LoadForPrompt formats all user memories as text suitable for system prompt injection.
+// Memories are sanitized to prevent prompt injection and truncated for safety.
 func (s *MemoryStore) LoadForPrompt(ctx context.Context, userID string) (string, error) {
 	memories, err := s.List(ctx, userID)
 	if err != nil {
@@ -180,16 +212,33 @@ func (s *MemoryStore) LoadForPrompt(ctx context.Context, userID string) (string,
 	}
 
 	var b strings.Builder
-	b.WriteString("\n\n## User Memories\nThe user has saved these facts/preferences. Use them to personalize responses:\n")
+	b.WriteString("\n\n<user_memories>\nThe user has saved these facts/preferences. Use them to personalize responses:\n")
 	for _, m := range memories {
+		content := sanitizeMemoryContent(m.Content)
+		if content == "" {
+			continue
+		}
 		b.WriteString("- ")
 		if m.Category != "general" {
 			b.WriteString("[")
 			b.WriteString(m.Category)
 			b.WriteString("] ")
 		}
-		b.WriteString(m.Content)
+		b.WriteString(content)
 		b.WriteString("\n")
+
+		// Truncate total memory text
+		if utf8.RuneCountInString(b.String()) > maxMemoryTotalLen {
+			break
+		}
 	}
-	return b.String(), nil
+	b.WriteString("</user_memories>")
+
+	// Final truncation to ensure total length is within bounds
+	result := b.String()
+	if utf8.RuneCountInString(result) > maxMemoryTotalLen {
+		runes := []rune(result)
+		result = string(runes[:maxMemoryTotalLen])
+	}
+	return result, nil
 }

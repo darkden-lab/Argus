@@ -107,11 +107,16 @@ func (m *ConfirmationManager) resolve(requestID string, status ConfirmationStatu
 		m.mu.Unlock()
 		return fmt.Errorf("confirmation %s not found or already resolved", requestID)
 	}
-	delete(m.pending, requestID)
 	pc.request.Status = status
+	// Send on channel while still under the lock to prevent races.
+	// Use non-blocking send to handle the edge case where the channel is already full.
+	select {
+	case pc.resultCh <- status:
+	default:
+	}
+	delete(m.pending, requestID)
 	m.mu.Unlock()
 
-	pc.resultCh <- status
 	log.Printf("ai: confirmation %s resolved as %s", requestID, status)
 	return nil
 }

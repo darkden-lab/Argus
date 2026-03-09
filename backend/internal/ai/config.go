@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 
 	"github.com/darkden-lab/argus/backend/internal/crypto"
@@ -80,7 +81,9 @@ func LoadConfigFromEnv() AIConfig {
 	}
 	if h := os.Getenv("AI_CUSTOM_HEADERS"); h != "" {
 		var headers map[string]string
-		if err := json.Unmarshal([]byte(h), &headers); err == nil {
+		if err := json.Unmarshal([]byte(h), &headers); err != nil {
+			log.Printf("ai: failed to unmarshal AI_CUSTOM_HEADERS: %v", err)
+		} else {
 			cfg.CustomHeaders = headers
 		}
 	}
@@ -108,7 +111,9 @@ func LoadConfigFromDB(ctx context.Context, pool *pgxpool.Pool, fallback AIConfig
 	}
 
 	if len(headersJSON) > 0 {
-		_ = json.Unmarshal(headersJSON, &dbCfg.CustomHeaders)
+		if err := json.Unmarshal(headersJSON, &dbCfg.CustomHeaders); err != nil {
+			log.Printf("ai: failed to unmarshal custom_headers from DB: %v", err)
+		}
 	}
 
 	// Decrypt API key from DB
@@ -130,7 +135,7 @@ func LoadConfigFromDB(ctx context.Context, pool *pgxpool.Pool, fallback AIConfig
 }
 
 // Validate checks that the configuration has all required fields for the
-// selected provider.
+// selected provider. Also validates common fields like Model, MaxTokens, and Temperature.
 func (c AIConfig) Validate() error {
 	switch c.Provider {
 	case ProviderClaude:
@@ -148,5 +153,16 @@ func (c AIConfig) Validate() error {
 	default:
 		return fmt.Errorf("ai: unknown provider %q", c.Provider)
 	}
+
+	if c.Model == "" {
+		return fmt.Errorf("ai: model must not be empty")
+	}
+	if c.MaxTokens <= 0 {
+		return fmt.Errorf("ai: max_tokens must be greater than 0")
+	}
+	if c.Temperature < 0 {
+		return fmt.Errorf("ai: temperature must be >= 0")
+	}
+
 	return nil
 }

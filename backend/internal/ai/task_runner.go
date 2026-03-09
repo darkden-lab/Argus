@@ -133,7 +133,7 @@ func (tr *TaskRunner) runTaskInternal(parentCtx context.Context, task *AgentTask
 		stepName := step["name"]
 		task.CurrentStep = stepName
 		task.CompletedSteps = i
-		task.Progress = (i * 100) / max(len(steps), 1)
+		task.Progress = clampProgress((i * 100) / max(len(steps), 1))
 		_ = tr.agentStore.UpdateTask(ctx, task)
 		if onProgress != nil {
 			onProgress(task.ID, task.Progress, stepName, i)
@@ -197,7 +197,7 @@ func (tr *TaskRunner) runTaskInternal(parentCtx context.Context, task *AgentTask
 	// Final: mark as completed
 	task.Status = "completed"
 	task.CompletedSteps = len(steps)
-	task.Progress = 100
+	task.Progress = clampProgress(100)
 	completedAt := time.Now()
 	task.CompletedAt = &completedAt
 
@@ -219,6 +219,35 @@ func (tr *TaskRunner) runTaskInternal(parentCtx context.Context, task *AgentTask
 			result = *task.Result
 		}
 		onComplete(task.ID, result)
+	}
+}
+
+// clampProgress ensures progress is within the valid 0-100 range.
+func clampProgress(p int) int {
+	if p < 0 {
+		return 0
+	}
+	if p > 100 {
+		return 100
+	}
+	return p
+}
+
+// RecoverStaleTasks marks any tasks with status "running" as "failed" at startup.
+// This handles cases where the server restarted while tasks were in progress.
+func (tr *TaskRunner) RecoverStaleTasks(ctx context.Context) {
+	if tr.agentStore == nil {
+		return
+	}
+	errMsg := "task interrupted by server restart"
+	_, err := tr.agentStore.pool.Exec(ctx,
+		`UPDATE ai_agent_tasks SET status = 'failed', error = $1, completed_at = NOW() WHERE status = 'running'`,
+		errMsg,
+	)
+	if err != nil {
+		log.Printf("task runner: failed to recover stale tasks: %v", err)
+	} else {
+		log.Printf("task runner: recovered stale tasks")
 	}
 }
 

@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/darkden-lab/argus/backend/internal/cluster"
@@ -19,6 +21,40 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	yamlutil "k8s.io/apimachinery/pkg/util/yaml"
 )
+
+// toolRequiredArgs maps tool names to their required argument names.
+// Computed lazily once on first access.
+var (
+	toolRequiredArgs     map[string][]string
+	toolRequiredArgsOnce sync.Once
+)
+
+func getToolRequiredArgs() map[string][]string {
+	toolRequiredArgsOnce.Do(func() {
+		toolRequiredArgs = make(map[string][]string)
+		for _, t := range AllTools() {
+			if len(t.Parameters.Required) > 0 {
+				toolRequiredArgs[t.Name] = t.Parameters.Required
+			}
+		}
+	})
+	return toolRequiredArgs
+}
+
+// validateRequiredArgs checks that all required arguments for a tool are present and non-empty.
+func validateRequiredArgs(toolName string, args map[string]string) error {
+	reqArgs := getToolRequiredArgs()
+	required, ok := reqArgs[toolName]
+	if !ok {
+		return nil
+	}
+	for _, arg := range required {
+		if val, exists := args[arg]; !exists || strings.TrimSpace(val) == "" {
+			return fmt.Errorf("missing required argument: %s for tool %s", arg, toolName)
+		}
+	}
+	return nil
+}
 
 // ToolResult is the outcome of executing a tool call.
 type ToolResult struct {
@@ -41,6 +77,7 @@ type Executor struct {
 	pluginEngine *plugin.Engine
 	pool         *pgxpool.Pool
 	memoryOps    MemoryOps
+	auditLogger  *AuditLogger
 }
 
 // NewExecutor creates a tool executor.
@@ -53,6 +90,7 @@ func NewExecutor(clusterMgr *cluster.Manager, pluginEngine *plugin.Engine, pool 
 func (e *Executor) Execute(ctx context.Context, call ToolCall) ToolResult {
 	result, err := e.dispatch(ctx, call)
 	if err != nil {
+		log.Printf("ai tools: tool %s failed: %v", call.Name, err)
 		return ToolResult{
 			ToolCallID: call.ID,
 			Content:    fmt.Sprintf("Error: %s", err.Error()),
@@ -70,24 +108,41 @@ func (e *Executor) SetMemoryOps(ops MemoryOps) {
 	e.memoryOps = ops
 }
 
+// SetAuditLogger sets the audit logger for tool execution tracking.
+func (e *Executor) SetAuditLogger(logger *AuditLogger) {
+	e.auditLogger = logger
+}
+
 // ExecuteForUser runs a tool call with a user ID context, enabling memory tools.
-// Falls back to Execute for non-memory tools.
+// Falls back to Execute for non-memory tools. Logs execution to audit trail.
 func (e *Executor) ExecuteForUser(ctx context.Context, call ToolCall, userID string) ToolResult {
+	start := time.Now()
+
+	var result ToolResult
 	if e.memoryOps != nil && isMemoryTool(call.Name) {
-		result, err := e.dispatchMemory(ctx, call, userID)
+		res, err := e.dispatchMemory(ctx, call, userID)
 		if err != nil {
-			return ToolResult{
+			result = ToolResult{
 				ToolCallID: call.ID,
 				Content:    fmt.Sprintf("Error: %s", err.Error()),
 				IsError:    true,
 			}
+		} else {
+			result = ToolResult{
+				ToolCallID: call.ID,
+				Content:    res,
+			}
 		}
-		return ToolResult{
-			ToolCallID: call.ID,
-			Content:    result,
-		}
+	} else {
+		result = e.Execute(ctx, call)
 	}
-	return e.Execute(ctx, call)
+
+	durationMs := time.Since(start).Milliseconds()
+	if e.auditLogger != nil {
+		e.auditLogger.Log(ctx, userID, call.Name, call.Arguments, result.Content, result.IsError, durationMs)
+	}
+
+	return result
 }
 
 func (e *Executor) dispatchMemory(ctx context.Context, call ToolCall, userID string) (string, error) {
@@ -154,6 +209,11 @@ func (e *Executor) dispatch(ctx context.Context, call ToolCall) (string, error) 
 	var args map[string]string
 	if err := json.Unmarshal([]byte(call.Arguments), &args); err != nil {
 		return "", fmt.Errorf("invalid tool arguments: %w", err)
+	}
+
+	// Validate that all required arguments are present and non-empty
+	if err := validateRequiredArgs(call.Name, args); err != nil {
+		return "", err
 	}
 
 	switch call.Name {

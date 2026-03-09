@@ -84,11 +84,18 @@ func (s *Store) InsertBatch(ctx context.Context, embeddings []Embedding) error {
 	return tx.Commit(ctx)
 }
 
+// defaultMinSimilarity is the minimum cosine similarity score for RAG search results.
+const defaultMinSimilarity = 0.3
+
 // Search finds the top-K most similar embeddings to the query vector using
-// cosine similarity.
-func (s *Store) Search(ctx context.Context, queryVec []float32, topK int, sourceType string) ([]SearchResult, error) {
+// cosine similarity. Results below minScore are filtered out. If minScore is 0,
+// defaultMinSimilarity is used.
+func (s *Store) Search(ctx context.Context, queryVec []float32, topK int, sourceType string, minScore float64) ([]SearchResult, error) {
 	if topK <= 0 {
 		topK = 5
+	}
+	if minScore <= 0 {
+		minScore = defaultMinSimilarity
 	}
 
 	query := `
@@ -96,11 +103,12 @@ func (s *Store) Search(ctx context.Context, queryVec []float32, topK int, source
 		       1 - (embedding <=> $1::vector) as score
 		FROM ai_embeddings
 		WHERE ($2 = '' OR source_type = $2)
+		  AND 1 - (embedding <=> $1::vector) >= $4
 		ORDER BY embedding <=> $1::vector
 		LIMIT $3
 	`
 
-	rows, err := s.pool.Query(ctx, query, pgvector.NewVector(queryVec), sourceType, topK)
+	rows, err := s.pool.Query(ctx, query, pgvector.NewVector(queryVec), sourceType, topK, minScore)
 	if err != nil {
 		return nil, fmt.Errorf("rag store: search: %w", err)
 	}

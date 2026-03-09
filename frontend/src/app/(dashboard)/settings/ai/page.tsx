@@ -26,6 +26,7 @@ import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { api } from "@/lib/api";
 import { toast } from "@/stores/toast";
+import { useAiChatStore } from "@/stores/ai-chat";
 import Link from "next/link";
 
 interface AiConfig {
@@ -163,6 +164,9 @@ export default function AiSettingsPage() {
         custom_headers: entriesToHeaders(headerEntries),
       });
       toast("Settings saved", { variant: "success" });
+      // Trigger AI chat reconnect so the new config takes effect immediately
+      useAiChatStore.getState().incrementConfigVersion();
+      useAiChatStore.getState().setConfigChangedWhileOpen(true);
     } catch {
       // api.put already shows toast on error
     } finally {
