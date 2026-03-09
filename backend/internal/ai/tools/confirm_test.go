@@ -193,6 +193,97 @@ func TestGetPendingForUser(t *testing.T) {
 	}
 }
 
+func TestConfirmationManagerConcurrentResolve(t *testing.T) {
+	mgr := NewConfirmationManager()
+	ctx := context.Background()
+	call := ToolCall{ID: "tc-race", Name: "delete_resource", Arguments: `{"name":"nginx"}`}
+
+	req := mgr.CreateRequest("user-race", call)
+
+	// Start WaitForRequest first so it grabs the pending entry before resolvers
+	var waitStatus ConfirmationStatus
+	var waitErr error
+	waitDone := make(chan struct{})
+	go func() {
+		waitStatus, waitErr = mgr.WaitForRequest(ctx, req.ID)
+		close(waitDone)
+	}()
+
+	// Give WaitForRequest time to acquire the pending entry
+	time.Sleep(20 * time.Millisecond)
+
+	const goroutines = 10
+	results := make(chan error, goroutines)
+	var wg sync.WaitGroup
+
+	// Try to resolve the same request from multiple goroutines concurrently
+	for i := 0; i < goroutines; i++ {
+		wg.Add(1)
+		go func(idx int) {
+			defer wg.Done()
+			var err error
+			if idx%2 == 0 {
+				err = mgr.Approve(req.ID)
+			} else {
+				err = mgr.Reject(req.ID)
+			}
+			results <- err
+		}(i)
+	}
+
+	wg.Wait()
+	close(results)
+
+	// Wait for the request to complete
+	<-waitDone
+
+	// Exactly one resolve should succeed, the rest should return errors
+	successCount := 0
+	for err := range results {
+		if err == nil {
+			successCount++
+		}
+	}
+
+	if successCount != 1 {
+		t.Errorf("expected exactly 1 successful resolve, got %d", successCount)
+	}
+
+	// The wait should have completed without error
+	if waitErr != nil {
+		t.Errorf("WaitForRequest returned error: %v", waitErr)
+	}
+	if waitStatus != ConfirmationApproved && waitStatus != ConfirmationRejected {
+		t.Errorf("WaitForRequest returned status %s, want Approved or Rejected", waitStatus)
+	}
+}
+
+func TestConfirmationManagerResolveAfterTimeout(t *testing.T) {
+	mgr := NewConfirmationManager()
+
+	call := ToolCall{ID: "tc-timeout", Name: "scale_resource", Arguments: `{"replicas":0}`}
+
+	// Create a confirmation with a short timeout context
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
+
+	req := mgr.CreateRequest("user-timeout", call)
+
+	// Wait for it with the short-lived context
+	status, err := mgr.WaitForRequest(ctx, req.ID)
+	if status != ConfirmationTimedOut {
+		t.Errorf("WaitForRequest returned status %s, want TimedOut", status)
+	}
+	if err == nil {
+		t.Error("WaitForRequest should return context error after timeout")
+	}
+
+	// Try to resolve after timeout - should fail because cleanup already happened
+	if resolveErr := mgr.Approve(req.ID); resolveErr == nil {
+		t.Error("Approve after timeout should return error, got nil")
+	}
+}
+
 func TestConcurrentApprovals(t *testing.T) {
 	mgr := NewConfirmationManager()
 	ctx := context.Background()
