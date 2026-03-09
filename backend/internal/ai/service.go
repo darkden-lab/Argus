@@ -129,20 +129,9 @@ func (s *Service) Snapshot() (LLMProvider, AIConfig) {
 	return s.provider, s.config
 }
 
-// ProcessMessage handles a user message through the full AI pipeline:
-// 1. Load conversation history
-// 2. Retrieve RAG context
-// 3. Build prompt with system message + context + history
-// 4. Call LLM with tools
-// 5. Handle tool calls or return text response
-func (s *Service) ProcessMessage(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext) (*ChatResponse, error) {
-	provider, cfg := s.Snapshot()
-
-	if !cfg.Enabled {
-		return nil, fmt.Errorf("AI assistant is not enabled, enable it in Settings > AI Configuration")
-	}
-
-	// Build messages
+// buildConversationMessages assembles the full message list for an LLM call:
+// system prompt + conversation history + RAG context + user message.
+func (s *Service) buildConversationMessages(ctx context.Context, userID, conversationID, userMessage string, pageCtx ChatContext) []Message {
 	messages := []Message{
 		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
 	}
@@ -157,23 +146,44 @@ func (s *Service) ProcessMessage(ctx context.Context, userID string, conversatio
 
 	// RAG retrieval
 	if s.retriever != nil {
-		ragResults, err := s.retriever.RetrieveContext(ctx, userMessage, "")
-		if err != nil {
-			log.Printf("ai service: RAG retrieval failed: %v", err)
+		ragResults, ragErr := s.retriever.RetrieveContext(ctx, userMessage, "")
+		if ragErr != nil {
+			log.Printf("ai service: RAG retrieval failed: %v", ragErr)
 		} else if len(ragResults) > 0 {
-			ragContext := rag.FormatContext(ragResults)
 			messages = append(messages, Message{
 				Role:    RoleSystem,
-				Content: "Here is relevant context from the knowledge base:\n\n" + ragContext,
+				Content: "Relevant context:\n\n" + rag.FormatContext(ragResults),
 			})
 		}
 	}
 
-	// Add user message
-	messages = append(messages, Message{
-		Role:    RoleUser,
-		Content: userMessage,
-	})
+	// The caller (e.g. ai_namespace.go) may save the user message to DB before
+	// calling this, so it could already appear in history. Only append if it is
+	// not already the last message.
+	lastIsCurrentMsg := len(history) > 0 &&
+		history[len(history)-1].Role == RoleUser &&
+		history[len(history)-1].Content == userMessage
+	if !lastIsCurrentMsg {
+		messages = append(messages, Message{Role: RoleUser, Content: userMessage})
+	}
+
+	return messages
+}
+
+// ProcessMessage handles a user message through the full AI pipeline:
+// 1. Load conversation history
+// 2. Retrieve RAG context
+// 3. Build prompt with system message + context + history
+// 4. Call LLM with tools
+// 5. Handle tool calls or return text response
+func (s *Service) ProcessMessage(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext) (*ChatResponse, error) {
+	provider, cfg := s.Snapshot()
+
+	if !cfg.Enabled {
+		return nil, fmt.Errorf("AI assistant is not enabled, enable it in Settings > AI Configuration")
+	}
+
+	messages := s.buildConversationMessages(ctx, userID, conversationID, userMessage, pageCtx)
 
 	// Call LLM with tools based on permission level
 	allTools := tools.ToolsForLevel(string(cfg.ToolPermissionLevel))
@@ -250,37 +260,7 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 		return nil, fmt.Errorf("AI assistant is not enabled, enable it in Settings > AI Configuration")
 	}
 
-	messages := []Message{
-		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
-	}
-
-	history, err := s.getHistoryWithSummary(ctx, conversationID)
-	if err != nil {
-		log.Printf("ai service: stream: failed to load history: %v", err)
-	}
-	messages = append(messages, history...)
-
-	if s.retriever != nil {
-		ragResults, ragErr := s.retriever.RetrieveContext(ctx, userMessage, "")
-		if ragErr != nil {
-			log.Printf("ai service: stream: RAG retrieval failed: %v", ragErr)
-		} else if len(ragResults) > 0 {
-			messages = append(messages, Message{
-				Role:    RoleSystem,
-				Content: "Relevant context:\n\n" + rag.FormatContext(ragResults),
-			})
-		}
-	}
-
-	// The caller (ai_namespace.go) saves the user message to DB BEFORE calling
-	// this method, so it may already be included in the history loaded above.
-	// Only append if not already the last message in history.
-	lastIsCurrentMsg := len(history) > 0 &&
-		history[len(history)-1].Role == RoleUser &&
-		history[len(history)-1].Content == userMessage
-	if !lastIsCurrentMsg {
-		messages = append(messages, Message{Role: RoleUser, Content: userMessage})
-	}
+	messages := s.buildConversationMessages(ctx, userID, conversationID, userMessage, pageCtx)
 
 	toolDefs := tools.ToolsForLevel(string(cfg.ToolPermissionLevel))
 	req := ChatRequest{
@@ -294,30 +274,18 @@ func (s *Service) ProcessMessageStream(ctx context.Context, userID string, conve
 	return provider.ChatStream(ctx, req)
 }
 
-// ExecuteToolsAndRespond handles the tool-call loop for streaming: it rebuilds
-// the conversation, executes the accumulated tool calls, and re-invokes the LLM
-// to produce a final text response.
-func (s *Service) ExecuteToolsAndRespond(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext, assistantContent string, toolCalls []ToolCall) (*ChatResponse, error) {
+// ConfirmNotifyFunc is called before blocking on a confirmation request, giving the
+// caller a chance to notify the client (e.g., emit a Socket.IO event).
+type ConfirmNotifyFunc func(req *tools.ConfirmationRequest)
+
+// ExecuteTools handles the tool-call loop for streaming: it rebuilds the
+// conversation, executes the accumulated tool calls, and re-invokes the LLM.
+// If confirmNotify is non-nil, it is called before blocking on each
+// confirmation (for Socket.IO event emission).
+func (s *Service) ExecuteTools(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext, assistantContent string, toolCalls []ToolCall, confirmNotify ConfirmNotifyFunc) (*ChatResponse, error) {
 	provider, cfg := s.Snapshot()
 
-	// Rebuild messages (same as ProcessMessageStream)
-	messages := []Message{
-		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
-	}
-	history, _ := s.getHistoryWithSummary(ctx, conversationID)
-	messages = append(messages, history...)
-
-	if s.retriever != nil {
-		ragResults, _ := s.retriever.RetrieveContext(ctx, userMessage, "")
-		if len(ragResults) > 0 {
-			messages = append(messages, Message{
-				Role:    RoleSystem,
-				Content: "Relevant context:\n\n" + rag.FormatContext(ragResults),
-			})
-		}
-	}
-
-	messages = append(messages, Message{Role: RoleUser, Content: userMessage})
+	messages := s.buildConversationMessages(ctx, userID, conversationID, userMessage, pageCtx)
 
 	// Add assistant message with tool calls
 	messages = append(messages, Message{
@@ -331,14 +299,30 @@ func (s *Service) ExecuteToolsAndRespond(ctx context.Context, userID string, con
 	// Execute each tool
 	for _, call := range toolCalls {
 		if tools.RequiresConfirm(call.Name) {
-			status, err := s.confirmMgr.RequestConfirmation(ctx, userID, call)
-			if err != nil || status != tools.ConfirmationApproved {
-				messages = append(messages, Message{
-					Role:       RoleTool,
-					Content:    "Action cancelled by user or timed out.",
-					ToolCallID: call.ID,
-				})
-				continue
+			if confirmNotify != nil {
+				// Create the confirmation first (non-blocking), notify the client, then wait
+				req := s.confirmMgr.CreateRequest(userID, tools.ToolCall(call))
+				confirmNotify(req)
+				status, err := s.confirmMgr.WaitForRequest(ctx, req.ID)
+				if err != nil || status != tools.ConfirmationApproved {
+					messages = append(messages, Message{
+						Role:       RoleTool,
+						Content:    "Action cancelled by user or timed out.",
+						ToolCallID: call.ID,
+					})
+					continue
+				}
+			} else {
+				// Blocking confirmation (no notifier)
+				status, err := s.confirmMgr.RequestConfirmation(ctx, userID, call)
+				if err != nil || status != tools.ConfirmationApproved {
+					messages = append(messages, Message{
+						Role:       RoleTool,
+						Content:    "Action cancelled by user or timed out.",
+						ToolCallID: call.ID,
+					})
+					continue
+				}
 			}
 		}
 		result := s.executor.ExecuteForUser(ctx, call, userID)
@@ -359,74 +343,14 @@ func (s *Service) ExecuteToolsAndRespond(ctx context.Context, userID string, con
 	return provider.Chat(ctx, req)
 }
 
-// ConfirmNotifyFunc is called before blocking on a confirmation request, giving the
-// caller a chance to notify the client (e.g., emit a Socket.IO event).
-type ConfirmNotifyFunc func(req *tools.ConfirmationRequest)
+// ExecuteToolsAndRespond is a convenience wrapper that calls ExecuteTools with no confirmation notifier.
+func (s *Service) ExecuteToolsAndRespond(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext, assistantContent string, toolCalls []ToolCall) (*ChatResponse, error) {
+	return s.ExecuteTools(ctx, userID, conversationID, userMessage, pageCtx, assistantContent, toolCalls, nil)
+}
 
-// ExecuteToolsWithNotify is like ExecuteToolsAndRespond but calls confirmNotify
-// before blocking on each confirmation, allowing the Socket.IO handler to emit
-// confirm_request events to the client.
+// ExecuteToolsWithNotify is a convenience wrapper that calls ExecuteTools with the given notifier.
 func (s *Service) ExecuteToolsWithNotify(ctx context.Context, userID string, conversationID string, userMessage string, pageCtx ChatContext, assistantContent string, toolCalls []ToolCall, confirmNotify ConfirmNotifyFunc) (*ChatResponse, error) {
-	provider, cfg := s.Snapshot()
-
-	messages := []Message{
-		{Role: RoleSystem, Content: s.buildSystemPrompt(ctx, userID, pageCtx)},
-	}
-	history, _ := s.getHistoryWithSummary(ctx, conversationID)
-	messages = append(messages, history...)
-
-	if s.retriever != nil {
-		ragResults, _ := s.retriever.RetrieveContext(ctx, userMessage, "")
-		if len(ragResults) > 0 {
-			messages = append(messages, Message{
-				Role:    RoleSystem,
-				Content: "Relevant context:\n\n" + rag.FormatContext(ragResults),
-			})
-		}
-	}
-
-	messages = append(messages, Message{Role: RoleUser, Content: userMessage})
-	messages = append(messages, Message{
-		Role:      RoleAssistant,
-		Content:   assistantContent,
-		ToolCalls: toolCalls,
-	})
-
-	allTools := tools.ToolsForLevel(string(cfg.ToolPermissionLevel))
-
-	for _, call := range toolCalls {
-		if tools.RequiresConfirm(call.Name) {
-			// Create the confirmation first (non-blocking), notify the client, then wait
-			req := s.confirmMgr.CreateRequest(userID, tools.ToolCall(call))
-			if confirmNotify != nil {
-				confirmNotify(req)
-			}
-			status, err := s.confirmMgr.WaitForRequest(ctx, req.ID)
-			if err != nil || status != tools.ConfirmationApproved {
-				messages = append(messages, Message{
-					Role:       RoleTool,
-					Content:    "Action cancelled by user or timed out.",
-					ToolCallID: call.ID,
-				})
-				continue
-			}
-		}
-		result := s.executor.ExecuteForUser(ctx, call, userID)
-		messages = append(messages, Message{
-			Role:       RoleTool,
-			Content:    result.Content,
-			ToolCallID: call.ID,
-		})
-	}
-
-	req := ChatRequest{
-		Messages:    messages,
-		Tools:       allTools,
-		MaxTokens:   cfg.MaxTokens,
-		Temperature: cfg.Temperature,
-	}
-
-	return provider.Chat(ctx, req)
+	return s.ExecuteTools(ctx, userID, conversationID, userMessage, pageCtx, assistantContent, toolCalls, confirmNotify)
 }
 
 // GetConfirmationManager returns the confirmation manager for WebSocket handlers.
