@@ -13,14 +13,14 @@ require (
 	github.com/pgvector/pgvector-go v0.3.0
 	github.com/segmentio/kafka-go v0.4.50
 	golang.org/x/crypto v0.48.0
-	golang.org/x/oauth2 v0.35.0
-	golang.org/x/time v0.12.0
-	google.golang.org/grpc v1.79.1
-	google.golang.org/protobuf v1.36.10
+	golang.org/x/oauth2 v0.36.0
+	golang.org/x/time v0.15.0
+	google.golang.org/grpc v1.79.2
+	google.golang.org/protobuf v1.36.11
 	helm.sh/helm/v3 v3.20.0
-	k8s.io/api v0.35.1
-	k8s.io/apimachinery v0.35.1
-	k8s.io/client-go v0.35.1
+	k8s.io/api v0.35.2
+	k8s.io/apimachinery v0.35.2
+	k8s.io/client-go v0.35.2
 )
 
 require (
