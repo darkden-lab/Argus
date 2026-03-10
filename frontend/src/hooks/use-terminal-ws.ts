@@ -1,10 +1,23 @@
 "use client";
 
 import { useEffect, useRef, useCallback, useState } from "react";
-import { getSocket, disconnectSocket } from "@/lib/socket";
-import type { Socket } from "socket.io-client";
+import { getToken } from "@/lib/sse-client";
 
 export type TerminalMode = "smart" | "raw";
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+function resolveWsUrl(): string {
+  if (API_URL) {
+    return API_URL.replace(/^https/, "wss").replace(/^http/, "ws");
+  }
+  if (typeof window !== "undefined") {
+    const proto = window.location.protocol === "https:" ? "wss:" : "ws:";
+    return `${proto}//${window.location.host}`;
+  }
+  return "";
+}
+const WS_URL = resolveWsUrl();
 
 interface UseTerminalOptions {
   cluster: string;
@@ -25,7 +38,7 @@ export function useTerminal({
   onConnected,
   onModeChanged,
 }: UseTerminalOptions) {
-  const socketRef = useRef<Socket | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const intentionalCloseRef = useRef(false);
 
@@ -40,53 +53,73 @@ export function useTerminal({
   callbackRefs.current = { onOutput, onError, onConnected, onModeChanged };
 
   const connect = useCallback(() => {
-    const token =
-      typeof window !== "undefined"
-        ? localStorage.getItem("access_token")
-        : null;
-
+    const token = getToken();
     if (!token || !clusterRef.current) return;
 
     intentionalCloseRef.current = false;
 
-    const socket = getSocket("/terminal");
-    socketRef.current = socket;
+    const ws = new WebSocket(
+      `${WS_URL}/ws/terminal?token=${encodeURIComponent(token)}`
+    );
+    wsRef.current = ws;
 
-    socket.on("connect", () => {
+    ws.onopen = () => {
       setIsConnected(true);
       // Set context after connecting
-      socket.emit("set_context", {
-        cluster_id: clusterRef.current,
-        namespace: namespaceRef.current,
-      });
-    });
+      ws.send(
+        JSON.stringify({
+          type: "set_context",
+          cluster_id: clusterRef.current,
+          namespace: namespaceRef.current,
+        })
+      );
+    };
 
-    socket.on("connected", () => {
-      callbackRefs.current.onConnected?.();
-    });
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        switch (msg.type) {
+          case "output":
+            if (msg.data) callbackRefs.current.onOutput?.(msg.data);
+            break;
+          case "error":
+            if (msg.data) callbackRefs.current.onError?.(msg.data);
+            break;
+          case "connected":
+            callbackRefs.current.onConnected?.();
+            break;
+          case "mode_changed":
+            if (msg.mode)
+              callbackRefs.current.onModeChanged?.(msg.mode as TerminalMode);
+            break;
+        }
+      } catch {
+        // Non-JSON message — treat as raw output
+        callbackRefs.current.onOutput?.(e.data);
+      }
+    };
 
-    socket.on("output", (msg: { data?: string }) => {
-      if (msg.data) callbackRefs.current.onOutput?.(msg.data);
-    });
-
-    socket.on("error", (msg: { data?: string } | string) => {
-      const errorData = typeof msg === "string" ? msg : msg.data;
-      if (errorData) callbackRefs.current.onError?.(errorData);
-    });
-
-    socket.on("mode_changed", (msg: { mode?: TerminalMode }) => {
-      if (msg.mode) callbackRefs.current.onModeChanged?.(msg.mode);
-    });
-
-    socket.on("disconnect", () => {
+    ws.onclose = () => {
       setIsConnected(false);
-    });
+      if (!intentionalCloseRef.current) {
+        // Auto-reconnect after 2s
+        setTimeout(() => {
+          if (!intentionalCloseRef.current) connect();
+        }, 2000);
+      }
+    };
+
+    ws.onerror = () => {
+      callbackRefs.current.onError?.("WebSocket connection error\r\n");
+    };
   }, []);
 
   const disconnect = useCallback(() => {
     intentionalCloseRef.current = true;
-    disconnectSocket("/terminal");
-    socketRef.current = null;
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
     setIsConnected(false);
   }, []);
 
@@ -98,7 +131,7 @@ export function useTerminal({
   const savedLineRef = useRef("");
 
   const sendRawInput = useCallback((data: string) => {
-    socketRef.current?.emit("input", { data });
+    wsRef.current?.send(JSON.stringify({ type: "input", data }));
   }, []);
 
   const sendInput = sendRawInput;
@@ -118,7 +151,12 @@ export function useTerminal({
       if (data === "\x15") {
         if (cursorPosRef.current > 0) {
           const after = lineBufferRef.current.slice(cursorPosRef.current);
-          writeFn("\r$ " + after + " ".repeat(cursorPosRef.current) + "\r$ ");
+          writeFn(
+            "\r$ " +
+              after +
+              " ".repeat(cursorPosRef.current) +
+              "\r$ "
+          );
           lineBufferRef.current = after;
           cursorPosRef.current = 0;
         }
@@ -217,7 +255,10 @@ export function useTerminal({
     [sendRawInput]
   );
 
-  const replaceLineBuffer = (newContent: string, writeFn: (s: string) => void) => {
+  const replaceLineBuffer = (
+    newContent: string,
+    writeFn: (s: string) => void
+  ) => {
     const oldLen = lineBufferRef.current.length;
     const oldPos = cursorPosRef.current;
     if (oldPos > 0) writeFn("\b".repeat(oldPos));
@@ -231,7 +272,11 @@ export function useTerminal({
   };
 
   const handleInput = useCallback(
-    (data: string, writeFn: (s: string) => void, currentMode: TerminalMode) => {
+    (
+      data: string,
+      writeFn: (s: string) => void,
+      currentMode: TerminalMode
+    ) => {
       if (currentMode === "smart") {
         handleSmartInput(data, writeFn);
       } else {
@@ -248,19 +293,22 @@ export function useTerminal({
   }, []);
 
   const sendResize = useCallback((cols: number, rows: number) => {
-    socketRef.current?.emit("resize", { cols, rows });
+    wsRef.current?.send(JSON.stringify({ type: "resize", cols, rows }));
   }, []);
 
   const sendModeChange = useCallback((newMode: TerminalMode) => {
-    socketRef.current?.emit("mode", { mode: newMode });
+    wsRef.current?.send(JSON.stringify({ type: "mode", mode: newMode }));
   }, []);
 
   const sendContextChange = useCallback(
     (newCluster: string, newNamespace: string) => {
-      socketRef.current?.emit("set_context", {
-        cluster_id: newCluster,
-        namespace: newNamespace,
-      });
+      wsRef.current?.send(
+        JSON.stringify({
+          type: "set_context",
+          cluster_id: newCluster,
+          namespace: newNamespace,
+        })
+      );
     },
     []
   );

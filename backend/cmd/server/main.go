@@ -33,7 +33,7 @@ import (
 	"github.com/darkden-lab/argus/backend/internal/pvcbrowser"
 	"github.com/darkden-lab/argus/backend/internal/rbac"
 	"github.com/darkden-lab/argus/backend/internal/settings"
-	sio "github.com/darkden-lab/argus/backend/internal/socketio"
+	"github.com/darkden-lab/argus/backend/internal/sse"
 	"github.com/darkden-lab/argus/backend/internal/setup"
 	"github.com/darkden-lab/argus/backend/internal/terminal"
 	"github.com/darkden-lab/argus/backend/internal/ws"
@@ -374,23 +374,22 @@ func main() {
 
 	log.Printf("AI system initialized (provider=%s, enabled=%v)", aiCfg.Provider, aiCfg.Enabled)
 
-	// Socket.IO server (new transport layer alongside legacy WebSockets)
-	sioServer := sio.NewServer(sio.Deps{
-		JWTService:      jwtService,
-		APIKeyService:   apiKeyService,
-		Hub:             hub,
-		AIService:       aiService,
-		ClusterMgr:      clusterMgr,
-		NotifWSHandler:  notifWSHandler,
-		TerminalHandler: terminalHandler,
-		HistoryStore:    aiHistoryStore,
-		AgentStore:      aiAgentStore,
-		TaskRunner:      aiTaskRunner,
-		MemoryStore:     aiMemoryStore,
-	})
-	defer sioServer.Close()
-	r.PathPrefix("/socket.io/").Handler(sioServer.Handler())
-	log.Println("Socket.IO server mounted at /socket.io/")
+	// SSE Hub + Handlers (replaces Socket.IO)
+	sseHub := sse.NewHub()
+
+	// AI SSE + REST handler
+	aiSSEHandler := sse.NewAIHandler(sseHub, jwtService, apiKeyService, aiService, aiHistoryStore, aiTaskRunner)
+	aiSSEHandler.RegisterRoutes(r, protected)
+
+	// K8s SSE + REST handler
+	k8sSSEHandler := sse.NewK8sHandler(sseHub, jwtService, apiKeyService, hub, clusterMgr)
+	k8sSSEHandler.RegisterRoutes(r, protected)
+
+	// Notifications SSE handler
+	notifSSEHandler := sse.NewNotificationsHandler(sseHub, jwtService, apiKeyService, notifWSHandler)
+	notifSSEHandler.RegisterRoutes(r)
+
+	log.Println("SSE handlers mounted (AI, K8s, Notifications)")
 
 	// Start health check ticker
 	go func() {

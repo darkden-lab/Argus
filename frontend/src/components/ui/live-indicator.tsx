@@ -1,6 +1,6 @@
 "use client";
 
-import { useRelativeTime } from "@/hooks/use-k8s-socket";
+import { useRelativeTime } from "@/hooks/use-k8s-watch";
 
 interface LiveIndicatorProps {
   isConnected: boolean;

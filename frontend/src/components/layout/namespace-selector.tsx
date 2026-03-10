@@ -13,8 +13,7 @@ import {
 import { StatusDot } from "@/components/ui/status-dot";
 import { useClusterStore } from "@/stores/cluster";
 import { api } from "@/lib/api";
-import { useK8sSocket } from "@/hooks/use-k8s-socket";
-import type { WatchEvent } from "@/lib/socket";
+import { useK8sWatch, type WatchEvent } from "@/hooks/use-k8s-watch";
 
 interface NamespaceItem {
   metadata: { name: string };
@@ -100,7 +99,7 @@ export function NamespaceSelector() {
     [selectedClusterId, namespaces, setNamespaces, selectedNamespace, setSelectedNamespace]
   );
 
-  useK8sSocket({
+  useK8sWatch({
     cluster: selectedClusterId ?? "",
     resource: "namespaces",
     onEvent: handleWatchEvent,

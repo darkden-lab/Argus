@@ -10,8 +10,7 @@ import { CreatePVCWizard } from "@/components/resources/create-pvc-wizard";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Plus } from "lucide-react";
 import { LiveIndicator } from "@/components/ui/live-indicator";
-import { useK8sSocket as useK8sWebSocket } from "@/hooks/use-k8s-socket";
-import type { WatchEvent } from "@/lib/socket";
+import { useK8sWatch as useK8sWebSocket, type WatchEvent } from "@/hooks/use-k8s-watch";
 
 interface K8sResource {
   metadata: {
