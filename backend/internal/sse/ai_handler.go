@@ -307,11 +307,6 @@ func (h *AIHandler) HandleConfirmAction(w http.ResponseWriter, r *http.Request) 
 	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
 }
 
-type contextUpdateRequest struct {
-	ClusterID string `json:"cluster_id"`
-	Namespace string `json:"namespace"`
-}
-
 // HandleContextUpdate handles POST /api/ai/context.
 func (h *AIHandler) HandleContextUpdate(w http.ResponseWriter, r *http.Request) {
 	// Context is now sent inline with each message, so this is a no-op

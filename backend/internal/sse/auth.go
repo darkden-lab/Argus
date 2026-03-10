@@ -49,6 +49,7 @@ func RequireAuth(w http.ResponseWriter, r *http.Request, jwtService *auth.JWTSer
 	claims := Authenticate(r, jwtService, apiKeyService)
 	if claims == nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+		return nil
 	}
 	return claims
 }
